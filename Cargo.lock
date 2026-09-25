@@ -1327,6 +1327,7 @@ dependencies = [
  "jobhunt-eligibility",
  "jobhunt-jobs",
  "jobhunt-profile",
+ "jobhunt-ranking",
  "jobhunt-resume",
  "jobhunt-sources",
  "jobhunt-storage",
@@ -1404,6 +1405,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "jobhunt-ranking"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "jobhunt-core",
+ "jobhunt-eligibility",
+ "jobhunt-jobs",
+ "jobhunt-profile",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "jobhunt-resume"
 version = "0.1.0"
 dependencies = [
@@ -1446,6 +1462,7 @@ dependencies = [
  "jobhunt-eligibility",
  "jobhunt-jobs",
  "jobhunt-profile",
+ "jobhunt-ranking",
  "serde",
  "serde_json",
  "sqlx",

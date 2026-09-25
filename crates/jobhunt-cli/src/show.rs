@@ -11,6 +11,7 @@ use jobhunt_jobs::verification::{OpportunityTrust, cached};
 use jobhunt_jobs::{
     JobEvent, JobEventKind, JobId, JobRecord, JobRepository, JobStatus, OpportunityId,
 };
+use jobhunt_ranking::{Gate, OpportunityState, Ranking, RankingService, RuleReader, Sentiment};
 use jobhunt_storage::SqliteJobStore;
 
 use crate::config::LoadedConfig;
@@ -69,6 +70,14 @@ pub async fn run(args: ShowArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCo
     for record in &records {
         histories.push(store.history(record.id).await?);
     }
+    let ranking =
+        RankingService::new(&store, &RuleReader).with_policy(loaded.config.verification.policy());
+    let fit = match assessment {
+        Some(_) => Some(ranking.explain(&records, now).await?.ranking),
+        None => None,
+    };
+    let state = ranking.state(&records).await?;
+    ranking.mark_seen(&records, now).await?;
     store.close().await;
 
     let mut out = anstream::stdout().lock();
@@ -78,6 +87,7 @@ pub async fn run(args: ShowArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCo
         &histories,
         &trust,
         assessment.as_ref(),
+        (fit.as_ref(), &state),
         now,
     ) {
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(ExitCode::SUCCESS),
@@ -94,6 +104,7 @@ fn write_details(
     histories: &[Vec<JobEvent>],
     trust: &OpportunityTrust,
     assessment: Option<&Assessment>,
+    (fit, state): (Option<&Ranking>, &OpportunityState),
     now: DateTime<Utc>,
 ) -> io::Result<()> {
     let main = &records[0];
@@ -163,6 +174,41 @@ fn write_details(
             out,
             "  No career profile yet: run `jobhunt init <resume>` or `jobhunt preferences set location <place>`."
         )?,
+    }
+
+    writeln!(out)?;
+    writeln!(out, "Fit:")?;
+    match fit {
+        Some(r) => {
+            let label = match &r.gate {
+                Gate::Excluded { .. } => "Not recommended",
+                _ => r.tier.label(),
+            };
+            writeln!(out, "  {label}: {}", r.brief.verdict)?;
+            writeln!(
+                out,
+                "  {DIM}Why, caveats and unknowns: jobhunt why {}{DIM:#}",
+                main.opportunity_id
+            )?;
+        }
+        None => writeln!(out, "  Needs a career profile, like eligibility.")?,
+    }
+    if state.has_feedback() {
+        let since = state
+            .since()
+            .map(|at| format!(" since {}", at.format("%Y-%m-%d")))
+            .unwrap_or_default();
+        let sentiment = match state.sentiment {
+            Some(Sentiment::Liked) => ", liked",
+            Some(Sentiment::Disliked) => ", disliked",
+            None => "",
+        };
+        writeln!(
+            out,
+            "  Your status: {}{sentiment}{since} {DIM}(jobhunt feedback {}){DIM:#}",
+            state.stage.as_str(),
+            main.opportunity_id
+        )?;
     }
 
     writeln!(out)?;

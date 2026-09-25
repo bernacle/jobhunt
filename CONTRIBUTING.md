@@ -99,7 +99,7 @@ request and every push to `main`. Its jobs are the required status checks:
 | --- | --- |
 | `fmt` | unformatted code |
 | `clippy` | any clippy or compiler warning, on every target |
-| `test` | a compile error (build step), then any failing unit, integration or doc test: model, lifecycle, dedupe, SQLite, migrations, adapters, end-to-end discovery, resume reading and parsing, profile re-import and evidence rules, the profile CLI flow, verification (domain, HTTP verifiers against mocks, SQLite), the eligibility rule matrix and region definitions, eligibility on real postings, and verify/show/check/find through the CLI |
+| `test` | a compile error (build step), then any failing unit, integration or doc test: model, lifecycle, dedupe, SQLite, migrations, adapters, end-to-end discovery, resume reading and parsing, profile re-import and evidence rules, the profile CLI flow, verification (domain, HTTP verifiers against mocks, SQLite), the eligibility rule matrix and region definitions, eligibility on real postings, and verify/show/check/find through the CLI; ranking (job facets, reason reading, feedback state, learned taste, signals, gates, pay, briefs), feedback and rankings in SQLite, and rank/why/feedback/taste/pipeline through the CLI |
 | `docs` | any rustdoc warning (broken intra-doc links, …) |
 | `msrv` | code or a dependency that needs a newer Rust than `rust-version` |
 | `ci-passed` | any of the above not succeeding |
@@ -153,8 +153,14 @@ the adapter (with a new fixture) in a PR.
    `regions.rs`). A change that can change a decision bumps
    `RULES_VERSION` (`jobhunt-eligibility/src/decision.rs`) so stored
    decisions are not reused; a change to how verifications are read bumps
-   `VERIFICATION_REVISION`. Schema changes are new, additive migrations; never
-   edit an existing one.
+   `VERIFICATION_REVISION`. A ranking change needs a case in
+   `jobhunt-ranking` (`rank/tests.rs`, or the facet, reason or taste
+   tests next to the code) and bumps its revision so stored rankings are
+   not reused: `RANKING_VERSION` (`rank.rs`) for signals, weights, gates
+   and tiers, `TASTE_VERSION` (`taste.rs`) for how taste is learned, and
+   `RULE_READER_REVISION` (`reason.rs`) for how reasons are read. Ranking
+   never changes an eligibility decision. Schema changes are new, additive
+   migrations; never edit an existing one.
 3. Run `./scripts/check.sh`.
 4. Open a PR against `main`. Merge when CI is green. A solo maintainer
    doesn't need approvals.
