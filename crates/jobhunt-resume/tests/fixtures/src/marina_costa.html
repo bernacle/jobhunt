@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Marina Costa — Resume</title>
+<style>
+  @page {
+    size: A4;
+    margin: 22mm 18mm 20mm 18mm;
+    @top-center { content: "Marina Costa · Resume"; font: 9pt "DejaVu Sans"; color: #555; }
+    @bottom-center { content: "Page " counter(page) " of " counter(pages); font: 9pt "DejaVu Sans"; color: #555; }
+  }
+  body { font: 10.5pt/1.35 "DejaVu Sans", sans-serif; color: #111; }
+  h1 { font-size: 20pt; margin: 0; }
+  .headline { font-size: 12pt; margin: 2pt 0; }
+  .contact { font-size: 9.5pt; color: #333; }
+  h2 { font-size: 12pt; text-transform: uppercase; letter-spacing: 1pt; border-bottom: 1px solid #999; margin: 14pt 0 6pt; }
+  .entry { margin-bottom: 9pt; }
+  .row { display: flex; justify-content: space-between; }
+  .org { font-weight: bold; }
+  .dates { color: #333; }
+  ul { margin: 3pt 0 3pt 14pt; padding: 0; }
+  li { margin: 1.5pt 0; }
+  .tech { font-size: 9.5pt; color: #333; }
+  .spacer { height: 120pt; }
+</style>
+</head>
+<body>
+<h1>Marina Costa</h1>
+<div class="headline">Senior Software Engineer — Backend &amp; Platform</div>
+<div class="contact">São Paulo, Brazil · marina.costa@example.com · +55 11 91234-5678 · github.com/marinacosta · linkedin.com/in/marinacosta</div>
+
+<h2>Summary</h2>
+<p>Backend engineer with eight years of experience building payment and compliance systems in Rust and TypeScript. I like owning systems end to end, from architecture to on-call.</p>
+
+<h2>Experience</h2>
+
+<div class="entry">
+  <div class="row"><span class="org">Ledgerly — Senior Software Engineer</span><span class="dates">Mar 2022 – Present</span></div>
+  <div>Remote · Full-time</div>
+  <ul>
+    <li>Built a multi-tenant organization layer that lets enterprise customers manage users, roles and API keys across 30+ subsidiaries.</li>
+    <li>Designed a rules engine for Travel Rule compliance checks, reducing manual reviews by 40%.</li>
+    <li>Integrated four payment providers (Stripe, Adyen, dLocal and PIX) behind a single settlement API.</li>
+    <li>Owned architectural decisions for the event pipeline and led the migration from RabbitMQ to Kafka.</li>
+    <li>Mentored three engineers and ran the backend hiring loop.</li>
+  </ul>
+  <div class="tech">Tech: Rust, TypeScript, PostgreSQL, Kafka, Kubernetes, AWS</div>
+</div>
+
+<div class="entry">
+  <div class="row"><span class="org">Banco Horizonte</span><span class="dates">São Paulo, Brazil</span></div>
+  <div class="row"><span>Software Engineer II</span><span class="dates">Jan 2020 – Apr 2022</span></div>
+  <ul>
+    <li>Maintained the card authorization service handling 2 million transactions per day with 99.99% availability.</li>
+    <li>Built fraud detection features for PIX instant payments together with the risk team.</li>
+    <li>Cut p99 latency of the ledger API from 800 ms to 120 ms by redesigning its PostgreSQL indexes.</li>
+  </ul>
+  <div class="row"><span>Software Engineer</span><span class="dates">Jun 2018 – Dec 2019</span></div>
+  <ul>
+    <li>Developed internal Java and Spring Boot services for account onboarding and KYC checks.</li>
+    <li>Wrote the Terraform modules used to provision the team's staging environments on AWS.</li>
+  </ul>
+</div>
+
+<div class="spacer"></div>
+
+<div class="entry">
+  <div class="row"><span class="org">Freelance — Full Stack Developer</span><span class="dates"></span></div>
+  <ul>
+    <li>Built web applications for small businesses with React, Node.js and PostgreSQL.</li>
+    <li>Set up CI/CD pipelines with GitHub Actions and Docker.</li>
+  </ul>
+</div>
+
+<h2>Projects</h2>
+<div class="entry">
+  <div class="row"><span class="org">tinyqueue — open-source Rust job queue</span><span class="dates">2021 – Present</span></div>
+  <ul>
+    <li>Author and maintainer of a PostgreSQL-backed job queue library for Rust with 1,200 GitHub stars.</li>
+  </ul>
+</div>
+<div class="entry">
+  <div class="row"><span class="org">Budgetly — personal finance app</span><span class="dates">2019</span></div>
+  <ul>
+    <li>Built a React Native budgeting app backed by Supabase, used by 500 monthly active users.</li>
+  </ul>
+</div>
+
+<h2>Education</h2>
+<div class="entry">
+  <div class="row"><span class="org">Universidade de São Paulo — B.Sc. in Computer Science</span><span class="dates">2014 – 2018</span></div>
+</div>
+
+<h2>Skills</h2>
+<div>Languages: Rust, TypeScript, Go, Python, SQL</div>
+<div>Infrastructure: Kubernetes, Terraform, AWS, Docker</div>
+<div>Data: PostgreSQL, Kafka, Redis</div>
+<div>Frontend: React, Next.js</div>
+
+<h2>Languages</h2>
+<div>Portuguese (native), English (fluent), Spanish (intermediate)</div>
+</body>
+</html>

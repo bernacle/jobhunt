@@ -6,25 +6,30 @@ use std::io::{self, Write};
 use anstyle::{AnsiColor, Style};
 use chrono::{DateTime, Utc};
 use jobhunt_core::text::search_key;
+use jobhunt_eligibility::Assessment;
 use jobhunt_jobs::{
-    Compensation, CompensationKind, DiscoveryReport, EmploymentType, JobRecord, OpportunityId,
-    PayInterval, ScanKind, WorkplaceType,
+    Compensation, CompensationKind, DiscoveryReport, EmploymentType, JobId, JobRecord,
+    OpportunityId, PayInterval, ScanKind, WorkplaceType,
 };
 
-const TITLE: Style = Style::new().bold();
-const DIM: Style = Style::new().dimmed();
-const LINK: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::Cyan)));
+pub(crate) const TITLE: Style = Style::new().bold();
+pub(crate) const DIM: Style = Style::new().dimmed();
+pub(crate) const LINK: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::Cyan)));
 
 /// Writes one block per job:
 ///
 /// ```text
 ///  1. Design Engineer (Web & Brand)
 ///     Linear · North America (+1 more) · Remote · Full-time
+///     ✓ yes: Germany eligible: remote in Europe
 ///     $180K – $250K • Offers Equity
 ///     https://jobs.ashbyhq.com/linear/f04f398b-…
 ///     ashby:linear · posted 9 days ago · job_02e5…
 ///     also listed on yc:linear
 /// ```
+///
+/// The eligibility line appears when `verdicts` has the job (there is a
+/// career profile to check it against).
 ///
 /// `also_listed` holds, per opportunity, the other sources' records of the
 /// same job (cross-source duplicates), which are named on the last line.
@@ -32,6 +37,7 @@ pub fn jobs(
     out: &mut impl Write,
     records: &[JobRecord],
     also_listed: &HashMap<OpportunityId, Vec<JobRecord>>,
+    verdicts: &HashMap<JobId, Assessment>,
     now: DateTime<Utc>,
 ) -> io::Result<()> {
     let width = records.len().to_string().len();
@@ -45,6 +51,9 @@ pub fn jobs(
             job.title
         )?;
         writeln!(out, "{indent}{}", details_line(record))?;
+        if let Some(a) = verdicts.get(&record.id) {
+            writeln!(out, "{indent}{}", crate::eligibility::verdict(a))?;
+        }
         if let Some(pay) = job.compensation.as_ref().and_then(compensation_text) {
             writeln!(out, "{indent}{pay}")?;
         }
@@ -376,6 +385,7 @@ mod tests {
                 summary: Some("$180K – $250K • Offers Equity".into()),
                 components: vec![],
             }),
+            work_authorization: None,
             description_text: None,
             description_html: None,
             posted_at: Some(Utc.with_ymd_and_hms(2026, 9, 15, 18, 5, 31).unwrap()),
@@ -398,7 +408,7 @@ mod tests {
         let mut out = Vec::new();
         let r = record();
         let id = r.id;
-        jobs(&mut out, &[r], &HashMap::new(), now()).unwrap();
+        jobs(&mut out, &[r], &HashMap::new(), &HashMap::new(), now()).unwrap();
         let text = String::from_utf8(out).unwrap();
         // anstyle writes escape codes; strip them for a stable comparison.
         let plain = strip_ansi(&text);
@@ -421,7 +431,7 @@ mod tests {
         twin.posting.provenance.source = SourceKey::new("yc", "linear").unwrap();
         let also: HashMap<_, _> = [(r.opportunity_id, vec![twin])].into();
         let mut out = Vec::new();
-        jobs(&mut out, &[r], &also, now()).unwrap();
+        jobs(&mut out, &[r], &also, &HashMap::new(), now()).unwrap();
         let plain = strip_ansi(&String::from_utf8(out).unwrap());
         assert!(
             plain.contains("\n    also listed on yc:linear\n"),
@@ -535,7 +545,7 @@ mod tests {
         assert_eq!(plural(3u64, "job", "jobs"), "3 jobs");
     }
 
-    fn strip_ansi(text: &str) -> String {
+    pub(crate) fn strip_ansi(text: &str) -> String {
         let mut out = String::new();
         let mut chars = text.chars();
         while let Some(c) = chars.next() {

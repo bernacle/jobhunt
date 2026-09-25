@@ -19,7 +19,7 @@ const JOB_ID_NAMESPACE: &str = "jobhunt.job.v1";
 
 /// Schema tag for [`JobPosting::fingerprint`]. Bump it when the set of
 /// fingerprinted fields changes.
-const FINGERPRINT_SCHEMA: &str = "jobhunt.job.content.v1";
+const FINGERPRINT_SCHEMA: &str = "jobhunt.job.content.v2";
 
 /// Schema tag for [`JobSnapshot::fingerprint`] (material content).
 const MATERIAL_SCHEMA: &str = "jobhunt.job.material.v1";
@@ -29,7 +29,7 @@ const MATERIAL_SCHEMA: &str = "jobhunt.job.material.v1";
 /// (ETag) recorded under another revision is not reused, so a conversion
 /// change always re-reads sources instead of trusting "not modified".
 /// Bump it whenever an adapter or the model changes what a posting contains.
-pub const CANONICAL_REVISION: &str = "2";
+pub const CANONICAL_REVISION: &str = "3";
 
 /// Stable internal identifier of a job, rendered as `job_<32 hex chars>`.
 ///
@@ -331,6 +331,10 @@ pub struct JobPosting {
     /// The source's own remote flag, when it has one.
     pub is_remote: Option<bool>,
     pub compensation: Option<Compensation>,
+    /// Who may be hired, when the source publishes it as a field of its own
+    /// (Work at a Startup's "US citizen/visa only"), verbatim. Statements in
+    /// the description are not copied here.
+    pub work_authorization: Option<String>,
     pub description_text: Option<String>,
     pub description_html: Option<String>,
     /// When the source says the job was first published.
@@ -404,7 +408,8 @@ impl JobPosting {
                 }
             }
         }
-        fp.optional("description_text", self.description_text.as_deref())
+        fp.optional("work_authorization", self.work_authorization.as_deref())
+            .optional("description_text", self.description_text.as_deref())
             .optional("description_html", self.description_html.as_deref())
             .optional("posted_at", self.posted_at.map(timestamp).as_deref())
             .optional(
@@ -435,6 +440,7 @@ impl JobPosting {
             workplace_type: self.workplace_type.as_ref().map(|t| t.as_str().to_owned()),
             is_remote: self.is_remote,
             compensation: self.compensation.clone(),
+            work_authorization: self.work_authorization.clone(),
             description_text: self.description_text.clone(),
             posted_at: self.posted_at,
         }
@@ -538,6 +544,8 @@ pub struct JobSnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compensation: Option<Compensation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_authorization: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub posted_at: Option<DateTime<Utc>>,
@@ -557,7 +565,7 @@ impl JobSnapshot {
     /// Names of the material fields that differ between two snapshots, in a
     /// fixed order: `title`, `company`, `url`, `apply_url`, `department`,
     /// `team`, `location`, `employment_type`, `workplace`, `compensation`,
-    /// `description`, `posted_at`.
+    /// `work_authorization`, `description`, `posted_at`.
     pub fn changed_fields(&self, other: &JobSnapshot) -> Vec<&'static str> {
         let checks = [
             ("title", self.title != other.title),
@@ -579,6 +587,10 @@ impl JobSnapshot {
                 self.workplace_type != other.workplace_type || self.is_remote != other.is_remote,
             ),
             ("compensation", self.compensation != other.compensation),
+            (
+                "work_authorization",
+                self.work_authorization != other.work_authorization,
+            ),
             (
                 "description",
                 self.description_text != other.description_text,
@@ -641,6 +653,7 @@ pub(crate) mod tests {
             workplace_type: Some(WorkplaceType::Remote),
             is_remote: Some(true),
             compensation: None,
+            work_authorization: None,
             description_text: None,
             description_html: None,
             posted_at: None,

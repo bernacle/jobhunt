@@ -24,14 +24,14 @@ use sqlx::sqlite::{
 use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection};
 use tracing::{debug, info};
 
-static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations/sqlite");
+pub(crate) static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations/sqlite");
 
 /// Ids bound per statement in batched updates (well under SQLite's limit).
 const BATCH: usize = 500;
 
 /// Content columns written on insert and on content rewrite, in bind order.
 /// Must match [`ContentValues::bind`].
-const CONTENT_COLUMNS: [&str; 23] = [
+const CONTENT_COLUMNS: [&str; 24] = [
     "source_kind",
     "source_instance",
     "source_job_id",
@@ -55,6 +55,7 @@ const CONTENT_COLUMNS: [&str; 23] = [
     "search_text",
     "fingerprint",
     "content_fingerprint",
+    "work_authorization",
 ];
 
 static INSERT_SQL: LazyLock<String> = LazyLock::new(|| {
@@ -86,7 +87,7 @@ static REWRITE_SQL: LazyLock<String> = LazyLock::new(|| {
 /// schema.
 #[derive(Debug, Clone)]
 pub struct SqliteJobStore {
-    pool: SqlitePool,
+    pub(crate) pool: SqlitePool,
     location: String,
 }
 
@@ -830,6 +831,7 @@ struct ContentValues {
     workplace_type: Option<String>,
     is_remote: Option<bool>,
     compensation: Option<String>,
+    work_authorization: Option<String>,
     description_text: Option<String>,
     description_html: Option<String>,
     posted_at: Option<String>,
@@ -871,6 +873,7 @@ impl ContentValues {
                 .map(serde_json::to_string)
                 .transpose()
                 .map_err(encode_error)?,
+            work_authorization: p.work_authorization.clone(),
             description_text: p.description_text.clone(),
             description_html: p.description_html.clone(),
             posted_at: p.posted_at.map(encode_timestamp),
@@ -910,6 +913,7 @@ impl ContentValues {
             .bind(&self.search_text)
             .bind(&self.fingerprint)
             .bind(&self.content_fingerprint)
+            .bind(&self.work_authorization)
     }
 }
 
@@ -974,6 +978,7 @@ fn decode_record(row: &SqliteRow) -> Result<JobRecord, StorageError> {
             .map(WorkplaceType::from_canonical),
         is_remote,
         compensation,
+        work_authorization: get_opt("work_authorization")?,
         description_text: get_opt("description_text")?,
         description_html: get_opt("description_html")?,
         posted_at: get_opt("posted_at")?
@@ -1003,11 +1008,11 @@ fn decode_record(row: &SqliteRow) -> Result<JobRecord, StorageError> {
 
 /// Fixed-width UTC RFC 3339 with microseconds, so values sort as text.
 /// Sub-microsecond precision is dropped.
-fn encode_timestamp(value: DateTime<Utc>) -> String {
+pub(crate) fn encode_timestamp(value: DateTime<Utc>) -> String {
     value.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string()
 }
 
-fn decode_timestamp(value: &str) -> Result<DateTime<Utc>, chrono::ParseError> {
+pub(crate) fn decode_timestamp(value: &str) -> Result<DateTime<Utc>, chrono::ParseError> {
     DateTime::parse_from_rfc3339(value).map(|t| t.with_timezone(&Utc))
 }
 
@@ -1105,6 +1110,7 @@ mod tests {
                     },
                 ],
             }),
+            work_authorization: None,
             description_text: Some("Build things.\n\nWith care.".into()),
             description_html: Some("<p>Build things.</p><p>With care.</p>".into()),
             posted_at: Some(Utc.with_ymd_and_hms(2026, 4, 7, 17, 12, 35).unwrap()),
@@ -1174,6 +1180,17 @@ mod tests {
                 "job_events",
                 "job_evidence",
                 "jobs",
+                "profile_claims",
+                "profile_documents",
+                "profile_education",
+                "profile_events",
+                "profile_experiences",
+                "profile_preference_statements",
+                "profile_preferences",
+                "profile_projects",
+                "profile_skill_evidence",
+                "profile_skills",
+                "profiles",
                 "source_scans"
             ]
         );

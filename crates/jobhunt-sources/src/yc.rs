@@ -334,6 +334,7 @@ pub fn to_posting(
         workplace_type,
         is_remote,
         compensation: compensation(raw.salary_range.as_deref(), raw.equity_range.as_deref()),
+        work_authorization: clean_line_opt(raw.visa.as_deref()),
         description_text: raw.description.as_deref().and_then(markdown_to_text),
         description_html: None,
         posted_at: None,
@@ -407,27 +408,47 @@ fn compensation(salary: Option<&str>, equity: Option<&str>) -> Option<Compensati
     })
 }
 
-/// "$190K - $215K" → (USD, 190000, 215000). Only unambiguous currency
+/// "US$190K - US$215K" → (USD, 190000, 215000); "$190K - $215K" leaves the
+/// currency unknown ("$" is several currencies). Only unambiguous currency
 /// symbols are named; anything unexpected yields `None`.
 fn parse_money_range(text: &str) -> Option<(Option<String>, f64, f64)> {
     let (low, high) = split_range(text)?;
     let (currency_a, min) = parse_money(low)?;
     let (currency_b, max) = parse_money(high)?;
     let currency = match (currency_a, currency_b) {
-        (Some(a), Some(b)) if a == b => Some(a),
-        (Some(a), None) | (None, Some(a)) => Some(a),
-        (None, None) => None,
+        (Money::Code(a), Money::Code(b)) if a == b => Some(a),
+        (Money::Code(a), Money::Bare) | (Money::Bare, Money::Code(a)) => Some(a),
+        (Money::Dollar | Money::Bare, Money::Dollar | Money::Bare) => None,
         _ => return None,
     };
     (min <= max).then_some((currency.map(str::to_owned), min, max))
 }
 
-fn parse_money(text: &str) -> Option<(Option<&'static str>, f64)> {
+/// What an amount's symbol says about its currency.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Money {
+    Code(&'static str),
+    /// "$": one of several currencies.
+    Dollar,
+    /// No symbol at all.
+    Bare,
+}
+
+fn parse_money(text: &str) -> Option<(Money, f64)> {
     let text = text.trim();
-    let (currency, rest) = [("$", "USD"), ("€", "EUR"), ("£", "GBP"), ("₹", "INR")]
-        .iter()
-        .find_map(|(symbol, code)| text.strip_prefix(symbol).map(|rest| (Some(*code), rest)))
-        .unwrap_or((None, text));
+    // "$" is written by several currencies (USD, CAD, SGD, ...) and so
+    // leaves the currency unknown; the display text keeps the symbol.
+    let (currency, rest) = [
+        ("US$", Money::Code("USD")),
+        ("CA$", Money::Code("CAD")),
+        ("$", Money::Dollar),
+        ("€", Money::Code("EUR")),
+        ("£", Money::Code("GBP")),
+        ("₹", Money::Code("INR")),
+    ]
+    .iter()
+    .find_map(|(symbol, money)| text.strip_prefix(symbol).map(|rest| (*money, rest)))
+    .unwrap_or((Money::Bare, text));
     let rest = rest.trim();
     let (number, multiplier) = match rest.chars().last()? {
         'K' | 'k' => (&rest[..rest.len() - 1], 1_000.0),
@@ -594,6 +615,9 @@ struct YcJob {
     pretty_role: Option<String>,
     salary_range: Option<String>,
     equity_range: Option<String>,
+    /// Who may apply, as YC asks companies to state it ("US citizen/visa
+    /// only", "Will sponsor", ...).
+    visa: Option<String>,
     description: Option<String>,
 }
 
@@ -605,6 +629,11 @@ mod tests {
     fn parses_money_and_equity_ranges() {
         assert_eq!(
             parse_money_range("$190K - $215K"),
+            Some((None, 190_000.0, 215_000.0)),
+            "“$” does not say which dollar"
+        );
+        assert_eq!(
+            parse_money_range("US$190K - US$215K"),
             Some((Some("USD".into()), 190_000.0, 215_000.0))
         );
         assert_eq!(

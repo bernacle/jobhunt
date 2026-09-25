@@ -2,7 +2,10 @@
 resolver = "3"
 members = [
     "crates/jobhunt-core",
+    "crates/jobhunt-eligibility",
     "crates/jobhunt-jobs",
+    "crates/jobhunt-profile",
+    "crates/jobhunt-resume",
     "crates/jobhunt-sources",
     "crates/jobhunt-storage",
     "crates/jobhunt-cli",
@@ -19,7 +22,10 @@ publish = false
 [workspace.dependencies]
 # Internal crates
 jobhunt-core = { path = "crates/jobhunt-core" }
+jobhunt-eligibility = { path = "crates/jobhunt-eligibility" }
 jobhunt-jobs = { path = "crates/jobhunt-jobs" }
+jobhunt-profile = { path = "crates/jobhunt-profile" }
+jobhunt-resume = { path = "crates/jobhunt-resume" }
 jobhunt-sources = { path = "crates/jobhunt-sources" }
 jobhunt-storage = { path = "crates/jobhunt-storage" }
 
@@ -32,6 +38,7 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 clap = { version = "4.5", features = ["derive", "env"] }
 directories = "6"
 futures = "0.3"
+pdf-extract = "0.12.1"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "gzip"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -41,6 +48,7 @@ tempfile = "3"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 toml = "1.1"
+unicode-normalization = "0.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 url = "2.5"

@@ -16,7 +16,7 @@ Nothing else: no Docker, no database server, no network access for tests.
 
 ```bash
 cargo build --workspace                  # build everything
-cargo test --workspace                   # the full offline suite (~200 tests, seconds once built)
+cargo test --workspace                   # the full offline suite (~280 tests, seconds once built)
 cargo test -p jobhunt-storage            # one crate
 cargo test -p jobhunt-cli --test multi_source_e2e   # one integration test file
 ```
@@ -58,8 +58,9 @@ Skip it once with `git push --no-verify`. CI remains the source of truth.
 ## Offline and live tests
 
 Everything `cargo test` runs is offline and deterministic: saved real
-responses under `crates/jobhunt-sources/tests/fixtures/`, local mock HTTP
-servers, and temporary SQLite files.
+responses under `crates/jobhunt-sources/tests/fixtures/`, resume fixtures
+under `crates/jobhunt-resume/tests/fixtures/` (their README says how each
+was made), local mock HTTP servers, and temporary SQLite files.
 
 The live tests (`crates/jobhunt-sources/tests/*_live.rs`) are `#[ignore]`d
 and read a few real boards per family. They check that the adapters still
@@ -82,7 +83,7 @@ request and every push to `main`. Its jobs are the required status checks:
 | --- | --- |
 | `fmt` | unformatted code |
 | `clippy` | any clippy or compiler warning, on every target |
-| `test` | a compile error (build step), then any failing unit, integration or doc test: model, lifecycle, dedupe, SQLite, migrations, adapters, end-to-end discovery |
+| `test` | a compile error (build step), then any failing unit, integration or doc test: model, lifecycle, dedupe, SQLite, migrations, adapters, end-to-end discovery, resume reading and parsing, profile re-import and evidence rules, the profile CLI flow, eligibility on real postings and through the CLI |
 | `docs` | any rustdoc warning (broken intra-doc links, …) |
 | `msrv` | code or a dependency that needs a newer Rust than `rust-version` |
 | `ci-passed` | any of the above not succeeding |
@@ -127,8 +128,12 @@ the adapter (with a new fixture) in a PR.
 1. Branch from `main`.
 2. Make the change with tests. A lifecycle, dedupe, storage or adapter
    change needs an offline regression test (fixture or mock server, not a
-   live one). Schema changes are new, additive migrations; never edit an
-   existing one.
+   live one); so does a change to resume parsing (a fixture under
+   `crates/jobhunt-resume/tests/fixtures/`) or to the profile's re-import
+   or evidence rules, and to an eligibility rule (a case in
+   `crates/jobhunt-eligibility/tests/assessments.rs`, on a real posting
+   where one shows it). Schema changes are new, additive migrations; never
+   edit an existing one.
 3. Run `./scripts/check.sh`.
 4. Open a PR against `main`. Merge when CI is green. A solo maintainer
    doesn't need approvals.

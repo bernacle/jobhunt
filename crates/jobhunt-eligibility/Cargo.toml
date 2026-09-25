@@ -1,0 +1,20 @@
+[package]
+name = "jobhunt-eligibility"
+description = "JobHunt eligibility: where a job can be done from, what it pays, and whether its facts are first-party and fresh, checked against the user's constraints."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+jobhunt-core.workspace = true
+jobhunt-jobs.workspace = true
+jobhunt-profile.workspace = true
+
+[dev-dependencies]
+jobhunt-sources.workspace = true
+
+[lints]
+workspace = true
