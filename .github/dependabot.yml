@@ -1,0 +1,28 @@
+# Low-noise dependency updates: one grouped PR per ecosystem per week for
+# minor/patch releases; major releases get their own PR. Every update runs
+# the full CI, including the MSRV job, so an update that raises a
+# dependency's rust-version above ours fails before it can be merged.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: deps
+    groups:
+      cargo-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: ci
+    groups:
+      github-actions:
+        patterns: ["*"]

@@ -43,9 +43,9 @@ ranking, and the MCP server.
 
 ## Quick start
 
-You need a stable Rust toolchain (1.88 or newer) and a C compiler (for the
-bundled SQLite and TLS libraries). No database server or other setup is
-required.
+You need a stable Rust toolchain (1.88 or newer, the declared minimum
+supported version) and a C compiler (for the bundled SQLite and TLS
+libraries). No database server or other setup is required.
 
 ```bash
 cargo build
@@ -361,6 +361,7 @@ Dependencies only point downward: `cli → sources, storage → jobs → core`.
 ## Tests
 
 ```bash
+./scripts/check.sh                  # the full local quality gate (what CI requires)
 cargo test                          # everything offline
 cargo test -p jobhunt-sources --test ashby_live -- --ignored --nocapture
 cargo test -p jobhunt-sources --test greenhouse_live -- --ignored --nocapture
@@ -393,13 +394,16 @@ rejected, or any converted posting is invalid.
   across runs to prove NEW / UNCHANGED / UPDATED / CLOSED / REOPENED, that
   failed and partial scans close nothing, and cross-source grouping.
 
-Before sending changes, run:
+Only the offline suite runs in required CI. The live tests run separately,
+three times a week and on demand, in the "Live sources" workflow, so a
+third-party outage never blocks a merge.
 
-```bash
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test
-```
+Before sending changes, run `./scripts/check.sh`. It runs formatting,
+clippy (warnings denied), the build, every offline test and rustdoc
+(warnings denied), exactly as required CI does, and `--msrv` adds the
+minimum-Rust check. [CONTRIBUTING.md](CONTRIBUTING.md) describes the CI
+checks, the live validation workflow, the PR workflow and branch
+protection.
 
 ## Adding a source
 
