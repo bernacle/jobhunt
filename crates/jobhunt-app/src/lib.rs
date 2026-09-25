@@ -25,7 +25,9 @@
 //! * [`LocalApp::application_context`] ([`context`]): evidence a client may
 //!   use to help with an application, only what the evidence policy allows;
 //! * [`LocalApp::export_state`] / [`LocalApp::import_state`] ([`state`]);
-//! * [`LocalApp::doctor`] ([`doctor`]).
+//! * [`LocalApp::doctor`] ([`doctor`]);
+//! * [`LocalApp::sync`] ([`sync`]): merge the person's state with JobHunt
+//!   Cloud.
 //!
 //! [`views`] holds the typed, serializable answers (the MCP tools'
 //! structured content and output schemas).
@@ -46,6 +48,7 @@ pub mod profile_view;
 pub mod resolve;
 pub mod shortlist;
 pub mod state;
+pub mod sync;
 pub mod verify;
 pub mod views;
 
@@ -62,6 +65,7 @@ pub use discover::{Refresh, RefreshMode, RefreshReason, SourceArg};
 pub use error::{AppError, ErrorKind};
 pub use resolve::{Opportunity, short_id};
 pub use shortlist::{FindRequest, Found, SearchResults};
+pub use sync::{Remote, Side, SyncReport, SyncTransport};
 
 /// Something a long use case is doing, for front-ends that show progress
 /// (the CLI prints it on stderr; the MCP server logs it).

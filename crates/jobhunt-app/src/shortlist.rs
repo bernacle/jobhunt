@@ -211,6 +211,18 @@ impl LocalApp {
                 checked,
             });
         }
+        // Per-person search state ("new since you last looked",
+        // notifications): best effort, it never fails a search.
+        let shown_now: Vec<jobhunt_storage::Shown> = shown
+            .iter()
+            .map(|e| jobhunt_storage::Shown {
+                opportunity: e.ranking.opportunity,
+                tier: e.ranking.tier,
+            })
+            .collect();
+        if let Err(error) = self.store().record_shown(&shown_now, now).await {
+            tracing::warn!(%error, "could not record the shortlist");
+        }
         Ok(Found {
             refresh,
             report,
@@ -456,6 +468,15 @@ impl SearchResults {
         }
         if matches!(found.refresh.reason, RefreshReason::Disabled) {
             notes.push("Working offline: stored jobs were not refreshed or verified.".into());
+        }
+        if matches!(
+            found.refresh.reason,
+            RefreshReason::Background { oldest: None }
+        ) {
+            notes.push(
+                "JobHunt Cloud has not read any job board yet; its scheduled discovery will."
+                    .into(),
+            );
         }
         Self {
             query: Some(found.request.text.trim().to_owned()).filter(|q| !q.is_empty()),
