@@ -1435,7 +1435,11 @@ mod tests {
                 "profile_skill_evidence",
                 "profile_skills",
                 "profiles",
-                "source_scans"
+                "source_scans",
+                "sync_account",
+                "sync_conflicts",
+                "sync_entities",
+                "sync_feedback"
             ]
         );
     }

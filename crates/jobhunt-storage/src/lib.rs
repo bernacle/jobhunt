@@ -20,6 +20,7 @@
 //! Nothing in the jobs, profile, eligibility or ranking domains, or the
 //! discovery pipeline, knows which backend is in use.
 
+pub mod postgres;
 mod profile;
 mod ranking;
 mod sqlite;
