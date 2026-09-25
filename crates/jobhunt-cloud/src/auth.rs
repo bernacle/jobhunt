@@ -163,6 +163,7 @@ impl OidcVerifier {
     pub fn new(settings: OidcSettings) -> Result<Self, AuthError> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
+            .user_agent(concat!("jobhunt-cloud/", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(|e| AuthError::Unavailable(e.to_string()))?;
         Ok(Self {

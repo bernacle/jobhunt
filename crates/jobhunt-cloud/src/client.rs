@@ -295,6 +295,7 @@ impl DeviceFlow {
         Ok(Self {
             http: reqwest::Client::builder()
                 .timeout(Duration::from_secs(30))
+                .user_agent(concat!("jobhunt/", env!("CARGO_PKG_VERSION")))
                 .build()
                 .map_err(|e| AppError::Config(format!("HTTP client: {e}")))?,
             device_endpoint: config
@@ -325,6 +326,7 @@ impl DeviceFlow {
         Ok(Self {
             http: reqwest::Client::builder()
                 .timeout(Duration::from_secs(30))
+                .user_agent(concat!("jobhunt/", env!("CARGO_PKG_VERSION")))
                 .build()
                 .map_err(|e| AppError::Config(format!("HTTP client: {e}")))?,
             device_endpoint: String::new(),

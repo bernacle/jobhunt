@@ -447,7 +447,7 @@ First deployment:
    railway variable set -s api \
      JOBHUNT_ENCRYPTION_KEYS="k1:$(openssl rand -base64 32)" \
      JOBHUNT_OIDC_ISSUER=https://<subdomain>.authkit.app \
-     JOBHUNT_OIDC_AUDIENCE="https://<api domain>,https://<api domain>/mcp" \
+     JOBHUNT_OIDC_AUDIENCE="https://<api domain>,https://<api domain>/mcp,<environment client id>" \
      JOBHUNT_OIDC_CLI_CLIENT_ID=<the CLI application's client id> \
      JOBHUNT_PUBLIC_URL=https://<api domain>
    ```
@@ -465,7 +465,13 @@ First deployment:
    - create a **public OAuth application** for the CLI (Applications →
      OAuth, public client, no secret) and use its client id as
      `JOBHUNT_OIDC_CLI_CLIENT_ID`; AuthKit's device endpoint refuses the
-     environment's own client id (`invalid_client`).
+     environment's own client id (`invalid_client`);
+   - add the **environment's client id** to `JOBHUNT_OIDC_AUDIENCE`:
+     AuthKit's device flow ignores the `resource` parameter and issues
+     tokens whose `aud` is the environment's client id (the CLI's own
+     client id is in the `client_id` claim). Keep one WorkOS environment
+     for JobHunt only, since every token of that environment then
+     reaches the API.
 
    For Auth0 instead: an API
    whose identifier is the audience, a native application with the device
