@@ -11,6 +11,8 @@ mod preferences;
 mod profile;
 mod profile_args;
 mod profile_render;
+mod rank;
+mod rank_render;
 mod render;
 mod show;
 mod verify;
@@ -21,6 +23,7 @@ use std::process::ExitCode;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
+use jobhunt_ranking::FeedbackAction;
 
 use crate::config::{LoadedConfig, LogFormat, Paths};
 
@@ -73,6 +76,39 @@ enum Command {
     /// What you want next: roles, pay, location, companies, domains, work style.
     #[command(alias = "prefs", alias = "preference")]
     Preferences(preferences::PreferencesArgs),
+    /// The few stored jobs most worth your time, each with a short brief:
+    /// why, caveats, unknowns. Builds on eligibility and verification, and
+    /// learns from your feedback.
+    Rank(rank::RankArgs),
+    /// The decision brief of one job: why it may be worth your time, the
+    /// caveats, what's unknown, your history with it, and (--details)
+    /// every signal with its evidence.
+    Why(rank::WhyArgs),
+    /// Save a job for later.
+    Save(rank::FeedbackArgs),
+    /// Take a job off your saved list (without rejecting it).
+    Unsave(rank::FeedbackArgs),
+    /// Not interested. Say why with --reason ("too corporate", "pure SRE"):
+    /// JobHunt learns from your words and keeps them verbatim.
+    Reject(rank::FeedbackArgs),
+    /// You like this job (independent of saving or applying).
+    Like(rank::FeedbackArgs),
+    /// You dislike this job (independent of rejecting it).
+    Dislike(rank::FeedbackArgs),
+    /// You applied.
+    Applied(rank::FeedbackArgs),
+    /// You're interviewing.
+    Interview(rank::FeedbackArgs),
+    /// You got an offer.
+    Offer(rank::FeedbackArgs),
+    /// Jobs you saved, applied to, are interviewing for or got an offer
+    /// from.
+    Pipeline(rank::PipelineArgs),
+    /// What JobHunt learned from your feedback, with the evidence behind
+    /// every pattern, next to what you told it.
+    Taste(rank::TasteArgs),
+    /// Your feedback, verbatim, for every job or one.
+    Feedback(rank::LogArgs),
     /// Show where JobHunt keeps its files and the effective configuration.
     Config,
 }
@@ -120,6 +156,19 @@ async fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Profile(args) => profile::run(args, &loaded).await,
         Command::Claims(args) => claims::run(args, &loaded).await,
         Command::Preferences(args) => preferences::run(args, &loaded).await,
+        Command::Rank(args) => rank::rank(args, &loaded).await,
+        Command::Why(args) => rank::why(args, &loaded).await,
+        Command::Save(args) => rank::feedback(FeedbackAction::Save, args, &loaded).await,
+        Command::Unsave(args) => rank::feedback(FeedbackAction::Unsave, args, &loaded).await,
+        Command::Reject(args) => rank::feedback(FeedbackAction::Reject, args, &loaded).await,
+        Command::Like(args) => rank::feedback(FeedbackAction::Like, args, &loaded).await,
+        Command::Dislike(args) => rank::feedback(FeedbackAction::Dislike, args, &loaded).await,
+        Command::Applied(args) => rank::feedback(FeedbackAction::Applied, args, &loaded).await,
+        Command::Interview(args) => rank::feedback(FeedbackAction::Interview, args, &loaded).await,
+        Command::Offer(args) => rank::feedback(FeedbackAction::Offer, args, &loaded).await,
+        Command::Pipeline(args) => rank::pipeline(args, &loaded).await,
+        Command::Taste(args) => rank::taste(args, &loaded).await,
+        Command::Feedback(args) => rank::log(args, &loaded).await,
         Command::Config => show_config(&loaded),
     }
 }
@@ -273,6 +322,46 @@ mod tests {
             panic!("expected verify");
         };
         assert!(args.force && args.details);
+    }
+
+    #[test]
+    fn parses_ranking_and_feedback() {
+        let cli = Cli::try_parse_from([
+            "jobhunt",
+            "reject",
+            "opp_02e51190085f8a9a0772e845ddd9f329",
+            "--reason",
+            "too corporate",
+        ])
+        .unwrap();
+        let Command::Reject(args) = cli.command else {
+            panic!("expected reject");
+        };
+        assert_eq!(args.reason.as_deref(), Some("too corporate"));
+        for verb in [
+            "save",
+            "unsave",
+            "like",
+            "dislike",
+            "applied",
+            "interview",
+            "offer",
+            "why",
+        ] {
+            assert!(
+                Cli::try_parse_from(["jobhunt", verb, "job_1"]).is_ok(),
+                "{verb}"
+            );
+        }
+        let cli = Cli::try_parse_from(["jobhunt", "rank", "rust", "-n", "3", "--all"]).unwrap();
+        let Command::Rank(args) = cli.command else {
+            panic!("expected rank");
+        };
+        assert_eq!((args.query.len(), args.limit, args.all), (1, 3, true));
+        assert!(Cli::try_parse_from(["jobhunt", "taste", "--all"]).is_ok());
+        assert!(Cli::try_parse_from(["jobhunt", "pipeline"]).is_ok());
+        assert!(Cli::try_parse_from(["jobhunt", "feedback"]).is_ok());
+        assert!(Cli::try_parse_from(["jobhunt", "reject"]).is_err());
     }
 
     #[test]

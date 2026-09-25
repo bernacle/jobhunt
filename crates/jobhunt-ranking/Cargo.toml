@@ -1,6 +1,6 @@
 [package]
-name = "jobhunt-storage"
-description = "Storage backends for JobHunt. Currently: local SQLite."
+name = "jobhunt-ranking"
+description = "JobHunt ranking: feedback on opportunities, learned taste with its evidence, deterministic ranking signals and decision briefs."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,15 +14,9 @@ jobhunt-core.workspace = true
 jobhunt-eligibility.workspace = true
 jobhunt-jobs.workspace = true
 jobhunt-profile.workspace = true
-jobhunt-ranking.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sqlx.workspace = true
-tracing.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true
-tokio.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

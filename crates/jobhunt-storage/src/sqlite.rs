@@ -1203,6 +1203,8 @@ mod tests {
                 "job_evidence",
                 "job_verifications",
                 "jobs",
+                "opportunity_feedback",
+                "opportunity_rankings",
                 "profile_claims",
                 "profile_documents",
                 "profile_education",

@@ -49,15 +49,24 @@ check` prints the same report from what is stored; `show` includes the
 last verification. With a profile, `find` adds a one-line verdict to every
 result, and `--eligible` / `--possible` filter on it.
 
+`jobhunt rank` turns all of that into a short list: the few stored jobs
+most worth your time, each with a decision brief (why it may be worth
+attention, caveats, unknowns), built on eligibility and verification and
+sharpened by what you tell it and what you do. `jobhunt reject <id>
+--reason "too corporate"`, `save`, `like`, `applied` and friends record
+feedback on the job (once per opportunity, whichever source lists it),
+keep your words verbatim, and teach it your taste; `jobhunt taste` shows
+what it learned and from which feedback (see
+[Ranking, feedback and taste](#ranking-feedback-and-taste)).
+
 `jobhunt init resume.pdf` builds your career profile from your resume
 (see [Career profile](#career-profile)): experiences, projects, education,
 skills, domains, role signals, and an evidence graph where every claim keeps
 the resume text it came from and your decision about it. `jobhunt
 preferences add "…"` records what you want in your own words.
 
-Not built yet: ranking and match scores, preference learning
-from saved/rejected jobs, application assistance, resume tailoring, and the
-MCP server.
+Not built yet: application assistance, resume tailoring, an AI-assisted
+reason reader (the seam exists), and the MCP server.
 
 ## Quick start
 
@@ -86,6 +95,10 @@ cargo run -- verify job_1e8575ded15556ca9b5ccf5485f05e4b           # still open?
 cargo run -- verify --details job_1e8575ded15556ca9b5ccf5485f05e4b # with provenance and evidence
 cargo run -- check job_1e8575ded15556ca9b5ccf5485f05e4b            # the same report, from what is stored
 cargo run -- find --offline --eligible               # only jobs your profile says you can take
+cargo run -- rank                                    # the few jobs most worth your time, with briefs
+cargo run -- why opp_1e8575ded15556ca9b5ccf5485f05e4b              # one job's decision brief
+cargo run -- reject opp_1e8575ded15556ca9b5ccf5485f05e4b --reason "pure SRE"
+cargo run -- taste                                   # what JobHunt learned from your feedback
 cargo run -- config                                  # show file locations and settings
 ```
 
@@ -323,7 +336,8 @@ baselined without being reported as UPDATED).
 column (Work at a Startup's visa field); the canonical revision was bumped
 so every source is read again and fills it.
 `20260930000000_verification_eligibility.sql` adds the verification and
-eligibility tables below without touching any existing table.
+eligibility tables below without touching any existing table, and
+`20261001000000_feedback_ranking.sql` the feedback and ranking tables.
 
 | Table | Holds |
 | --- | --- |
@@ -334,6 +348,8 @@ eligibility tables below without touching any existing table.
 | `discovery_runs` | one row per run with totals |
 | `job_verifications` | one row per verification attempt: listing, application and authority states, whether it succeeded, the method, URL and failure kind as columns, and the whole record (authority chain, compensation facts, published places, unknowns) as JSON |
 | `eligibility_decisions` | stored eligibility decisions, keyed by opportunity, profile and a digest of every input (see [Caching and revisions](#caching-and-revisions)) |
+| `opportunity_feedback` | one row per action you took on an opportunity (save, reject, applied, …), with your reason verbatim; never updated or deleted (see [Ranking, feedback and taste](#ranking-feedback-and-taste)) |
+| `opportunity_rankings` | rankings that were shown to you, keyed by a digest of every input |
 
 Unchanged observations add no history, so history grows with changes, not
 with scans. The current row plus the chain of replaced snapshots answers:
@@ -535,8 +551,9 @@ A newer preference with the same key (say, a new minimum salary) replaces
 the older one, which is kept as history. `jobhunt check` and `find` read
 the location, work-mode, time-zone, relocation, sponsorship,
 authorization and engagement preferences (see
-[Verification and eligibility](#verification-and-eligibility)); ranking
-will read the rest (pay, roles, companies) later.
+[Verification and eligibility](#verification-and-eligibility)); `jobhunt
+rank` reads the rest (pay, roles, companies, domains, work style; see
+[Ranking, feedback and taste](#ranking-feedback-and-taste)).
 
 ### Re-importing a resume
 
@@ -1000,6 +1017,239 @@ jobhunt-cli ──► jobhunt-sources::verify (HttpVerifier) ──► jobhunt-j
   `EligibilityRepository` boundary. No HTTP or SQL.
 - `jobhunt-storage` implements both repositories on SQLite.
 
+## Ranking, feedback and taste
+
+Eligibility answers *can this person plausibly work this job?* Ranking
+answers *would they want it?* They are kept apart: ranking sits on top of
+the eligibility decision and never feeds pay, roles, seniority, domains or
+companies back into it.
+
+A resume says what someone can do. JobHunt learns what they actually want
+from three things, kept separate and always inspectable:
+
+- **what you told it**: preferences you set or stated (roles, pay,
+  company and team kinds, domains, work style, work modes). These always
+  win;
+- **what you did**: feedback on jobs (save, reject, applied, interview,
+  offer, like, dislike), with your reasons in your own words;
+- **what it inferred**: patterns across that feedback, each with the
+  evidence behind it.
+
+```text
+$ jobhunt rank
+Worth your attention
+  1. Security Engineer, Cloud — Ramp   Strong fit
+     infrastructure, security · AWS, Terraform · security, infrastructure · USD 211,400 – 290,600 per year · hybrid
+     + Infrastructure roles: a role you want
+     + Meets your minimum of USD 180,000 per year across the range
+     + Reaches your target of USD 250,000 per year at the top of the range
+     opp_55a62bd94e54404eb2af36d7bc9d2071 · jobhunt why opp_55a62bd94e54404eb2af36d7bc9d2071
+
+Promising, but verify before spending time
+  2. Forward Deployed Engineer - ML — Modal   Worth reviewing
+     solutions / forward-deployed engineering, machine learning · ai, infrastructure · USD 180,000 – 250,000 per year
+     + Meets your minimum of USD 180,000 per year across the range
+     + Reaches your target of USD 250,000 per year at the top of the range
+     + Domain: infrastructure: you've favored jobs like this (1 reason in your words and 1 action without a reason; tentative)
+     - Not one of the roles you listed (backend roles, infrastructure roles)
+     - Customer-facing engineering (solutions / forward-deployed), not product engineering
+     ? Not verified yet: it may be closed or changed
+     opp_011ee5ec62edd51f11dc0fd4b3edd532 · jobhunt verify opp_011ee5ec62edd51f11dc0fd4b3edd532
+
+Not shown: 2 you rejected · 1 in your pipeline · 5 maybe or low priority (--all).
+Ranked 11 stored open jobs against your profile, 5 pieces of feedback and 4 patterns learned from it. Tiers are coarse on purpose; `jobhunt why <id>` shows every reason.
+```
+
+### Commands
+
+| Command | Does |
+| --- | --- |
+| `jobhunt rank [WORDS] [-n N] [--all]` | The few stored open jobs most worth your time (default 10, strong fit and worth reviewing only), grouped by gate, each with its short brief. Reads what is stored; `find` refreshes, `verify` verifies |
+| `jobhunt why <id> [--details]` | One job's decision brief; `--details` lists every signal with its group, basis, weight and evidence |
+| `jobhunt save\|unsave\|reject\|like\|dislike\|applied\|interview\|offer <id> [--reason "…"]` | Feedback on a job (`job_…` or `opp_…`), with how the reason was read |
+| `jobhunt pipeline [--all]` | Jobs you saved, applied to, are interviewing for or got an offer from (`--all`: and rejected ones) |
+| `jobhunt taste [--all]` | What you told JobHunt, what it learned from your feedback (with evidence), what contradicts itself, and reasons it couldn't read |
+| `jobhunt feedback [<id>]` | Your feedback, verbatim |
+| `jobhunt show <id>` | Now also shows the fit verdict and your status on the job |
+
+### The gate: eligibility and verification first
+
+| Situation | Where it goes |
+| --- | --- |
+| eligible or conditional, verified recently at an authoritative source (`Assessment::recommendable`) | **Worth your attention** |
+| eligible or conditional, but never verified, stale, or the last check failed | **Promising, but verify first** (`jobhunt verify <id>`) |
+| eligibility uncertain | **Could be worth it, if you can take it**, with why (`jobhunt check <id>`) |
+| ineligible, closed, rejected by you, already in your pipeline, or verified pay below a *required* minimum | not recommended; counted under "Not shown" |
+
+A conditional job (you would relocate; the company grants the sponsorship
+it offers) is ranked normally, with its condition as a caveat.
+Uncertainty is never hidden, and a job is never ranked on eligibility it
+doesn't have.
+
+### Tiers, not percentages
+
+What you see is a coarse tier: **Strong fit**, **Worth reviewing**,
+**Maybe**, **Low priority**. Signals carry weights that order jobs within a
+tier; the sum is shown only by `why --details`, labelled as an ordering
+aid. A strong fit needs a reason in terms of what *you* want (a stated
+preference, learned taste, your own feedback), not just eligibility and
+freshness; anything you said you don't want caps a job at Maybe.
+
+### Signals
+
+Every signal is independently inspectable (`jobhunt why --details`): its
+group, its basis (your preference, learned from your feedback, your
+resume, the posting, your feedback on this job, verification,
+eligibility), a one-line summary, and its evidence.
+
+| Group | Reads |
+| --- | --- |
+| eligibility, verification | the stored assessment: eligible +, conditional as a caveat; verified fresh +, aging, or not trusted yet |
+| role | the job's role shape from its title (backend, frontend, full stack, platform, infrastructure, SRE / DevOps, data, mobile, machine learning, security, embedded, solutions / forward-deployed, sales, product management, design), or its description when the title says only "Software Engineer"; against roles you want, accept, require or avoid; a non-engineering job when your resume is engineering; your role experience (context) |
+| seniority | the title's level against your latest title (junior below a senior is a caveat; a step up is a stretch, not a penalty) |
+| stack | technologies the job *requires* (its title, requirements lists, "must"/"strong experience" sentences) against those your resume shows you used; "nice to have" and passing mentions don't count; one missing technology is never a reason to skip |
+| domain | the job's domains (title, department, or named more than once in its description) against domains you want or avoid; having worked in a domain is shown as experience, never as wanting it |
+| pay | see below |
+| company | company and team kinds the posting states (startup, early-stage, founder-led, small team, large company, consulting, agency, open source, remote-first, …) against yours; unstated ones you care about are unknowns |
+| work style | ownership, management, on-call, greenfield, async, … against yours; people management when you want individual-contributor work |
+| work mode | remote / hybrid / on-site against modes you want or avoid (a *required* mode is eligibility's) |
+| feedback | what you did with this job (saved, liked, disliked), and notes about it only ("great product") |
+| freshness | posted (or first seen) in the last week +; over 60 days a caveat, unless verification found it still listed |
+
+Everything is read deterministically from the posting with fixed
+vocabularies, and every fact keeps the words it came from. Benefits and
+policy sections ("medical, dental & vision insurance") are skipped, so
+they don't make a company look like a healthcare one. Nothing is guessed:
+a posting that doesn't say how big the company is has no size.
+
+### Compensation
+
+Pay is compared with your minimum and target using the latest successful
+verification's compensation facts (or, until verified, what discovery
+stored, which says so):
+
+- only a salary range in your currency (an ISO code) and your period is
+  compared. Currencies are never converted and periods never translated;
+  a bare `$` is never USD. Anything else is an **unknown**, with why ("Pay
+  is in EUR; your minimum is in USD");
+- **not published is unknown, not low**;
+- a range topping out below a **required** minimum rules the job out when
+  that pay is verified, and is a heavy penalty until then; below a
+  preferred minimum it is a heavy penalty. A range starting below your
+  minimum is a caveat;
+- reaching your target (across the range, or at its top) counts for it;
+- your minimum or target without a currency is never compared (set one
+  with `jobhunt preferences set compensation --currency …`);
+- if you've turned jobs down over pay before, unknown or low pay gets a
+  caveat.
+
+### Feedback and state
+
+Feedback is per **opportunity** (`opp_…`): a job listed on two boards is
+saved, rejected or applied to once, and every source record keeps its own
+provenance. Each action is an event that is never changed; state is folded
+from events, so the history behind "rejected" is always there. Events keep
+the record you acted on, so if identity grouping later merges two
+opportunities, feedback follows its record.
+
+State has two independent parts:
+
+- the **pipeline stage**: unseen, seen (`show` and `why` record that you
+  looked), saved, rejected, applied, interviewing, offer. Saving a
+  rejected job brings it back; rejecting after applying withdraws, and
+  keeps how far it went;
+- **like / dislike**, which is orthogonal: liking a job is not applying to
+  it, and disliking it is not rejecting it.
+
+### Reasons
+
+`--reason` is the most useful feedback there is. Reasons are kept exactly as
+written, and read deterministically (`RuleReader`, revision `rules/1`)
+into structured signals:
+
+| Reason | Read as |
+| --- | --- |
+| "too corporate" | avoid company: large companies |
+| "pure SRE" | avoid role: SRE / DevOps |
+| "too frontend-heavy" | avoid role: frontend |
+| "too much consulting" / "too much management" | avoid company: consulting / avoid work style: managing people |
+| "salary too local" / "compensation too low" | avoid pay pegged to a local market / the pay level |
+| "fintech" (rejecting) | avoid domain: fintech |
+| "already worked with this domain" | avoid the job's own domains (resolved from the job) |
+| "love tiny founder-led teams" | prefer founder-led companies, small teams |
+| "interesting infra problem" | prefer domain: infrastructure; the problem (this job only) |
+| "no ownership" / "not enough autonomy" | prefer work style: ownership (something missing is something wanted) |
+| "great product but too corporate" | prefer the product (this job only); avoid large companies |
+| "boring product" / "unclear remote policy" | about this job only: kept as a note, not generalized |
+| "meh vibes" | nothing recognized: kept as written and listed by `taste` |
+
+Clauses are read separately; "too", "boring", "hate" point away, "love",
+"great", "interesting" toward, and "no", "lack of", "not enough" toward the
+missing thing. Without a cue, the action decides (a reason given while
+rejecting describes what was wrong). Interviews and offers carry no
+direction of their own. The reading is recomputed whenever taste is
+derived, so a better reader improves old feedback too. `ReasonReader` is
+the seam for other readers (an AI-assisted one could augment it); nothing
+requires one.
+
+### Learned taste
+
+Each learned pattern answers: what was inferred, from which feedback, how
+many signals, whether they were your words or only behavior, when it was
+last reinforced, and what contradicts it.
+
+| Evidence | Weight |
+| --- | --- |
+| a reason naming something ("pure SRE") | 1.0 |
+| a reason pointing at the job ("this domain") | 0.75 per fact it resolves to |
+| liked / disliked | ±0.6 |
+| applied (interviewing 0.6, offer 0.7) | +0.5 |
+| saved | +0.25 |
+| rejected without a reason (with one, the reason carries it: −0.1) | −0.2 |
+| only looked at | 0 |
+
+Behavior is spread over the job's facets (role, level, domains, company
+kind, work style, required technologies, employer); reasons count for what
+they name. A pattern is used when enough agrees: one reason makes it
+*tentative*, two *established*, three *strong*; behavior alone needs three
+jobs (tentative) or five (established) and is never strong, so passive
+behavior can't create a strong preference, and one rejection without a
+reason teaches next to nothing. When evidence on both sides is comparable
+the pattern is **contradictory** and not used: rejecting one fintech job
+"because fintech", then applying to two fintech infrastructure roles, does
+not blacklist fintech, and the role (infrastructure) is its own pattern.
+A stated preference about the same thing always wins; the learned pattern
+stays visible next to it ("your feedback leans the other way").
+
+### Caching and revisions
+
+Rankings are recomputed from their inputs, and the ones shown to you
+(`rank`'s list, `why`) are stored in `opportunity_rankings` under a digest
+of everything they depend on: the ranking rules (`RANKING_VERSION`), the
+taste digest (every feedback event, the reader's revision and
+`TASTE_VERSION`), the profile and its revision, every record's content and
+status, the verification and eligibility answers, and the day. A new
+input is a new key, so a stored ranking never outlives what it was
+computed from; older rows are a record of what was shown and why. Bump
+`RANKING_VERSION`, `TASTE_VERSION` or `RULE_READER_REVISION` with any
+change that can rank, learn or read differently.
+
+### Architecture
+
+```text
+jobhunt-cli ──► jobhunt-ranking ──► jobhunt-eligibility ──► jobhunt-jobs, jobhunt-profile
+     │               ▲
+     └──► jobhunt-storage (FeedbackRepository, RankingRepository)
+```
+
+`jobhunt-ranking` holds the feedback model, reason reading, job facets,
+the person's side, learned taste, signals, gates, tiers, briefs, the rank
+cache key and the `FeedbackRepository` / `RankingRepository` boundaries,
+and `RankingService` (the use cases). It reads jobs, verification,
+eligibility and the profile only through their domain types and
+repository traits: no SQL, HTTP, CLI formatting or AI vendor code. The CLI
+is thin.
+
 ## Logging
 
 Logs are structured (`tracing`) and go to stderr, so they never mix with
@@ -1042,18 +1292,22 @@ crates/
                     tables, region definitions), restriction extraction with
                     evidence, profile facts, the rules, decisions and reasons,
                     opportunity aggregation, and the decision cache boundary.
+  jobhunt-ranking   Feedback on opportunities, reason reading, job facets,
+                    learned taste with its evidence, ranking signals, gates,
+                    tiers, decision briefs, the rank cache, RankingService.
   jobhunt-sources   Adapters (Ashby, Greenhouse, Lever, YC), careers-page board
                     detection, the HTTP verifiers, and the shared HTTP client.
   jobhunt-storage   Storage backends. SQLite today (jobs, profiles,
-                    verifications, eligibility decisions).
+                    verifications, eligibility decisions, feedback, rankings).
   jobhunt-cli       The `jobhunt` binary: config, logging, find, show, verify,
-                    check, init, profile, claims, preferences, output.
+                    check, rank, why, feedback commands, taste, pipeline,
+                    init, profile, claims, preferences, output.
   jobhunt-mcp       Placeholder for the MCP server; intentionally empty for now.
 ```
 
 Dependencies only point downward: `cli → sources, storage → jobs → core`,
-`cli → resume, storage → profile → core`, and `cli → eligibility → jobs,
-profile`. `jobhunt-jobs` and `jobhunt-profile` do not depend on any HTTP,
+`cli → resume, storage → profile → core`, `cli → eligibility → jobs,
+profile`, and `cli, storage → ranking → eligibility`. `jobhunt-jobs` and `jobhunt-profile` do not depend on any HTTP,
 SQL or PDF crate, nor on each other; `jobhunt-eligibility` is the only
 place where they meet.
 
@@ -1116,6 +1370,28 @@ rejected, or any converted posting is invalid.
   visa field, Pacific hours, Anthropic's Sydney office, a hybrid job with
   a remote flag); opportunity aggregation and the decision cache
   (profile, job, verification and rules changes each invalidate it).
+- `jobhunt-ranking`: job facets (titles to role shapes and levels,
+  generic titles read from the description, required vs preferred vs
+  mentioned technologies, domains needing more than a stray mention,
+  company and work-style statements with their sentence, benefits
+  boilerplate skipped); the reason reader on every documented phrasing
+  (cues, absence, clauses, job references, unread reasons, scope);
+  feedback state (pipeline folding, withdrawals, like/dislike apart from
+  it); learned taste (strong patterns from repeated reasons with their
+  evidence, reasonless rejections staying weak, contradictions not used,
+  explicit preferences winning, references resolved to the job, single-job
+  notes, digests); and ranking (a strong fit and its brief, the
+  eligibility and verification gates, conditional jobs, feedback on the
+  job, unwanted roles and non-engineering jobs, pay below a required
+  minimum verified or not, unknown, ambiguous, foreign-currency and
+  currency-less pay never read as low, learned taste moving rankings with
+  attribution, stated preferences outranking it, one rejection not
+  blacklisting a domain, work mode and style, ordering and round trips).
+- `jobhunt-storage` (ranking): feedback round trips and per-record
+  lookups, duplicates sharing state and feedback following a merge,
+  ranking through `RankingService` over SQLite (gates, exclusions,
+  learning from a reason, what was shown stored and reused, a new event
+  being a new key, verified pay below a minimum).
 - `jobhunt-sources` (verification): each family's verifier against a local
   mock serving saved real responses: active, closed and redirected
   listings, working and broken application paths, 5xx, garbage, timeouts,
@@ -1140,7 +1416,10 @@ rejected, or any converted posting is invalid.
   endpoints (`JOBHUNT_VERIFY_ENDPOINT`), `show` and `check` without
   fetching, reuse within the window, `--force`, `--details`, a profile
   change, 503s keeping the last success, jobs taken down, and `find`
-  filtering.
+  filtering; and ranking through the binary (`rank` with and without
+  `--all`, `why --details`, every feedback command with reasons read or
+  kept as written, `taste`, `pipeline`, `feedback`, `show`'s fit) over
+  real Ashby and Greenhouse responses, a resume and verified jobs.
 
 Only the offline suite runs in required CI. The live tests run separately,
 three times a week and on demand, in the "Live sources" workflow, so a
@@ -1205,7 +1484,7 @@ Eligibility:
   citizenship rules, and the answer is a compatibility signal, not legal
   advice.
 - No currency conversion, and pay is not part of eligibility (a pay
-  minimum is a ranking question).
+  minimum is a ranking question, answered by `jobhunt rank`).
 - Verification is plain HTTP. Employer careers pages are not checked
   (so no listing reaches `employer_first_party` yet); Ashby application
   pages render in a browser and are known from the API, not requested; a
@@ -1214,6 +1493,20 @@ Eligibility:
   closes it; meanwhile `show`, `check` and `verify` show it closed, `find`
   marks it ("Verified closed at its source") and `--eligible` /
   `--possible` never offer it.
+
+Ranking:
+
+- Job facets, levels and reasons are read with fixed English
+  vocabularies. A posting that describes itself in other words (company
+  size, stage, work style) simply has no such fact, and a reason with
+  nothing recognizable is kept as written and listed by `jobhunt taste`.
+- Learned patterns are about single facets (a role, a domain, a company
+  kind). "Fintech is fine, fintech sales isn't" is learned as two patterns
+  (the domain is contradictory; sales is avoided), not as a combination.
+- Learned taste doesn't decay with time; `taste` shows when each pattern
+  was last reinforced.
+- `rank` reads every open stored opportunity and its verification and
+  eligibility from the database each time (seconds for thousands of jobs).
 
 Jobs:
 

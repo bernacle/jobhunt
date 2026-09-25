@@ -5,6 +5,7 @@ members = [
     "crates/jobhunt-eligibility",
     "crates/jobhunt-jobs",
     "crates/jobhunt-profile",
+    "crates/jobhunt-ranking",
     "crates/jobhunt-resume",
     "crates/jobhunt-sources",
     "crates/jobhunt-storage",
@@ -25,6 +26,7 @@ jobhunt-core = { path = "crates/jobhunt-core" }
 jobhunt-eligibility = { path = "crates/jobhunt-eligibility" }
 jobhunt-jobs = { path = "crates/jobhunt-jobs" }
 jobhunt-profile = { path = "crates/jobhunt-profile" }
+jobhunt-ranking = { path = "crates/jobhunt-ranking" }
 jobhunt-resume = { path = "crates/jobhunt-resume" }
 jobhunt-sources = { path = "crates/jobhunt-sources" }
 jobhunt-storage = { path = "crates/jobhunt-storage" }
