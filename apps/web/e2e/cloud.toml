@@ -1,0 +1,59 @@
+# End-to-end tests and local development: the fixture boards in
+# fixtures/boards.mjs (served by fixture-server.mjs) plus one recorded real
+# board. Read by the real discovery worker.
+
+[logging]
+level = "info,sqlx=warn"
+format = "text"
+
+[discovery]
+concurrency = 4
+
+[verification]
+reuse_minutes = 15
+fresh_hours = 24
+stale_hours = 72
+
+[[sources.greenhouse]]
+board = "ledgerly"
+company = "Ledgerly"
+
+[[sources.greenhouse]]
+board = "toolbox"
+company = "Toolbox"
+
+[[sources.greenhouse]]
+board = "paydev"
+company = "PayDev"
+
+[[sources.greenhouse]]
+board = "northwind"
+company = "Northwind Ledger"
+
+[[sources.greenhouse]]
+board = "quanta"
+company = "Quanta Tools"
+
+[[sources.greenhouse]]
+board = "harbor"
+company = "Harbor"
+
+[[sources.greenhouse]]
+board = "cliworks"
+company = "CLI Works"
+
+[[sources.greenhouse]]
+board = "opsco"
+company = "OpsCo"
+
+[[sources.greenhouse]]
+board = "brandly"
+company = "Brandly"
+
+[[sources.greenhouse]]
+board = "figma"
+company = "Figma"
+
+[[sources.greenhouse]]
+board = "latecomer"
+company = "Latecomer"

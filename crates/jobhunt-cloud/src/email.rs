@@ -176,7 +176,8 @@ impl EmailSender for ResendSender {
             .post(&self.endpoint)
             .bearer_auth(&self.api_key)
             .header("Idempotency-Key", idempotency_key)
-            .json(&body)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(serde_json::to_vec(&body).map_err(|e| SendError::Permanent(e.to_string()))?)
             .send()
             .await
             .map_err(|e| SendError::Retryable(format!("could not reach Resend: {e}")))?;
