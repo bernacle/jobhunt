@@ -7,7 +7,7 @@ use jobhunt_jobs::{JobId, StorageError};
 use jobhunt_ranking::{
     FeedbackAction, FeedbackEvent, FeedbackRepository, RankKey, Ranking, RankingRepository,
 };
-use sqlx::{QueryBuilder, Row, Sqlite};
+use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection};
 
 use crate::sqlite::{SqliteJobStore, decode_timestamp, encode_timestamp};
 
@@ -53,25 +53,46 @@ fn decode(row: &sqlx::sqlite::SqliteRow) -> Result<FeedbackEvent, StorageError> 
     })
 }
 
+/// Inserts one feedback event. With `if_absent`, an event whose id is
+/// already stored is left alone and `false` is returned.
+pub(crate) async fn insert_feedback(
+    conn: &mut SqliteConnection,
+    event: &FeedbackEvent,
+    if_absent: bool,
+) -> Result<bool, StorageError> {
+    let verb = if if_absent {
+        "INSERT OR IGNORE"
+    } else {
+        "INSERT"
+    };
+    let result = sqlx::query(&format!(
+        "{verb} INTO opportunity_feedback ({FEEDBACK_COLUMNS}) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ))
+    .bind(event.id.to_string())
+    .bind(&event.profile_id)
+    .bind(event.opportunity.to_string())
+    .bind(event.job.to_string())
+    .bind(event.action.as_str())
+    .bind(event.reason.as_deref())
+    .bind(&event.title)
+    .bind(&event.company)
+    .bind(encode_timestamp(event.at))
+    .execute(&mut *conn)
+    .await
+    .map_err(query_error("saving feedback"))?;
+    Ok(result.rows_affected() > 0)
+}
+
 #[async_trait]
 impl FeedbackRepository for SqliteJobStore {
     async fn record_feedback(&self, event: &FeedbackEvent) -> Result<(), StorageError> {
-        sqlx::query(&format!(
-            "INSERT INTO opportunity_feedback ({FEEDBACK_COLUMNS}) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-        ))
-        .bind(event.id.to_string())
-        .bind(&event.profile_id)
-        .bind(event.opportunity.to_string())
-        .bind(event.job.to_string())
-        .bind(event.action.as_str())
-        .bind(event.reason.as_deref())
-        .bind(&event.title)
-        .bind(&event.company)
-        .bind(encode_timestamp(event.at))
-        .execute(&self.pool)
-        .await
-        .map_err(query_error("saving feedback"))?;
+        let mut conn = self
+            .pool
+            .acquire()
+            .await
+            .map_err(query_error("saving feedback"))?;
+        insert_feedback(&mut conn, event, false).await?;
         Ok(())
     }
 

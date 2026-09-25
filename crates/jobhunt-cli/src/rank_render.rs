@@ -1,29 +1,29 @@
-//! Output for `rank`, `why`, `taste`, `pipeline`, `feedback` and the
-//! feedback commands.
+//! Output for `why`, `taste`, `pipeline`, `feedback` and the feedback
+//! commands (the shortlist itself is `find`'s).
 
 use std::io::{self, Write};
 
 use anstyle::{AnsiColor, Style};
 use chrono::{DateTime, Utc};
-use jobhunt_ranking::reason::{ReadSignal, Target};
+use jobhunt_app::feedback::{FeedbackOutcome, describe_signal};
 use jobhunt_ranking::signals::{SignalKind, clip, describe_evidence};
 use jobhunt_ranking::{
-    Direction, FeedbackEvent, Gate, LearnedTaste, Person, PipelineEntry, RankReport, Ranking,
-    Recorded, Stage, TasteModel, TasteStatus, Tier,
+    Direction, FeedbackEvent, Gate, LearnedTaste, Person, PipelineEntry, Ranking, Stage,
+    TasteModel, TasteStatus, Tier,
 };
 
 use crate::render::{DIM, TITLE, plural};
 
-const GOOD: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::Green)));
-const OPEN: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::Yellow)));
-const BAD: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::Red)));
-const HEADING: Style = Style::new().bold();
+pub(crate) const GOOD: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::Green)));
+pub(crate) const OPEN: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::Yellow)));
+pub(crate) const BAD: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::Red)));
+pub(crate) const HEADING: Style = Style::new().bold();
 
 fn heading(out: &mut impl Write, text: &str) -> io::Result<()> {
     writeln!(out, "{HEADING}{text}{HEADING:#}")
 }
 
-fn tier_style(tier: Tier) -> Style {
+pub(crate) fn tier_style(tier: Tier) -> Style {
     match tier {
         Tier::StrongFit => GOOD.bold(),
         Tier::WorthReviewing => GOOD,
@@ -45,174 +45,6 @@ fn marker(kind: SignalKind) -> (&'static str, Style) {
 
 fn date(at: DateTime<Utc>) -> String {
     at.format("%Y-%m-%d").to_string()
-}
-
-/// The sections `rank` prints, in order.
-fn section(gate: &Gate) -> &'static str {
-    match gate {
-        Gate::Recommended => "Worth your attention",
-        Gate::VerifyFirst { .. } => "Promising, but verify before spending time",
-        Gate::EligibilityUnclear { .. } => "Could be worth it, if you can take it",
-        Gate::Excluded { .. } => "Not recommended",
-    }
-}
-
-/// `rank`: the few jobs worth attention, grouped by gate, each with its
-/// short brief.
-pub fn rank_list(
-    out: &mut impl Write,
-    report: &RankReport,
-    limit: usize,
-    all: bool,
-) -> io::Result<()> {
-    let shown: Vec<&Ranking> = report
-        .rankings
-        .iter()
-        .filter(|r| all || r.tier >= Tier::WorthReviewing)
-        .take(limit)
-        .collect();
-    let hidden_tiers = report
-        .rankings
-        .iter()
-        .filter(|r| r.tier < Tier::WorthReviewing)
-        .count();
-    if shown.is_empty() {
-        if report.rankings.is_empty() {
-            writeln!(
-                out,
-                "Nothing to recommend among {}.",
-                plural(
-                    report.considered as u64,
-                    "stored open job",
-                    "stored open jobs"
-                )
-            )?;
-        } else {
-            writeln!(
-                out,
-                "No job stands out yet: {} rank as maybe or low priority (--all shows them).",
-                plural(hidden_tiers as u64, "job", "jobs")
-            )?;
-        }
-    }
-    let mut current: Option<&'static str> = None;
-    for (i, r) in shown.iter().enumerate() {
-        let name = section(&r.gate);
-        if current != Some(name) {
-            if current.is_some() {
-                writeln!(out)?;
-            }
-            heading(out, name)?;
-            current = Some(name);
-        }
-        let s = tier_style(r.tier);
-        writeln!(
-            out,
-            " {DIM}{:>2}.{DIM:#} {TITLE}{}{TITLE:#} — {}   {s}{}{s:#}",
-            i + 1,
-            r.title,
-            r.company,
-            r.tier.label()
-        )?;
-        writeln!(out, "     {DIM}{}{DIM:#}", r.brief.summary)?;
-        let lines = r
-            .brief
-            .worth
-            .iter()
-            .take(3)
-            .map(|l| (SignalKind::Plus, l))
-            .chain(
-                r.brief
-                    .caveats
-                    .iter()
-                    .take(2)
-                    .map(|l| (SignalKind::Minus, l)),
-            )
-            .chain(
-                r.brief
-                    .unknowns
-                    .iter()
-                    .take(1)
-                    .map(|l| (SignalKind::Unknown, l)),
-            );
-        for (kind, line) in lines {
-            let (m, st) = marker(kind);
-            writeln!(out, "     {st}{m}{st:#} {line}")?;
-        }
-        let next = match &r.gate {
-            Gate::VerifyFirst { .. } => format!("jobhunt verify {}", r.opportunity),
-            Gate::EligibilityUnclear { .. } => format!("jobhunt check {}", r.opportunity),
-            _ => format!("jobhunt why {}", r.opportunity),
-        };
-        writeln!(out, "     {DIM}{} · {next}{DIM:#}", r.opportunity)?;
-    }
-    writeln!(out)?;
-    let e = &report.excluded;
-    let mut not_shown: Vec<String> = Vec::new();
-    let mut add = |n: usize, one: &str, many: &str| {
-        if n > 0 {
-            not_shown.push(plural(n as u64, one, many));
-        }
-    };
-    add(e.ineligible, "job you can't take", "jobs you can't take");
-    add(
-        e.below_minimum,
-        "job below your pay minimum",
-        "jobs below your pay minimum",
-    );
-    add(e.rejected, "you rejected", "you rejected");
-    add(e.in_pipeline, "in your pipeline", "in your pipeline");
-    add(e.closed, "closed", "closed");
-    if !all {
-        add(
-            hidden_tiers,
-            "maybe or low priority (--all)",
-            "maybe or low priority (--all)",
-        );
-    }
-    let beyond = report
-        .rankings
-        .iter()
-        .filter(|r| all || r.tier >= Tier::WorthReviewing)
-        .count()
-        .saturating_sub(shown.len());
-    add(beyond, "more beyond --limit", "more beyond --limit");
-    if !not_shown.is_empty() {
-        writeln!(out, "{DIM}Not shown: {}.{DIM:#}", not_shown.join(" · "))?;
-    }
-    let taste = &report.taste;
-    let learned = taste.active().count();
-    writeln!(
-        out,
-        "{DIM}Ranked {} against your profile{}. Tiers are coarse on purpose; \
-         `jobhunt why <id>` shows every reason.{DIM:#}",
-        plural(
-            report.considered as u64,
-            "stored open job",
-            "stored open jobs"
-        ),
-        if taste.events > 0 {
-            format!(
-                ", {} and {} learned from it",
-                plural(
-                    taste.events as u64,
-                    "piece of feedback",
-                    "pieces of feedback"
-                ),
-                plural(learned as u64, "pattern", "patterns")
-            )
-        } else {
-            String::new()
-        }
-    )?;
-    if !report.person.has_preferences() {
-        writeln!(
-            out,
-            "{DIM}Say what you want (jobhunt preferences add \"…\") and give feedback \
-             (jobhunt save|reject <id> --reason \"…\") to sharpen this.{DIM:#}"
-        )?;
-    }
-    out.flush()
 }
 
 /// `why`: the decision brief of one job.
@@ -307,22 +139,26 @@ pub fn brief(
     out.flush()
 }
 
-/// How a reason was read, in words.
-pub fn reading(signal: &ReadSignal) -> String {
-    let what = match &signal.target {
-        Target::Key { key } => key.label(),
-        Target::Job { reference } => reference.label().to_owned(),
-    };
-    let scope = match signal.scope {
-        jobhunt_ranking::reason::Scope::General => "",
-        jobhunt_ranking::reason::Scope::ThisOpportunity => " (this job only)",
-    };
-    format!("{} {what}{scope}", signal.direction.as_str())
-}
-
 /// What a feedback command did.
-pub fn recorded(out: &mut impl Write, r: &Recorded) -> io::Result<()> {
+pub fn recorded(out: &mut impl Write, outcome: &FeedbackOutcome) -> io::Result<()> {
+    let r = &outcome.recorded;
     let e = &r.event;
+    if !r.recorded {
+        writeln!(
+            out,
+            "Already {} {TITLE}{} — {}{TITLE:#}: nothing changed.",
+            e.action.past(),
+            e.title,
+            e.company
+        )?;
+        writeln!(out, "{DIM}{} · {}{DIM:#}", e.opportunity, e.id)?;
+        writeln!(
+            out,
+            "Status: {}",
+            state_text(r.after.stage, r.after.sentiment)
+        )?;
+        return out.flush();
+    }
     let verb = e.action.past();
     writeln!(
         out,
@@ -340,7 +176,7 @@ pub fn recorded(out: &mut impl Write, r: &Recorded) -> io::Result<()> {
                 "{DIM}Kept as written: JobHunt didn't recognize anything to learn from in it.{DIM:#}"
             )?;
         } else {
-            let read: Vec<String> = reading.signals.iter().map(self::reading).collect();
+            let read: Vec<String> = reading.signals.iter().map(describe_signal).collect();
             writeln!(out, "Read as: {}", read.join("; "))?;
         }
     }
@@ -350,6 +186,12 @@ pub fn recorded(out: &mut impl Write, r: &Recorded) -> io::Result<()> {
         writeln!(out, "Status: {after} (unchanged)")?;
     } else {
         writeln!(out, "Status: {after} (was {before})")?;
+    }
+    for learned in &outcome.learned {
+        writeln!(out, "Learned: {learned}")?;
+    }
+    for unlearned in &outcome.unlearned {
+        writeln!(out, "{DIM}No longer used: {unlearned}{DIM:#}")?;
     }
     if r.after.stage == Stage::Rejected {
         writeln!(

@@ -41,11 +41,18 @@ pub enum RankingError {
 /// What recording feedback did.
 #[derive(Debug, Clone)]
 pub struct Recorded {
+    /// The event stored now; or, when nothing was stored (`recorded` is
+    /// false), the earlier event it repeats (or the one it would have been).
     pub event: FeedbackEvent,
     pub before: OpportunityState,
     pub after: OpportunityState,
     /// How the reason was read (`None` without a reason).
     pub reading: Option<ReasonReading>,
+    /// Whether a new event was stored. An action that changes nothing
+    /// (the state already reflects it, and its reason, if any, was
+    /// already given for the same action) is a repeat, typically a retry,
+    /// and is not stored again.
+    pub recorded: bool,
 }
 
 /// One ranking with what it was computed from.
@@ -201,14 +208,38 @@ where
             (&main.posting.title, &main.posting.company),
             now,
         );
-        self.repo.record_feedback(&event).await?;
         let after = OpportunityState::of(before.events.iter().cloned().chain([event.clone()]));
         let reading = event.reason.as_deref().map(|r| self.reader.read(r, action));
+        let same_state = after.stage == before.stage
+            && after.sentiment == before.sentiment
+            && after.furthest == before.furthest;
+        let said_before = |e: &FeedbackEvent| e.action == action && e.reason == event.reason;
+        let repeat =
+            same_state && (event.reason.is_none() || before.events.iter().any(said_before));
+        if repeat {
+            let earlier = before
+                .events
+                .iter()
+                .rev()
+                .find(|e| said_before(e))
+                .or_else(|| before.events.iter().rev().find(|e| e.action == action))
+                .cloned()
+                .unwrap_or(event);
+            return Ok(Recorded {
+                event: earlier,
+                after: before.clone(),
+                before,
+                reading,
+                recorded: false,
+            });
+        }
+        self.repo.record_feedback(&event).await?;
         Ok(Recorded {
             event,
             before,
             after,
             reading,
+            recorded: true,
         })
     }
 

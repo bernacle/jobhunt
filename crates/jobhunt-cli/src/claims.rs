@@ -5,12 +5,10 @@ use std::process::ExitCode;
 
 use chrono::Utc;
 use clap::Subcommand;
-use jobhunt_profile::{
-    ClaimKind, ClaimQuery, ProfileService, Provenance, RecordId, Subject, Verification,
-};
+use jobhunt_profile::{ClaimKind, ClaimQuery, Provenance, RecordId, Subject, Verification};
 
 use crate::config::LoadedConfig;
-use crate::profile_args::{finish, open_store};
+use crate::profile_args::finish;
 use crate::profile_render::{self, short};
 use crate::render::plural;
 
@@ -137,17 +135,14 @@ pub enum StateArg {
 }
 
 pub async fn run(args: ClaimsArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
-    let store = open_store(loaded).await?;
-    let result = execute(args, &store).await;
-    store.close().await;
+    let app = crate::local::open(loaded).await?;
+    let result = execute(args, &app).await;
+    app.close().await;
     result
 }
 
-async fn execute(
-    args: ClaimsArgs,
-    store: &jobhunt_storage::SqliteJobStore,
-) -> anyhow::Result<ExitCode> {
-    let service = ProfileService::new(store);
+async fn execute(args: ClaimsArgs, app: &jobhunt_app::LocalApp) -> anyhow::Result<ExitCode> {
+    let service = app.profiles();
     let now = Utc::now();
     let mut out = anstream::stdout().lock();
     match args.command.unwrap_or(ClaimsCommand::List(args.list)) {

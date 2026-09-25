@@ -5,9 +5,6 @@ use std::str::FromStr;
 
 use anyhow::Context;
 use jobhunt_profile::{EmploymentKind, PartialDate, Stance};
-use jobhunt_storage::SqliteJobStore;
-
-use crate::config::LoadedConfig;
 
 /// A value that can also be cleared with `none` (or an empty string).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,12 +76,6 @@ impl From<StanceArg> for Stance {
 
 pub fn date(s: &str) -> Result<Clearable<PartialDate>, String> {
     s.parse()
-}
-
-pub async fn open_store(loaded: &LoadedConfig) -> anyhow::Result<SqliteJobStore> {
-    SqliteJobStore::open(&loaded.database)
-        .await
-        .context("could not open the local JobHunt database")
 }
 
 /// Ignores a closed pipe (`jobhunt profile | head`).

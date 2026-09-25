@@ -1,11 +1,18 @@
 //! The `jobhunt` command.
+//!
+//! Every command is a thin interface over [`jobhunt_app::LocalApp`], the
+//! same application the MCP server (`jobhunt mcp`) runs: arguments in, a
+//! use case, output on stdout (progress and logs on stderr).
 
 mod check;
 mod claims;
 mod config;
+mod context;
+mod doctor;
 mod eligibility;
 mod find;
 mod init;
+mod local;
 mod logging;
 mod preferences;
 mod profile;
@@ -15,6 +22,7 @@ mod rank;
 mod rank_render;
 mod render;
 mod show;
+mod state;
 mod verify;
 
 use std::io::Write;
@@ -25,9 +33,13 @@ use anyhow::Context;
 use clap::{Parser, Subcommand};
 use jobhunt_ranking::FeedbackAction;
 
-use crate::config::{LoadedConfig, LogFormat, Paths};
+use crate::config::{LoadedConfig, LogFormatArg, Paths};
 
-/// High-signal job discovery.
+/// High-signal job discovery: a tiny, verified, personalized shortlist
+/// from a large universe of jobs.
+///
+/// Start with `jobhunt init resume.pdf`, say what you want with
+/// `jobhunt preferences add "…"`, then run `jobhunt find`.
 #[derive(Debug, Parser)]
 #[command(name = "jobhunt", version, about, propagate_version = true)]
 struct Cli {
@@ -45,7 +57,7 @@ struct Cli {
 
     /// Log format on stderr.
     #[arg(long, global = true, value_enum, value_name = "FORMAT")]
-    log_format: Option<LogFormat>,
+    log_format: Option<LogFormatArg>,
 
     #[command(subcommand)]
     command: Command,
@@ -53,64 +65,82 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Fetch jobs from the configured sources, save them locally, and show them.
-    Find(find::FindArgs),
-    /// Show everything stored about one job: every source listing it and its history.
-    Show(show::ShowArgs),
-    /// Verify one job at its authoritative sources (is it still open, can
-    /// you apply, who publishes it, what does it say now), save the result,
-    /// and check it against your profile.
-    Verify(verify::VerifyArgs),
-    /// The full verification and eligibility report of one job, with the
-    /// evidence behind every reason, from what is stored (`--refresh`
-    /// verifies first).
-    Check(check::CheckArgs),
     /// Import your resume (PDF, .txt or .md) into your career profile. Run it
     /// again after updating the resume; your edits and decisions are kept.
     Init(init::InitArgs),
-    /// Show, correct, export or import your career profile.
-    Profile(profile::ProfileArgs),
-    /// Review the evidence behind your profile: list, confirm or reject claims.
-    #[command(alias = "claim")]
-    Claims(claims::ClaimsArgs),
     /// What you want next: roles, pay, location, companies, domains, work style.
     #[command(alias = "prefs", alias = "preference")]
     Preferences(preferences::PreferencesArgs),
-    /// The few stored jobs most worth your time, each with a short brief:
-    /// why, caveats, unknowns. Builds on eligibility and verification, and
-    /// learns from your feedback.
-    Rank(rank::RankArgs),
-    /// The decision brief of one job: why it may be worth your time, the
-    /// caveats, what's unknown, your history with it, and (--details)
-    /// every signal with its evidence.
+    /// The few opportunities worth your time: personalized, verified, with
+    /// why. Refreshes job boards when stored jobs are stale (--refresh,
+    /// --offline); --raw lists every matching stored job instead.
+    Find(find::FindArgs),
+    /// Everything about one opportunity: every source listing it, its
+    /// verification, eligibility, fit, your status and history.
+    Show(show::ShowArgs),
+    /// The decision brief of one opportunity: why it may be worth your
+    /// time, caveats, unknowns, your history with it, and (--details) every
+    /// signal with its evidence.
     Why(rank::WhyArgs),
-    /// Save a job for later.
+    /// Verify one opportunity at its authoritative sources (still open? can
+    /// you apply? who publishes it? what does it say now?), save the
+    /// result, and check it against your profile.
+    Verify(verify::VerifyArgs),
+    /// The full verification and eligibility report of one opportunity,
+    /// with the evidence behind every reason, from what is stored
+    /// (`--refresh` verifies first).
+    Check(check::CheckArgs),
+    /// Save an opportunity for later.
     Save(rank::FeedbackArgs),
-    /// Take a job off your saved list (without rejecting it).
-    Unsave(rank::FeedbackArgs),
     /// Not interested. Say why with --reason ("too corporate", "pure SRE"):
     /// JobHunt learns from your words and keeps them verbatim.
     Reject(rank::FeedbackArgs),
-    /// You like this job (independent of saving or applying).
+    /// You like this opportunity (independent of saving or applying).
     Like(rank::FeedbackArgs),
-    /// You dislike this job (independent of rejecting it).
+    /// You dislike this opportunity (independent of rejecting it).
     Dislike(rank::FeedbackArgs),
+    /// Take an opportunity off your saved list (without rejecting it).
+    Unsave(rank::FeedbackArgs),
     /// You applied.
     Applied(rank::FeedbackArgs),
     /// You're interviewing.
     Interview(rank::FeedbackArgs),
     /// You got an offer.
     Offer(rank::FeedbackArgs),
-    /// Jobs you saved, applied to, are interviewing for or got an offer
-    /// from.
+    /// Opportunities you saved, applied to, are interviewing for or got an
+    /// offer from.
     Pipeline(rank::PipelineArgs),
+    /// Your feedback, verbatim, for every opportunity or one.
+    Feedback(rank::LogArgs),
     /// What JobHunt learned from your feedback, with the evidence behind
     /// every pattern, next to what you told it.
     Taste(rank::TasteArgs),
-    /// Your feedback, verbatim, for every job or one.
-    Feedback(rank::LogArgs),
+    /// Show, correct, export or import your career profile.
+    Profile(profile::ProfileArgs),
+    /// Review the evidence behind your profile: list, confirm or reject claims.
+    #[command(alias = "claim")]
+    Claims(claims::ClaimsArgs),
+    /// The evidence you approved that bears on one opportunity, as JSON, for
+    /// an assistant helping with an application (writes nothing itself).
+    Context(context::ContextArgs),
+    /// Write everything that is yours (profile, evidence decisions,
+    /// preferences, feedback and pipeline) as one versioned JSON file.
+    Export(state::ExportArgs),
+    /// Restore a file written by `jobhunt export`, atomically.
+    Import(state::ImportArgs),
+    /// Serve the Model Context Protocol on stdin/stdout, so an MCP client
+    /// (Claude, ChatGPT, Codex, …) can use this same profile, jobs and
+    /// feedback.
+    Mcp,
+    /// Check the setup: config and database paths, schema, profile, stored
+    /// jobs, sources, and the MCP command for your client.
+    Doctor,
     /// Show where JobHunt keeps its files and the effective configuration.
     Config,
+    /// The shortlist from stored jobs only (`jobhunt find --offline`); kept
+    /// for scripts written before `find` became personalized.
+    #[command(hide = true)]
+    Rank(find::RankArgs),
 }
 
 #[tokio::main]
@@ -127,6 +157,18 @@ async fn main() -> ExitCode {
             for cause in error.chain().skip(1) {
                 let _ = writeln!(stderr, "  caused by: {cause}");
             }
+            if let Some(hint) = error
+                .downcast_ref::<jobhunt_app::AppError>()
+                .and_then(|e| e.hint())
+                .filter(|_| {
+                    !matches!(
+                        error.downcast_ref::<jobhunt_app::AppError>(),
+                        Some(jobhunt_app::AppError::NoProfile | jobhunt_app::AppError::NoJobs)
+                    )
+                })
+            {
+                let _ = writeln!(stderr, "hint: {hint}");
+            }
             ExitCode::FAILURE
         }
     }
@@ -139,7 +181,10 @@ async fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         cli.database.as_deref(),
         paths.as_ref(),
     )?;
-    let format = cli.log_format.unwrap_or(loaded.config.logging.format);
+    let format = cli
+        .log_format
+        .map(Into::into)
+        .unwrap_or(loaded.config.logging.format);
     logging::init(cli.verbose, &loaded.config.logging, format)?;
     tracing::debug!(
         config_file = ?loaded.file,
@@ -148,29 +193,42 @@ async fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     );
 
     match cli.command {
+        Command::Init(args) => init::run(args, &loaded).await,
+        Command::Preferences(args) => preferences::run(args, &loaded).await,
         Command::Find(args) => find::run(args, &loaded, cli.verbose).await,
         Command::Show(args) => show::run(args, &loaded).await,
+        Command::Why(args) => rank::why(args, &loaded).await,
         Command::Verify(args) => verify::run(args, &loaded).await,
         Command::Check(args) => check::run(args, &loaded).await,
-        Command::Init(args) => init::run(args, &loaded).await,
-        Command::Profile(args) => profile::run(args, &loaded).await,
-        Command::Claims(args) => claims::run(args, &loaded).await,
-        Command::Preferences(args) => preferences::run(args, &loaded).await,
-        Command::Rank(args) => rank::rank(args, &loaded).await,
-        Command::Why(args) => rank::why(args, &loaded).await,
         Command::Save(args) => rank::feedback(FeedbackAction::Save, args, &loaded).await,
-        Command::Unsave(args) => rank::feedback(FeedbackAction::Unsave, args, &loaded).await,
         Command::Reject(args) => rank::feedback(FeedbackAction::Reject, args, &loaded).await,
         Command::Like(args) => rank::feedback(FeedbackAction::Like, args, &loaded).await,
         Command::Dislike(args) => rank::feedback(FeedbackAction::Dislike, args, &loaded).await,
+        Command::Unsave(args) => rank::feedback(FeedbackAction::Unsave, args, &loaded).await,
         Command::Applied(args) => rank::feedback(FeedbackAction::Applied, args, &loaded).await,
         Command::Interview(args) => rank::feedback(FeedbackAction::Interview, args, &loaded).await,
         Command::Offer(args) => rank::feedback(FeedbackAction::Offer, args, &loaded).await,
         Command::Pipeline(args) => rank::pipeline(args, &loaded).await,
-        Command::Taste(args) => rank::taste(args, &loaded).await,
         Command::Feedback(args) => rank::log(args, &loaded).await,
+        Command::Taste(args) => rank::taste(args, &loaded).await,
+        Command::Profile(args) => profile::run(args, &loaded).await,
+        Command::Claims(args) => claims::run(args, &loaded).await,
+        Command::Context(args) => context::run(args, &loaded).await,
+        Command::Export(args) => state::export(args, &loaded).await,
+        Command::Import(args) => state::import(args, &loaded).await,
+        Command::Mcp => mcp(&loaded).await,
+        Command::Doctor => doctor::run(&loaded).await,
         Command::Config => show_config(&loaded),
+        Command::Rank(args) => find::rank(args, &loaded).await,
     }
+}
+
+/// `jobhunt mcp`: the same configuration and database, served over stdio.
+/// Nothing but protocol messages is written to stdout; logs go to stderr.
+async fn mcp(loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
+    let app = local::open(loaded).await?;
+    jobhunt_mcp::serve_stdio(app).await?;
+    Ok(ExitCode::SUCCESS)
 }
 
 fn show_config(loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
@@ -220,10 +278,10 @@ mod tests {
             panic!("expected find");
         };
         assert_eq!(args.query, ["rust", "backend"]);
-        assert_eq!(args.limit, 5);
+        assert_eq!(args.limit, Some(5));
         assert_eq!(
             args.sources[0],
-            find::SourceArg::Key("ashby:linear".parse().unwrap())
+            jobhunt_app::SourceArg::Key("ashby:linear".parse().unwrap())
         );
         assert!(!args.offline);
     }
@@ -243,7 +301,7 @@ mod tests {
         let Command::Find(args) = cli.command else {
             panic!("expected find");
         };
-        assert!(matches!(args.sources[0], find::SourceArg::Url(_)));
+        assert!(matches!(args.sources[0], jobhunt_app::SourceArg::Url(_)));
     }
 
     #[test]
@@ -358,6 +416,26 @@ mod tests {
             panic!("expected rank");
         };
         assert_eq!((args.query.len(), args.limit, args.all), (1, 3, true));
+        let cli =
+            Cli::try_parse_from(["jobhunt", "find", "--refresh", "--all", "-n", "3"]).unwrap();
+        let Command::Find(args) = cli.command else {
+            panic!("expected find");
+        };
+        assert!(args.refresh && args.all && !args.raw);
+        assert!(Cli::try_parse_from(["jobhunt", "find", "--refresh", "--offline"]).is_err());
+        assert!(Cli::try_parse_from(["jobhunt", "find", "--raw", "--json"]).is_err());
+        for command in [
+            vec!["jobhunt", "mcp"],
+            vec!["jobhunt", "doctor"],
+            vec!["jobhunt", "export", "-o", "state.json"],
+            vec!["jobhunt", "import", "state.json", "--replace"],
+            vec!["jobhunt", "context", "opp_1234", "--contact"],
+            vec!["jobhunt", "show", "opp_1234", "--json"],
+            vec!["jobhunt", "verify", "opp_1234", "--json"],
+            vec!["jobhunt", "pipeline", "--json"],
+        ] {
+            assert!(Cli::try_parse_from(&command).is_ok(), "{command:?}");
+        }
         assert!(Cli::try_parse_from(["jobhunt", "taste", "--all"]).is_ok());
         assert!(Cli::try_parse_from(["jobhunt", "pipeline"]).is_ok());
         assert!(Cli::try_parse_from(["jobhunt", "feedback"]).is_ok());

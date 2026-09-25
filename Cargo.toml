@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/jobhunt-app",
     "crates/jobhunt-core",
     "crates/jobhunt-eligibility",
     "crates/jobhunt-jobs",
@@ -22,10 +23,12 @@ publish = false
 
 [workspace.dependencies]
 # Internal crates
+jobhunt-app = { path = "crates/jobhunt-app" }
 jobhunt-core = { path = "crates/jobhunt-core" }
 jobhunt-eligibility = { path = "crates/jobhunt-eligibility" }
 jobhunt-jobs = { path = "crates/jobhunt-jobs" }
 jobhunt-profile = { path = "crates/jobhunt-profile" }
+jobhunt-mcp = { path = "crates/jobhunt-mcp" }
 jobhunt-ranking = { path = "crates/jobhunt-ranking" }
 jobhunt-resume = { path = "crates/jobhunt-resume" }
 jobhunt-sources = { path = "crates/jobhunt-sources" }
@@ -41,7 +44,9 @@ clap = { version = "4.5", features = ["derive", "env"] }
 directories = "6"
 futures = "0.3"
 pdf-extract = "0.12.1"
+rmcp = { version = "3.4.1", default-features = false, features = ["server", "macros", "schemars", "transport-io"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "gzip"] }
+schemars = "1.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"

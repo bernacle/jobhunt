@@ -8,12 +8,11 @@ use anyhow::{Context, bail};
 use chrono::Utc;
 use clap::Subcommand;
 use jobhunt_profile::{
-    BasicsEdit, EducationEdit, ExperienceEdit, PartialDate, ProfileExport, ProfileService,
-    ProjectEdit, Removal,
+    BasicsEdit, EducationEdit, ExperienceEdit, PartialDate, ProfileExport, ProjectEdit, Removal,
 };
 
 use crate::config::LoadedConfig;
-use crate::profile_args::{Clearable, Employment, date, finish, open_store};
+use crate::profile_args::{Clearable, Employment, date, finish};
 use crate::profile_render::{self, date_or_unknown, short};
 
 #[derive(Debug, clap::Args)]
@@ -246,17 +245,14 @@ impl EducationArgs {
 }
 
 pub async fn run(args: ProfileArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
-    let store = open_store(loaded).await?;
-    let result = execute(args, &store).await;
-    store.close().await;
+    let app = crate::local::open(loaded).await?;
+    let result = execute(args, &app).await;
+    app.close().await;
     result
 }
 
-async fn execute(
-    args: ProfileArgs,
-    store: &jobhunt_storage::SqliteJobStore,
-) -> anyhow::Result<ExitCode> {
-    let service = ProfileService::new(store);
+async fn execute(args: ProfileArgs, app: &jobhunt_app::LocalApp) -> anyhow::Result<ExitCode> {
+    let service = app.profiles();
     let now = Utc::now();
     let mut out = anstream::stdout().lock();
     match args

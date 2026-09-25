@@ -1,0 +1,123 @@
+//! `jobhunt doctor`: is everything where it should be, and how does an MCP
+//! client start this JobHunt?
+
+use std::io::{self, Write};
+use std::process::ExitCode;
+
+use jobhunt_app::RefreshReason;
+use jobhunt_app::doctor::Diagnostics;
+
+use crate::config::LoadedConfig;
+use crate::local::{finish, with_app};
+use crate::rank_render::{GOOD, OPEN};
+use crate::render::{DIM, plural};
+
+pub async fn run(loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
+    with_app!(loaded, |app| {
+        let d = app.doctor(jobhunt_app::now()).await?;
+        finish(
+            write(&mut anstream::stdout().lock(), &d, loaded),
+            "the report",
+        )
+    })
+}
+
+fn ok(out: &mut impl Write, good: bool, text: &str) -> io::Result<()> {
+    if good {
+        writeln!(out, "{GOOD}✓{GOOD:#} {text}")
+    } else {
+        writeln!(out, "{OPEN}!{OPEN:#} {text}")
+    }
+}
+
+fn write(out: &mut impl Write, d: &Diagnostics, loaded: &LoadedConfig) -> io::Result<()> {
+    let config = match (&d.config_file, &d.default_config_file) {
+        (Some(file), _) => file.display().to_string(),
+        (None, Some(default)) => {
+            format!("none (defaults; would be read from {})", default.display())
+        }
+        (None, None) => "none (defaults)".to_owned(),
+    };
+    ok(out, true, &format!("Config: {config}"))?;
+    ok(out, true, &format!("Database: {}", d.database.display()))?;
+    let s = &d.stats;
+    ok(
+        out,
+        s.migrations_applied >= s.migrations_known,
+        &format!(
+            "Schema: {} of {} migrations applied",
+            s.migrations_applied, s.migrations_known
+        ),
+    )?;
+    match &d.profile {
+        Some(p) => ok(
+            out,
+            p.experiences > 0 || p.preferences > 0,
+            &format!(
+                "Profile: {}, {} ({} usable, {} to review), {}",
+                plural(p.experiences as u64, "experience", "experiences"),
+                plural(p.claims as u64, "claim", "claims"),
+                p.usable_claims,
+                p.needs_review,
+                plural(p.preferences as u64, "preference", "preferences"),
+            ),
+        )?,
+        None => ok(out, false, "Profile: none yet (jobhunt init resume.pdf)")?,
+    }
+    ok(
+        out,
+        s.open_jobs > 0,
+        &format!(
+            "Jobs: {} ({} open opportunities), {}, {}",
+            plural(s.jobs, "stored job", "stored jobs"),
+            s.open_opportunities,
+            plural(s.verifications, "verification", "verifications"),
+            plural(s.feedback, "piece of feedback", "pieces of feedback"),
+        ),
+    )?;
+    let now = jobhunt_app::now();
+    let fresh = matches!(d.freshness, RefreshReason::Fresh { .. });
+    ok(
+        out,
+        fresh,
+        &format!(
+            "Sources: {} configured{}; {}",
+            d.sources,
+            if d.careers_pages > 0 {
+                format!(
+                    " plus {}",
+                    plural(d.careers_pages as u64, "careers page", "careers pages")
+                )
+            } else {
+                String::new()
+            },
+            d.freshness.describe(now)
+        ),
+    )?;
+    writeln!(out)?;
+    let exe = std::env::current_exe()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "jobhunt".to_owned());
+    let mut args = vec!["mcp".to_owned()];
+    if let Some(file) = &loaded.file {
+        args.push("--config".into());
+        args.push(file.display().to_string());
+    }
+    args.push("--database".into());
+    args.push(d.database.display().to_string());
+    writeln!(
+        out,
+        "MCP: `jobhunt mcp` serves this profile and database over stdio. For a client:"
+    )?;
+    writeln!(out, "  command: {exe}")?;
+    writeln!(
+        out,
+        "  args:    {}",
+        serde_json::to_string(&args).unwrap_or_default()
+    )?;
+    writeln!(
+        out,
+        "{DIM}No AI provider or account is needed; see the README for client configuration.{DIM:#}"
+    )?;
+    out.flush()
+}

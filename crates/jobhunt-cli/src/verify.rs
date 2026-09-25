@@ -4,29 +4,22 @@
 use std::io::{self, Write};
 use std::process::ExitCode;
 
-use anyhow::Context;
 use chrono::{DateTime, Utc};
-use jobhunt_eligibility::evaluate::trust;
+use jobhunt_app::inspect::VerificationReport;
+use jobhunt_app::verify::Checked;
 use jobhunt_eligibility::profile::ProfileFacts;
-use jobhunt_eligibility::{Assessment, cached_assess, requirements};
-use jobhunt_jobs::verification::{
-    FreshnessPolicy, OpportunityTrust, RecordVerification, VerificationService, VerifyMode,
-};
-use jobhunt_sources::{HttpClient, HttpVerifier, VerifierHosts};
-use jobhunt_storage::SqliteJobStore;
+use jobhunt_eligibility::{Assessment, requirements};
+use jobhunt_jobs::verification::{OpportunityTrust, RecordVerification, VerifyMode};
 
 use crate::config::LoadedConfig;
 use crate::eligibility;
+use crate::local::{StderrProgress, finish, print_json, with_app};
 use crate::render::{DIM, TITLE, plural};
-use crate::show::load_records;
-
-/// Sends every verification request to this base URL instead of the real
-/// hosts. For offline tests against a local server; not a user setting.
-const ENDPOINT_OVERRIDE: &str = "JOBHUNT_VERIFY_ENDPOINT";
 
 #[derive(Debug, clap::Args)]
 pub struct VerifyArgs {
-    /// A job id (job_…, printed by `find`) or an opportunity id (opp_…).
+    /// An opportunity id (opp_…, as `find` prints it) or a job id (job_…);
+    /// a unique prefix works too.
     #[arg(value_name = "ID")]
     pub id: String,
 
@@ -38,128 +31,58 @@ pub struct VerifyArgs {
     /// authority chain, and the evidence behind every reason.
     #[arg(long, short = 'd')]
     pub details: bool,
+
+    /// Print the result as JSON (the structure the MCP verify_job tool
+    /// returns).
+    #[arg(long)]
+    pub json: bool,
 }
 
 pub async fn run(args: VerifyArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
-    let store = SqliteJobStore::open(&loaded.database)
-        .await
-        .context("could not open the local job database")?;
-    let result = execute(&args, loaded, &store).await;
-    store.close().await;
-    result
-}
-
-async fn execute(
-    args: &VerifyArgs,
-    loaded: &LoadedConfig,
-    store: &SqliteJobStore,
-) -> anyhow::Result<ExitCode> {
-    let records = load_records(store, &args.id).await?;
-    let now = Utc::now();
-    let mode = if args.force {
-        VerifyMode::Force
-    } else {
-        VerifyMode::IfDue
-    };
-    let verified = verify(loaded, store, &records, mode, now).await?;
-    let reused = verified.iter().filter(|v| v.reused).count();
-    if reused > 0 && !args.force {
-        eprintln!(
-            "Reused {} from the last {} minutes (--force asks again).",
-            plural(reused as u64, "recent verification", "recent verifications"),
-            loaded.config.verification.reuse_minutes
-        );
-    }
-    report(loaded, store, &verified, now, args.details).await
-}
-
-/// Verifies records against their sources.
-pub async fn verify(
-    loaded: &LoadedConfig,
-    store: &SqliteJobStore,
-    records: &[jobhunt_jobs::JobRecord],
-    mode: VerifyMode,
-    now: DateTime<Utc>,
-) -> anyhow::Result<Vec<RecordVerification>> {
-    let config = &loaded.config;
-    let http = HttpClient::new(config.discovery.http_settings())?;
-    let verifier = match std::env::var(ENDPOINT_OVERRIDE) {
-        Ok(base) if !base.trim().is_empty() => {
-            HttpVerifier::with_hosts(http, VerifierHosts::all_at(&base))
-        }
-        _ => HttpVerifier::new(http),
-    };
-    let fetching = records.len();
-    {
-        eprintln!(
-            "Verifying {} at {}…",
-            plural(fetching as u64, "source record", "source records"),
-            plural(
-                records
-                    .iter()
-                    .map(|r| r.posting.provenance.source.to_string())
-                    .collect::<std::collections::BTreeSet<_>>()
-                    .len() as u64,
-                "source",
-                "sources"
+    with_app!(loaded, |app| {
+        let opportunity = app.resolve(&args.id).await?;
+        let mode = if args.force {
+            VerifyMode::Force
+        } else {
+            VerifyMode::IfDue
+        };
+        let checked = app
+            .verify(
+                &opportunity,
+                mode,
+                &StderrProgress::each(),
+                jobhunt_app::now(),
             )
-        );
-    }
-    VerificationService::new(store, &verifier)
-        .with_policy(config.verification.policy())
-        .with_concurrency(config.verification.concurrency)
-        .verify(records, mode, now)
-        .await
-        .context("could not save the verification")
-}
-
-/// The assessment of verified records against the profile (reusing a
-/// stored decision when nothing it depends on changed).
-pub async fn assessment(
-    store: &SqliteJobStore,
-    verified: &[RecordVerification],
-    policy: &FreshnessPolicy,
-    now: DateTime<Utc>,
-) -> anyhow::Result<(Option<ProfileFacts>, Option<Assessment>, OpportunityTrust)> {
-    let profile = eligibility::profile_facts(store).await?;
-    match &profile {
-        Some(p) => {
-            let (a, _) = cached_assess(store, verified, p, policy, now)
-                .await
-                .context("could not store the eligibility decision")?;
-            let trust = a.trust.clone();
-            Ok((profile, Some(a), trust))
+            .await?;
+        let reused = checked.reused();
+        if reused > 0 && !args.force {
+            eprintln!(
+                "Reused {} from the last {} minutes (--force asks again).",
+                plural(reused as u64, "recent verification", "recent verifications"),
+                loaded.config.verification.reuse_minutes
+            );
         }
-        None => Ok((None, None, trust(verified, policy, now))),
-    }
+        if args.json {
+            return print_json(&VerificationReport::of(&opportunity, &checked));
+        }
+        report(&checked, args.details)
+    })
 }
 
 /// Prints the full report.
-pub async fn report(
-    loaded: &LoadedConfig,
-    store: &SqliteJobStore,
-    verified: &[RecordVerification],
-    now: DateTime<Utc>,
-    detail: bool,
-) -> anyhow::Result<ExitCode> {
-    let policy = loaded.config.verification.policy();
-    let (profile, assessment, trust) = assessment(store, verified, &policy, now).await?;
-    let mut out = anstream::stdout().lock();
-    match write(
-        &mut out,
-        verified,
-        &trust,
-        profile.as_ref(),
-        assessment.as_ref(),
-        now,
-        detail,
-    ) {
-        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(ExitCode::SUCCESS),
-        other => {
-            other.context("could not write the verification")?;
-            Ok(ExitCode::SUCCESS)
-        }
-    }
+pub fn report(checked: &Checked, detail: bool) -> anyhow::Result<ExitCode> {
+    finish(
+        write(
+            &mut anstream::stdout().lock(),
+            &checked.verified,
+            &checked.trust,
+            checked.profile.as_ref(),
+            checked.assessment.as_ref(),
+            jobhunt_app::now(),
+            detail,
+        ),
+        "the verification",
+    )
 }
 
 fn write(
