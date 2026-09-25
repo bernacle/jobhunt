@@ -8,8 +8,8 @@ use anyhow::bail;
 use chrono::Utc;
 use clap::Subcommand;
 use jobhunt_profile::{
-    Arrangement, CompanyTrait, CompensationBound, PayPeriod, PreferenceValue, ProfileService,
-    RuleParser, Stance, WorkAspect, WorkMode,
+    Arrangement, CompanyTrait, CompensationBound, Engagement, PayPeriod, PreferenceValue,
+    ProfileService, RuleParser, Stance, WorkAspect, WorkMode,
 };
 
 use crate::config::LoadedConfig;
@@ -93,10 +93,22 @@ pub enum SetCommand {
         #[arg(value_enum)]
         answer: YesNo,
     },
-    /// Whether you need visa sponsorship.
+    /// Whether you need visa sponsorship. "no" is read as: you may work
+    /// where you live without it (use `authorized-in` for other places).
     Sponsorship {
         #[arg(value_enum)]
         answer: YesNo,
+    },
+    /// A country (or "the EU") you may already work in without
+    /// sponsorship. Repeat for each.
+    AuthorizedIn { place: Vec<String> },
+    /// Being hired as an employee or as a contractor (B2B, freelance):
+    /// `--stance require` for the only one you accept, `avoid` to rule one out.
+    Engagement {
+        #[arg(value_enum)]
+        kind: EngagementArg,
+        #[arg(long, value_enum, default_value = "accept")]
+        stance: StanceArg,
     },
     /// A kind of company or team: startup, early-stage, scaleup,
     /// large-company, founder-led, product-company, agency, consulting,
@@ -137,6 +149,13 @@ pub enum ModeArg {
     Hybrid,
     #[value(alias = "on-site")]
     Onsite,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum EngagementArg {
+    Employee,
+    #[value(alias = "b2b", alias = "freelance")]
+    Contractor,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -324,6 +343,25 @@ fn values(set: SetCommand) -> anyhow::Result<Vec<(PreferenceValue, Stance)>> {
             },
             Stance::Required,
         )],
+        SetCommand::AuthorizedIn { place } => {
+            let place = place.join(" ").trim().to_owned();
+            if place.is_empty() {
+                bail!("name a country, e.g. jobhunt preferences set authorized-in Portugal");
+            }
+            vec![(
+                PreferenceValue::WorkAuthorization { place },
+                Stance::Required,
+            )]
+        }
+        SetCommand::Engagement { kind, stance } => vec![(
+            PreferenceValue::Engagement {
+                engagement: match kind {
+                    EngagementArg::Employee => Engagement::Employee,
+                    EngagementArg::Contractor => Engagement::Contractor,
+                },
+            },
+            stance.into(),
+        )],
         SetCommand::Company { kind, stance } => {
             let Some(company) = CompanyTrait::from_canonical(&kind.trim().to_lowercase()) else {
                 let valid: Vec<String> = CompanyTrait::ALL
@@ -398,6 +436,34 @@ mod tests {
                 stance: StanceArg::Want
             })
             .is_err()
+        );
+        let auth = values(SetCommand::AuthorizedIn {
+            place: vec!["Portugal".into()],
+        })
+        .unwrap();
+        assert_eq!(
+            auth[0],
+            (
+                PreferenceValue::WorkAuthorization {
+                    place: "Portugal".into()
+                },
+                Stance::Required
+            )
+        );
+        assert!(values(SetCommand::AuthorizedIn { place: vec![] }).is_err());
+        let engagement = values(SetCommand::Engagement {
+            kind: EngagementArg::Contractor,
+            stance: StanceArg::Avoid,
+        })
+        .unwrap();
+        assert_eq!(
+            engagement[0],
+            (
+                PreferenceValue::Engagement {
+                    engagement: Engagement::Contractor
+                },
+                Stance::Unwanted
+            )
         );
         let company = values(SetCommand::Company {
             kind: "founder-led".into(),
