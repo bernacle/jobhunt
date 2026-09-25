@@ -316,6 +316,21 @@ impl DeviceFlow {
         })
     }
 
+    /// A flow that can only refresh and revoke tokens (a stored session).
+    pub fn for_session(token_endpoint: &str, client_id: &str) -> Result<Self, AppError> {
+        Ok(Self {
+            http: reqwest::Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .map_err(|e| AppError::Config(format!("HTTP client: {e}")))?,
+            device_endpoint: String::new(),
+            token_endpoint: token_endpoint.to_owned(),
+            client_id: client_id.to_owned(),
+            scopes: String::new(),
+            audience: None,
+        })
+    }
+
     async fn form<T: DeserializeOwned>(
         &self,
         url: &str,

@@ -917,3 +917,96 @@ async fn sync_through_the_http_api_and_a_second_machine() {
     let _: DateTime<Utc> = Utc::now();
     server.finish().await;
 }
+
+#[tokio::test]
+async fn device_flow_signs_in_refreshes_and_revokes() {
+    use jobhunt_cloud::api::types::AuthConfigView;
+    use jobhunt_cloud::client::DeviceFlow;
+    use wiremock::matchers::{body_string_contains, method};
+
+    let provider = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/oauth/device/code"))
+        .and(body_string_contains("client_id=cli-client"))
+        .and(body_string_contains("audience="))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "device_code": "dev-123", "user_code": "ABCD-EFGH",
+            "verification_uri": "https://id.test/activate",
+            "verification_uri_complete": "https://id.test/activate?user_code=ABCD-EFGH",
+            "expires_in": 60, "interval": 1,
+        })))
+        .mount(&provider)
+        .await;
+    // Pending once, then approved.
+    Mock::given(method("POST"))
+        .and(path("/oauth/token"))
+        .and(body_string_contains("device_code=dev-123"))
+        .respond_with(
+            ResponseTemplate::new(400).set_body_json(json!({"error": "authorization_pending"})),
+        )
+        .up_to_n_times(1)
+        .with_priority(1)
+        .mount(&provider)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/oauth/token"))
+        .and(body_string_contains("device_code=dev-123"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "at-1", "refresh_token": "rt-1", "expires_in": 3600,
+        })))
+        .with_priority(2)
+        .mount(&provider)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/oauth/token"))
+        .and(body_string_contains("grant_type=refresh_token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "at-2", "expires_in": 3600,
+        })))
+        .mount(&provider)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/oauth/revoke"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({})))
+        .expect(1)
+        .mount(&provider)
+        .await;
+    let config = AuthConfigView {
+        mode: "oidc".into(),
+        issuer: Some(format!("{}/", provider.uri())),
+        audience: Some(AUDIENCE.into()),
+        cli_client_id: Some("cli-client".into()),
+        scopes: Some("openid offline_access".into()),
+        device_authorization_endpoint: Some(format!("{}/oauth/device/code", provider.uri())),
+        token_endpoint: Some(format!("{}/oauth/token", provider.uri())),
+        revocation_endpoint: Some(format!("{}/oauth/revoke", provider.uri())),
+    };
+    let flow = DeviceFlow::from_config(&config).unwrap();
+    let code = flow.start().await.unwrap();
+    assert_eq!(code.user_code, "ABCD-EFGH");
+    let tokens = flow.wait(&code).await.unwrap();
+    assert_eq!(tokens.access_token, "at-1");
+    assert_eq!(tokens.refresh_token.as_deref(), Some("rt-1"));
+    assert!(
+        !format!("{tokens:?}").contains("at-1"),
+        "tokens are not logged"
+    );
+    let session =
+        DeviceFlow::for_session(&format!("{}/oauth/token", provider.uri()), "cli-client").unwrap();
+    assert_eq!(session.refresh("rt-1").await.unwrap().access_token, "at-2");
+    session
+        .revoke(&format!("{}/oauth/revoke", provider.uri()), "rt-1")
+        .await
+        .unwrap();
+    // A server without device sign-in says how to sign in instead.
+    let without = AuthConfigView {
+        device_authorization_endpoint: None,
+        ..config
+    };
+    assert!(
+        DeviceFlow::from_config(&without)
+            .unwrap_err()
+            .to_string()
+            .contains("--token")
+    );
+}

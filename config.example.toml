@@ -42,6 +42,11 @@ stale_hours = 72
 # Source records of one job verified at the same time.
 concurrency = 4
 
+[cloud]
+# JobHunt Cloud server for `jobhunt login` and `jobhunt sync` (optional;
+# JobHunt works fully offline without it). JOBHUNT_CLOUD_URL overrides it.
+# server = "https://jobhunt.example.com"
+
 # Sources to search. Listing any source here replaces all built-in defaults,
 # so this file fully controls what is searched. Each source can set `company`
 # to control the displayed company name.

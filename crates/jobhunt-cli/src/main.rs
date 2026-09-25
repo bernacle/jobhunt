@@ -6,8 +6,10 @@
 
 mod check;
 mod claims;
+mod cloud;
 mod config;
 mod context;
+mod credentials;
 mod doctor;
 mod eligibility;
 mod find;
@@ -21,6 +23,7 @@ mod profile_render;
 mod rank;
 mod rank_render;
 mod render;
+mod serve;
 mod show;
 mod state;
 mod verify;
@@ -137,6 +140,32 @@ enum Command {
     Doctor,
     /// Show where JobHunt keeps its files and the effective configuration.
     Config,
+    /// Sign in to JobHunt Cloud (in the browser, or with --token).
+    Login(cloud::LoginArgs),
+    /// Sign out of JobHunt Cloud on this machine (--everywhere: on every
+    /// device). Local data is kept.
+    Logout(cloud::LogoutArgs),
+    /// Your JobHunt Cloud account and where this machine's sync stands.
+    Account(cloud::AccountArgs),
+    /// Sync your profile, evidence decisions, preferences and feedback with
+    /// JobHunt Cloud, and bring back what changed there. Conflicting
+    /// changes are shown, never overwritten.
+    Sync(cloud::SyncArgs),
+    /// Personal access tokens for MCP clients and scripts.
+    Token(cloud::TokenArgs),
+    /// JobHunt Cloud: serve the HTTP API and hosted MCP (configured by
+    /// environment variables; see the README).
+    #[command(hide = true)]
+    Server,
+    /// JobHunt Cloud: run one scheduled job (a cron run), then exit.
+    #[command(hide = true)]
+    Worker(serve::WorkerArgs),
+    /// JobHunt Cloud: apply database migrations (the pre-deploy command).
+    #[command(hide = true)]
+    Migrate,
+    /// JobHunt Cloud: operator commands.
+    #[command(hide = true)]
+    Admin(serve::AdminArgs),
     /// The shortlist from stored jobs only (`jobhunt find --offline`); kept
     /// for scripts written before `find` became personalized.
     #[command(hide = true)]
@@ -175,6 +204,26 @@ async fn main() -> ExitCode {
 }
 
 async fn run(cli: Cli) -> anyhow::Result<ExitCode> {
+    // The cloud process modes are configured by their environment, and log
+    // JSON by default (Railway collects stderr).
+    if matches!(
+        cli.command,
+        Command::Server | Command::Worker(_) | Command::Migrate | Command::Admin(_)
+    ) {
+        let cloud = serve::cloud_config();
+        let format = cli
+            .log_format
+            .map(Into::into)
+            .unwrap_or(cloud.app.config.logging.format);
+        logging::init(cli.verbose, &cloud.app.config.logging, format)?;
+        return match cli.command {
+            Command::Server => serve::serve(cloud).await,
+            Command::Worker(args) => serve::worker(args, cloud).await,
+            Command::Migrate => serve::migrate(cloud).await,
+            Command::Admin(args) => serve::admin(args, cloud).await,
+            _ => unreachable!("matched above"),
+        };
+    }
     let paths = Paths::platform();
     let loaded = config::load(
         cli.config.as_deref(),
@@ -219,6 +268,14 @@ async fn run(cli: Cli) -> anyhow::Result<ExitCode> {
         Command::Mcp => mcp(&loaded).await,
         Command::Doctor => doctor::run(&loaded).await,
         Command::Config => show_config(&loaded),
+        Command::Login(args) => cloud::login(args, &loaded).await,
+        Command::Logout(args) => cloud::logout(args).await,
+        Command::Account(args) => cloud::account(args, &loaded).await,
+        Command::Sync(args) => cloud::sync(args, &loaded).await,
+        Command::Token(args) => cloud::token(args).await,
+        Command::Server | Command::Worker(_) | Command::Migrate | Command::Admin(_) => {
+            unreachable!("handled before loading the local configuration")
+        }
         Command::Rank(args) => find::rank(args, &loaded).await,
     }
 }
@@ -440,6 +497,39 @@ mod tests {
         assert!(Cli::try_parse_from(["jobhunt", "pipeline"]).is_ok());
         assert!(Cli::try_parse_from(["jobhunt", "feedback"]).is_ok());
         assert!(Cli::try_parse_from(["jobhunt", "reject"]).is_err());
+    }
+
+    #[test]
+    fn parses_cloud_commands() {
+        for command in [
+            vec!["jobhunt", "login", "--server", "https://api.example.com"],
+            vec!["jobhunt", "login", "--token"],
+            vec!["jobhunt", "logout", "--everywhere"],
+            vec!["jobhunt", "account", "--json"],
+            vec!["jobhunt", "sync"],
+            vec!["jobhunt", "sync", "--status"],
+            vec!["jobhunt", "sync", "--keep", "local", "--record", "clm_1"],
+            vec![
+                "jobhunt",
+                "token",
+                "create",
+                "Claude Desktop",
+                "--days",
+                "30",
+            ],
+            vec!["jobhunt", "token", "list"],
+            vec!["jobhunt", "token", "revoke", "tok_1"],
+            vec!["jobhunt", "server"],
+            vec!["jobhunt", "worker", "discovery", "--budget-minutes", "5"],
+            vec!["jobhunt", "worker", "verification"],
+            vec!["jobhunt", "migrate"],
+            vec!["jobhunt", "admin", "status", "--json"],
+            vec!["jobhunt", "admin", "reencrypt"],
+        ] {
+            assert!(Cli::try_parse_from(&command).is_ok(), "{command:?}");
+        }
+        assert!(Cli::try_parse_from(["jobhunt", "sync", "--record", "clm_1"]).is_err());
+        assert!(Cli::try_parse_from(["jobhunt", "sync", "--status", "--keep", "cloud"]).is_err());
     }
 
     #[test]

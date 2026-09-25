@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "name": "jobhunt-infrastructure",
+  "description": "Only for Railway's Infrastructure as Code (.railway/railway.ts); the product is the Rust workspace.",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "devDependencies": {
+    "railway": "^3.11.0"
+  }
+}

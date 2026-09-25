@@ -258,9 +258,15 @@ async fn ranks_learns_and_explains() {
             "Every signal",
             "verified at ashby:ramp just now",
             "your minimum: at least USD 180,000 per year",
-            "Posted 170 days ago, and still listed when verified",
+            // The day count depends on today's date (the fixture was
+            // posted on 2026-04-07); the wording is what matters.
+            "days ago, and still listed when verified",
             "it is not a match percentage",
         ],
+    );
+    assert!(
+        out.contains("Posted 1") || out.contains("Posted 2"),
+        "{out}"
     );
     let unverified = env.ok(&["why", &mobile]);
     has(

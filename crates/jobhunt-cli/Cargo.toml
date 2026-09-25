@@ -21,6 +21,7 @@ clap.workspace = true
 directories.workspace = true
 futures.workspace = true
 jobhunt-app.workspace = true
+jobhunt-cloud.workspace = true
 jobhunt-core.workspace = true
 jobhunt-eligibility.workspace = true
 jobhunt-jobs.workspace = true
@@ -39,7 +40,12 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 url.workspace = true
 
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+keyring = { version = "3.6", features = ["apple-native", "windows-native"] }
+
 [dev-dependencies]
+reqwest = { workspace = true, features = ["json"] }
+sqlx.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["process", "io-util"] }
 wiremock.workspace = true
