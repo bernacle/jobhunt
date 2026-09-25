@@ -83,7 +83,7 @@ request and every push to `main`. Its jobs are the required status checks:
 | --- | --- |
 | `fmt` | unformatted code |
 | `clippy` | any clippy or compiler warning, on every target |
-| `test` | a compile error (build step), then any failing unit, integration or doc test: model, lifecycle, dedupe, SQLite, migrations, adapters, end-to-end discovery, resume reading and parsing, profile re-import and evidence rules, the profile CLI flow |
+| `test` | a compile error (build step), then any failing unit, integration or doc test: model, lifecycle, dedupe, SQLite, migrations, adapters, end-to-end discovery, resume reading and parsing, profile re-import and evidence rules, the profile CLI flow, eligibility on real postings and through the CLI |
 | `docs` | any rustdoc warning (broken intra-doc links, …) |
 | `msrv` | code or a dependency that needs a newer Rust than `rust-version` |
 | `ci-passed` | any of the above not succeeding |
@@ -130,8 +130,10 @@ the adapter (with a new fixture) in a PR.
    change needs an offline regression test (fixture or mock server, not a
    live one); so does a change to resume parsing (a fixture under
    `crates/jobhunt-resume/tests/fixtures/`) or to the profile's re-import
-   or evidence rules. Schema changes are new, additive migrations; never edit an
-   existing one.
+   or evidence rules, and to an eligibility rule (a case in
+   `crates/jobhunt-eligibility/tests/assessments.rs`, on a real posting
+   where one shows it). Schema changes are new, additive migrations; never
+   edit an existing one.
 3. Run `./scripts/check.sh`.
 4. Open a PR against `main`. Merge when CI is green. A solo maintainer
    doesn't need approvals.

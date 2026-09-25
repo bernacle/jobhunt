@@ -10,7 +10,9 @@
 //! source was last seen listing the job. Nothing is inferred from silence:
 //! a remote flag with no place attached says nothing about where.
 
+use std::collections::HashMap;
 use std::fmt;
+use std::sync::{LazyLock, Mutex, PoisonError};
 
 use chrono::{DateTime, Utc};
 use jobhunt_core::SourceKey;
@@ -602,6 +604,32 @@ const CONTRACTOR_CUES: [&str; 9] = [
     "independent contract*",
 ];
 
+const ZONE_CONTEXT: [&str; 11] = [
+    "time zone*",
+    "timezone*",
+    "hours",
+    "overlap",
+    "=PT",
+    "=PST",
+    "=ET",
+    "=EST",
+    "=CET",
+    "=UTC",
+    "=GMT",
+];
+
+/// Compiled cue lists, by the list's address and length.
+type PatternCache = HashMap<(usize, usize), &'static [Pattern]>;
+
+/// A cue list's patterns, compiled once.
+fn compiled(cues: &'static [&'static str]) -> &'static [Pattern] {
+    static CACHE: LazyLock<Mutex<PatternCache>> = LazyLock::new(Default::default);
+    let mut cache = CACHE.lock().unwrap_or_else(PoisonError::into_inner);
+    cache
+        .entry((cues.as_ptr() as usize, cues.len()))
+        .or_insert_with(|| Vec::leak(cues.iter().map(|c| Pattern::new(c)).collect()))
+}
+
 const RELOCATION_CUES: [&str; 6] = [
     "relocation assistance",
     "relocation support",
@@ -667,7 +695,8 @@ fn read_sentence(record: &JobRecord, sentence: &str, facts: &mut JobFacts) {
         return;
     }
     let ws = words(sentence);
-    let has_any = |cues: &[&str]| cues.iter().any(|c| Pattern::new(c).find(&ws).is_some());
+    let has_any =
+        |cues: &'static [&'static str]| compiled(cues).iter().any(|p| p.find(&ws).is_some());
     let ev = || evidence(record, "description", sentence);
     // Long sentences are usually about the company, not the job's terms.
     if ws.len() > 60 {
@@ -757,20 +786,7 @@ fn read_sentence(record: &JobRecord, sentence: &str, facts: &mut JobFacts) {
     if facts.worldwide.is_none() && has_any(&WORLDWIDE_CUES) && has_any(&HIRING_CONTEXT) {
         facts.worldwide = Some(ev());
     }
-    let zone_context = [
-        "time zone*",
-        "timezone*",
-        "hours",
-        "overlap",
-        "=PT",
-        "=PST",
-        "=ET",
-        "=EST",
-        "=CET",
-        "=UTC",
-        "=GMT",
-    ];
-    if has_any(&zone_context) {
+    if has_any(&ZONE_CONTEXT) {
         for (label, offsets) in zones_in(sentence) {
             if !facts.zones.iter().any(|z| z.offsets == offsets) {
                 facts.zones.push(ZoneFact {

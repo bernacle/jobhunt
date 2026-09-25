@@ -6,10 +6,10 @@
 //! into facts that each carry their [`facts::Evidence`]. The user side
 //! ([`user`]) reads the profile's preferences: where the user lives, work
 //! modes, time zones, relocation, sponsorship, pay minimums and roles.
-//! [`assess`] checks one against the other and answers each dimension with
+//! [`assess`](mod@assess) checks one against the other and answers each dimension with
 //! a [`assess::Fit`] (yes, likely, unknown, unlikely, no) and a one-line
 //! summary ("Brazil eligible: remote in Latin America", "Remote, but the
-//! United States only", "Compensation unknown"). [`verify`] says whether
+//! United States only", "Compensation unknown"). [`verify`](mod@verify) says whether
 //! the job's records come from the company's own board and how recently
 //! they were seen there.
 //!

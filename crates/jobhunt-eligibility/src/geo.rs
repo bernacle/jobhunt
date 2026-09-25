@@ -11,7 +11,7 @@
 //! the United States and Canada, but only *maybe* Mexico: postings disagree,
 //! so an assessment built on it is "likely", never "yes".
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::LazyLock;
 
@@ -711,6 +711,16 @@ static NAMES: LazyLock<HashMap<String, Area>> = LazyLock::new(|| {
     index
 });
 
+/// The first word of every name, so text scanning can skip words that
+/// start none.
+static FIRST_WORDS: LazyLock<HashSet<String>> = LazyLock::new(|| {
+    NAMES
+        .keys()
+        .filter_map(|k| k.split(' ').next())
+        .map(str::to_owned)
+        .collect()
+});
+
 /// Words that describe a place without naming it ("Japan Locations").
 const PLACE_NOISE: [&str; 9] = [
     "locations",
@@ -1115,6 +1125,13 @@ pub fn places_in_text(text: &str) -> Vec<Area> {
     let mut out: Vec<Area> = Vec::new();
     let mut i = 0;
     while i < words.len() {
+        let word = words[i];
+        let code = word.len() <= 3 && word.chars().all(|c| c.is_ascii_uppercase());
+        let key = search_key(word);
+        if !code && !FIRST_WORDS.contains(key.split(' ').next().unwrap_or_default()) {
+            i += 1;
+            continue;
+        }
         let mut found = None;
         // Longest phrases first (up to four words).
         for len in (1..=4).rev() {

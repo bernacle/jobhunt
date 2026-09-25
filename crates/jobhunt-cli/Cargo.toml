@@ -21,6 +21,7 @@ clap.workspace = true
 directories.workspace = true
 futures.workspace = true
 jobhunt-core.workspace = true
+jobhunt-eligibility.workspace = true
 jobhunt-jobs.workspace = true
 jobhunt-profile.workspace = true
 jobhunt-resume.workspace = true

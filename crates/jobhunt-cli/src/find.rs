@@ -9,15 +9,17 @@ use std::str::FromStr;
 use anyhow::{Context, bail};
 use chrono::Utc;
 use jobhunt_core::{ErrorChain, SourceKey};
+use jobhunt_eligibility::{Assessment, Fit, assess_record};
 use jobhunt_jobs::{
-    Discovery, DiscoveryReport, JobQuery, JobRecord, JobRepository, JobStatus, OpportunityId,
-    ScanKind,
+    Discovery, DiscoveryReport, JobId, JobQuery, JobRecord, JobRepository, JobStatus,
+    OpportunityId, ScanKind,
 };
 use jobhunt_sources::{CareersPage, HttpClient, SourceSpec, careers};
 use jobhunt_storage::SqliteJobStore;
 use url::Url;
 
 use crate::config::{AppConfig, LoadedConfig};
+use crate::eligibility;
 use crate::render::{self, plural};
 
 #[derive(Debug, clap::Args)]
@@ -40,6 +42,27 @@ pub struct FindArgs {
     /// Don't fetch anything; search the jobs already stored locally.
     #[arg(long)]
     pub offline: bool,
+
+    /// Only show jobs your profile says you can take ("yes" or "likely").
+    #[arg(long, conflicts_with = "possible")]
+    pub eligible: bool,
+
+    /// Hide jobs your profile rules out; keep the unknowns.
+    #[arg(long)]
+    pub possible: bool,
+}
+
+impl FindArgs {
+    /// The lowest fit to show, when filtering by eligibility.
+    fn min_fit(&self) -> Option<Fit> {
+        if self.eligible {
+            Some(Fit::Likely)
+        } else if self.possible {
+            Some(Fit::Unknown)
+        } else {
+            None
+        }
+    }
 }
 
 /// A `--source` value.
@@ -120,12 +143,52 @@ pub async fn run(args: FindArgs, loaded: &LoadedConfig, verbosity: u8) -> anyhow
         Some(report)
     };
 
-    let records = store.search(&query).await?;
-    let total = store.count(&query).await?;
+    let user = eligibility::user_constraints(&store).await?;
+    let (records, total, verdicts) = match (args.min_fit(), &user) {
+        (Some(_), None) => {
+            store.close().await;
+            bail!(
+                "--eligible and --possible need a career profile: run `jobhunt init <resume>` \
+                 or `jobhunt preferences set location <place>`"
+            );
+        }
+        (Some(min), Some(user)) => {
+            // Eligibility is not a stored column: read every match, then cut.
+            query.limit = None;
+            let mut kept = Vec::new();
+            let mut verdicts = HashMap::new();
+            for record in store.search(&query).await? {
+                let a = assess_record(&record, user);
+                if a.fit >= min {
+                    verdicts.insert(record.id, a);
+                    kept.push(record);
+                }
+            }
+            let total = kept.len() as u64;
+            kept.truncate(args.limit);
+            (kept, total, verdicts)
+        }
+        (None, user) => {
+            let records = store.search(&query).await?;
+            let total = store.count(&query).await?;
+            let verdicts = user
+                .iter()
+                .flat_map(|u| records.iter().map(move |r| (r.id, assess_record(r, u))))
+                .collect();
+            (records, total, verdicts)
+        }
+    };
     let also_listed = other_listings(&store, &records).await?;
     store.close().await;
 
-    match print_results(&records, &also_listed, total, report.as_ref(), &args) {
+    match print_results(
+        &records,
+        &also_listed,
+        &verdicts,
+        total,
+        report.as_ref(),
+        &args,
+    ) {
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(ExitCode::SUCCESS),
         other => {
             other.context("could not write results")?;
@@ -251,7 +314,7 @@ async fn resolve_page(http: &HttpClient, page: &CareersPage) -> anyhow::Result<V
     Ok(specs)
 }
 
-fn report_problems(report: &DiscoveryReport) {
+pub(crate) fn report_problems(report: &DiscoveryReport) {
     for (source, error) in report.failures() {
         eprintln!("warning: skipped {source}: {}", ErrorChain(error));
     }
@@ -278,6 +341,7 @@ fn report_problems(report: &DiscoveryReport) {
 fn print_results(
     records: &[JobRecord],
     also_listed: &HashMap<OpportunityId, Vec<JobRecord>>,
+    verdicts: &HashMap<JobId, Assessment>,
     total: u64,
     report: Option<&DiscoveryReport>,
     args: &FindArgs,
@@ -294,13 +358,17 @@ fn print_results(
         )?;
     } else if records.is_empty() {
         let hint = match (report, args.query.is_empty()) {
+            _ if args.eligible => {
+                "No matching jobs fit your profile. Try --possible to include the unknowns."
+            }
+            _ if args.possible => "Your profile rules out every matching job.",
             (None, _) => "No stored jobs match. Run without --offline to fetch fresh jobs.",
             (Some(_), false) => "No jobs match those words. Try fewer or different words.",
             (Some(_), true) => "The sources returned no open jobs.",
         };
         writeln!(out, "{hint}")?;
     } else {
-        render::jobs(&mut out, records, also_listed, now)?;
+        render::jobs(&mut out, records, also_listed, verdicts, now)?;
         let shown = records.len() as u64;
         if shown < total {
             writeln!(

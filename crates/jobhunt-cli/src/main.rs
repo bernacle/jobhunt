@@ -1,7 +1,9 @@
 //! The `jobhunt` command.
 
+mod check;
 mod claims;
 mod config;
+mod eligibility;
 mod find;
 mod init;
 mod logging;
@@ -51,6 +53,10 @@ enum Command {
     Find(find::FindArgs),
     /// Show everything stored about one job: every source listing it and its history.
     Show(show::ShowArgs),
+    /// Check one job against your profile: where you can work from, work
+    /// authorization, work mode, time zone and pay, with the posting's words
+    /// behind each answer, and whether the listing is first-party and fresh.
+    Check(check::CheckArgs),
     /// Import your resume (PDF, .txt or .md) into your career profile. Run it
     /// again after updating the resume; your edits and decisions are kept.
     Init(init::InitArgs),
@@ -103,6 +109,7 @@ async fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     match cli.command {
         Command::Find(args) => find::run(args, &loaded, cli.verbose).await,
         Command::Show(args) => show::run(args, &loaded).await,
+        Command::Check(args) => check::run(args, &loaded).await,
         Command::Init(args) => init::run(args, &loaded).await,
         Command::Profile(args) => profile::run(args, &loaded).await,
         Command::Claims(args) => claims::run(args, &loaded).await,

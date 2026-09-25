@@ -1324,6 +1324,7 @@ dependencies = [
  "directories",
  "futures",
  "jobhunt-core",
+ "jobhunt-eligibility",
  "jobhunt-jobs",
  "jobhunt-profile",
  "jobhunt-resume",
