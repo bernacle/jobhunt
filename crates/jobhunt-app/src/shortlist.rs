@@ -24,7 +24,10 @@ use crate::discover::{Refresh, RefreshMode, RefreshReason};
 use crate::error::AppError;
 use crate::resolve::{Opportunity, short_id};
 use crate::verify::Checked;
-use crate::views::{EligibilityBrief, FitTier, Recommendation, VerificationBrief, gate_note};
+use crate::views::{
+    CompensationView, EligibilityBrief, FitTier, Recommendation, VerificationBrief, best_record,
+    gate_note, locations,
+};
 use crate::{LocalApp, Progress};
 
 /// The most results a shortlist shows.
@@ -114,82 +117,29 @@ impl LocalApp {
         if self.profile_facts().await?.is_none() {
             return Err(AppError::NoProfile);
         }
-        let refresh = match self.refresh(request.refresh, &[], progress, now).await {
-            // A refresh nobody asked for must not stand between the person
-            // and the jobs already stored (a laptop offline, a board down).
-            Err(AppError::SourceUnavailable { failed, detail })
-                if request.refresh == RefreshMode::Auto && self.has_open_jobs().await? =>
-            {
-                Refresh {
-                    reason: self.freshness(now).await?,
-                    report: None,
-                    warnings: vec![format!(
-                        "could not reach any source ({failed} failed: {detail}); \
-                         using stored jobs"
-                    )],
-                }
-            }
-            other => other?,
-        };
-        let ranking = self.ranking();
+        let refresh = self
+            .refresh_for_search(request.refresh, progress, now)
+            .await?;
         let query = RankQuery {
             text: request.text.clone(),
             store_top: request.limit,
             all: request.all_tiers,
         };
-        let mut report = ranking.rank(&query, now).await?;
+        let all = request.all_tiers;
+        let (report, verified_now) = self
+            .rank_verified(
+                &query,
+                request.verify,
+                request.limit * 2,
+                &|r: &Ranking| all || r.tier >= Tier::WorthReviewing,
+                progress,
+                now,
+            )
+            .await?;
         if report.considered == 0 && request.text.trim().is_empty() {
             return Err(AppError::NoJobs);
         }
 
-        let mut verified_now = 0;
-        if request.verify {
-            // The best candidates whose listings aren't trusted yet: ones to
-            // verify first, and ones whose eligibility is unclear (their
-            // listing still deserves checking before they are shown).
-            let budget = (request.limit * 2).clamp(1, MAX_VERIFIED);
-            let mut due = Vec::new();
-            for r in report
-                .rankings
-                .iter()
-                .filter(|r| request.all_tiers || r.tier >= Tier::WorthReviewing)
-                .take(request.limit * 2)
-            {
-                if due.len() >= budget {
-                    break;
-                }
-                let records = match &r.gate {
-                    Gate::VerifyFirst { .. } => {
-                        self.store().opportunity_records(r.opportunity).await?
-                    }
-                    Gate::EligibilityUnclear { .. } => {
-                        let records = self.store().opportunity_records(r.opportunity).await?;
-                        let verified = cached(self.store(), &records).await?;
-                        if trust(&verified, &self.policy(), now).standing == Standing::Trusted {
-                            continue;
-                        }
-                        records
-                    }
-                    _ => continue,
-                };
-                due.push(records);
-            }
-            if !due.is_empty() {
-                let results: Vec<Result<_, AppError>> = futures::stream::iter(&due)
-                    .map(|r| self.verify_records(r, VerifyMode::IfDue, progress, now))
-                    .buffer_unordered(4)
-                    .collect()
-                    .await;
-                for result in results {
-                    if result?.iter().any(|v| !v.reused) {
-                        verified_now += 1;
-                    }
-                }
-                report = ranking.rank(&query, now).await?;
-            }
-        }
-
-        let all = request.all_tiers;
         let mut shown = Vec::new();
         for r in report
             .rankings
@@ -230,6 +180,117 @@ impl LocalApp {
             verified_now,
             request: request.clone(),
         })
+    }
+}
+
+impl LocalApp {
+    /// Refreshes discovery for a search as `mode` says. A refresh nobody
+    /// asked for (`Auto`) must not stand between the person and the jobs
+    /// already stored (a laptop offline, a board down): it then reports a
+    /// warning instead of failing.
+    pub(crate) async fn refresh_for_search(
+        &self,
+        mode: RefreshMode,
+        progress: &dyn Progress,
+        now: DateTime<Utc>,
+    ) -> Result<Refresh, AppError> {
+        match self.refresh(mode, &[], progress, now).await {
+            Err(AppError::SourceUnavailable { failed, detail })
+                if mode == RefreshMode::Auto && self.has_open_jobs().await? =>
+            {
+                Ok(Refresh {
+                    reason: self.freshness(now).await?,
+                    report: None,
+                    warnings: vec![format!(
+                        "could not reach any source ({failed} failed: {detail}); \
+                         using stored jobs"
+                    )],
+                })
+            }
+            other => other,
+        }
+    }
+
+    /// Ranks every open opportunity matching `query`; with `verify`, then
+    /// verifies the best candidates among the first `pool` that `wanted`
+    /// keeps whose listings aren't trusted yet (at most
+    /// [`MAX_VERIFIED`]), and ranks again. Returns the report and how many
+    /// candidates were verified now.
+    pub(crate) async fn rank_verified(
+        &self,
+        query: &RankQuery,
+        verify: bool,
+        pool: usize,
+        wanted: &(dyn Fn(&Ranking) -> bool + Sync),
+        progress: &dyn Progress,
+        now: DateTime<Utc>,
+    ) -> Result<(RankReport, usize), AppError> {
+        let ranking = self.ranking();
+        let mut report = ranking.rank(query, now).await?;
+        let mut verified_now = 0;
+        if verify && report.considered > 0 {
+            let candidates: Vec<&Ranking> = report
+                .rankings
+                .iter()
+                .filter(|r| wanted(r))
+                .take(pool)
+                .collect();
+            verified_now = self
+                .verify_candidates(&candidates, pool.clamp(1, MAX_VERIFIED), progress, now)
+                .await?;
+            if verified_now > 0 {
+                report = ranking.rank(query, now).await?;
+            }
+        }
+        Ok((report, verified_now))
+    }
+
+    /// Verifies, among `candidates` (best first), up to `budget` whose
+    /// listings aren't trusted yet: ones to verify first, and ones whose
+    /// eligibility is unclear (their listing still deserves checking
+    /// before they are shown). Returns how many were verified now (not
+    /// reusing a recent attempt).
+    pub(crate) async fn verify_candidates(
+        &self,
+        candidates: &[&Ranking],
+        budget: usize,
+        progress: &dyn Progress,
+        now: DateTime<Utc>,
+    ) -> Result<usize, AppError> {
+        let budget = budget.min(MAX_VERIFIED);
+        let mut due = Vec::new();
+        for r in candidates {
+            if due.len() >= budget {
+                break;
+            }
+            let records = match &r.gate {
+                Gate::VerifyFirst { .. } => self.store().opportunity_records(r.opportunity).await?,
+                Gate::EligibilityUnclear { .. } => {
+                    let records = self.store().opportunity_records(r.opportunity).await?;
+                    let verified = cached(self.store(), &records).await?;
+                    if trust(&verified, &self.policy(), now).standing == Standing::Trusted {
+                        continue;
+                    }
+                    records
+                }
+                _ => continue,
+            };
+            due.push(records);
+        }
+        let mut verified_now = 0;
+        if !due.is_empty() {
+            let results: Vec<Result<_, AppError>> = futures::stream::iter(&due)
+                .map(|r| self.verify_records(r, VerifyMode::IfDue, progress, now))
+                .buffer_unordered(4)
+                .collect()
+                .await;
+            for result in results {
+                if result?.iter().any(|v| !v.reused) {
+                    verified_now += 1;
+                }
+            }
+        }
+        Ok(verified_now)
     }
 }
 
@@ -334,6 +395,21 @@ pub struct ShortlistItem {
     pub summary: String,
     pub verification: VerificationBrief,
     pub eligibility: EligibilityBrief,
+    /// Published pay: verified facts when there are any, else what the
+    /// listing said when discovered.
+    pub compensation: CompensationView,
+    /// Every location the listing names, primary first.
+    #[serde(default)]
+    pub locations: Vec<String>,
+    /// `remote`, `hybrid` or `onsite`, as the listing says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workplace: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub department: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team: Option<String>,
     /// Why it may be worth the person's time (up to 4; verification and
     /// eligibility are in their own fields).
     pub why: Vec<String>,
@@ -377,6 +453,8 @@ impl ShortlistItem {
             Gate::EligibilityUnclear { .. } => format!("jobhunt check {}", short_id(&id)),
             _ => format!("jobhunt why {}", short_id(&id)),
         };
+        let record = best_record(&entry.checked.verified, &entry.checked.trust, None);
+        let posting = record.map(|r| &r.posting);
         Self {
             id: id.to_string(),
             short_id: short_id(&id),
@@ -390,6 +468,20 @@ impl ShortlistItem {
             eligibility: EligibilityBrief::of(
                 entry.checked.assessment.as_ref().map(|a| &a.decision),
             ),
+            compensation: match record {
+                Some(record) => CompensationView::best(record, &entry.checked.trust),
+                None => CompensationView::of(
+                    &jobhunt_jobs::verification::CompensationCheck::observe(None, None),
+                    None,
+                ),
+            },
+            locations: record.map(locations).unwrap_or_default(),
+            workplace: posting
+                .and_then(|p| p.workplace_type.as_ref())
+                .map(|w| w.as_str().to_owned()),
+            remote: posting.and_then(|p| p.is_remote),
+            department: posting.and_then(|p| p.department.clone()),
+            team: posting.and_then(|p| p.team.clone()),
             why: r
                 .brief
                 .worth

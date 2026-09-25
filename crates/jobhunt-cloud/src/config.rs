@@ -104,6 +104,67 @@ impl std::fmt::Debug for AuthConfig {
     }
 }
 
+/// Where transactional email goes.
+#[derive(Clone, PartialEq, Eq)]
+pub enum EmailConfig {
+    /// Resend's HTTP API (<https://resend.com/docs/api-reference>).
+    Resend {
+        api_key: String,
+        /// `JobHunt <notifications@example.com>`: a sender on a domain
+        /// verified in Resend.
+        from: String,
+        /// The API's base URL (tests point it at a local server).
+        api_url: String,
+    },
+    /// Every message appended as a JSON line to a file: development and
+    /// end-to-end tests only (refused in production).
+    File { path: PathBuf, from: String },
+}
+
+impl std::fmt::Debug for EmailConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Resend { from, .. } => f
+                .debug_struct("Resend")
+                .field("from", from)
+                .finish_non_exhaustive(),
+            Self::File { path, .. } => f.debug_struct("File").field("path", path).finish(),
+        }
+    }
+}
+
+impl EmailConfig {
+    /// The provider's name, for reports and delivery records.
+    pub fn provider(&self) -> &'static str {
+        match self {
+            Self::Resend { .. } => "resend",
+            Self::File { .. } => "file",
+        }
+    }
+}
+
+/// How the notification worker behaves.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotifySettings {
+    /// With the `immediate` cadence, at most one recommendations email per
+    /// account this often.
+    pub min_interval: Duration,
+    /// Opportunities in one email at most.
+    pub max_items: usize,
+    /// Accounts a worker claims at a time.
+    pub batch: usize,
+}
+
+impl Default for NotifySettings {
+    fn default() -> Self {
+        Self {
+            min_interval: Duration::from_secs(4 * 3600),
+            max_items: 3,
+            batch: 50,
+        }
+    }
+}
+
 /// Everything the cloud processes need.
 #[derive(Clone)]
 pub struct CloudConfig {
@@ -122,6 +183,13 @@ pub struct CloudConfig {
     pub migrate_on_start: bool,
     /// Browser origins allowed to call the API (BRU-295's web app).
     pub allowed_origins: Vec<String>,
+    /// Where people use JobHunt in a browser (`https://app.example.com`):
+    /// the links in emails.
+    pub web_url: Option<Url>,
+    /// Transactional email (notifications, address confirmation); `None`
+    /// means email is not available.
+    pub email: Option<EmailConfig>,
+    pub notify: NotifySettings,
     pub schedule: ScheduleSettings,
     /// Sources a discovery worker claims per run.
     pub discovery_batch: usize,
@@ -152,6 +220,8 @@ impl std::fmt::Debug for CloudConfig {
 pub enum Role {
     Server,
     Worker,
+    /// The notification worker: reads private data and sends email.
+    Notifier,
     Migrate,
 }
 
@@ -342,6 +412,75 @@ impl CloudConfig {
             )),
             ..schedule_defaults
         };
+        let web_url = match env("JOBHUNT_WEB_URL") {
+            Some(raw) => match Url::parse(raw.trim()) {
+                Ok(url) if matches!(url.scheme(), "http" | "https") => Some(url),
+                _ => {
+                    problems.push("JOBHUNT_WEB_URL is not an http(s) URL".into());
+                    None
+                }
+            },
+            None => None,
+        };
+        let from = env("JOBHUNT_EMAIL_FROM");
+        let email = match env("JOBHUNT_EMAIL_PROVIDER").as_deref().map(str::trim) {
+            None | Some("none") => None,
+            Some("resend") => match (env("JOBHUNT_RESEND_API_KEY"), from.clone()) {
+                (Some(api_key), Some(from)) => Some(EmailConfig::Resend {
+                    api_key,
+                    from,
+                    api_url: env("JOBHUNT_RESEND_API_URL")
+                        .unwrap_or_else(|| "https://api.resend.com".into()),
+                }),
+                _ => {
+                    problems.push(
+                        "JOBHUNT_EMAIL_PROVIDER=resend needs JOBHUNT_RESEND_API_KEY and \
+                         JOBHUNT_EMAIL_FROM"
+                            .into(),
+                    );
+                    None
+                }
+            },
+            Some("file") => match env("JOBHUNT_EMAIL_FILE") {
+                Some(path) => Some(EmailConfig::File {
+                    path: PathBuf::from(path),
+                    from: from.unwrap_or_else(|| "JobHunt <notifications@jobhunt.test>".into()),
+                }),
+                None => {
+                    problems.push("JOBHUNT_EMAIL_PROVIDER=file needs JOBHUNT_EMAIL_FILE".into());
+                    None
+                }
+            },
+            Some(other) => {
+                problems.push(format!(
+                    "JOBHUNT_EMAIL_PROVIDER must be \"resend\", \"file\" or \"none\", not {other:?}"
+                ));
+                None
+            }
+        };
+        let notify_defaults = NotifySettings::default();
+        let notify = NotifySettings {
+            min_interval: hours(parse(
+                env,
+                "JOBHUNT_NOTIFY_MIN_INTERVAL_HOURS",
+                notify_defaults.min_interval.as_secs() / 3600,
+                &mut problems,
+            )),
+            max_items: parse(
+                env,
+                "JOBHUNT_NOTIFY_MAX_ITEMS",
+                notify_defaults.max_items,
+                &mut problems,
+            )
+            .clamp(1, 5),
+            batch: parse(
+                env,
+                "JOBHUNT_NOTIFY_BATCH",
+                notify_defaults.batch,
+                &mut problems,
+            )
+            .max(1),
+        };
         let instance = env("RAILWAY_REPLICA_ID")
             .or_else(|| env("HOSTNAME"))
             .map_or_else(
@@ -374,6 +513,9 @@ impl CloudConfig {
                         .collect()
                 })
                 .unwrap_or_default(),
+            web_url,
+            email,
+            notify,
             schedule,
             discovery_batch: parse(env, "JOBHUNT_DISCOVERY_BATCH", 25, &mut problems),
             verification_batch: parse(env, "JOBHUNT_VERIFY_BATCH", 100, &mut problems),
@@ -433,6 +575,30 @@ impl CloudConfig {
             if self.public_url.is_none() && self.is_production() {
                 out.push("JOBHUNT_PUBLIC_URL is not set (the service's https URL)".into());
             }
+        }
+        if role == Role::Notifier {
+            match self.keyring() {
+                Ok(_) => {}
+                Err(CryptoError::NoKeys) => out.push(
+                    "JOBHUNT_ENCRYPTION_KEYS is not set (the notification worker reads private \
+                     data)"
+                        .into(),
+                ),
+                Err(e) => out.push(format!("JOBHUNT_ENCRYPTION_KEYS: {e}")),
+            }
+            if self.email.is_none() && !self.problems.iter().any(|p| p.contains("EMAIL")) {
+                out.push(
+                    "email is not configured: set JOBHUNT_EMAIL_PROVIDER (resend) with \
+                     JOBHUNT_RESEND_API_KEY and JOBHUNT_EMAIL_FROM"
+                        .into(),
+                );
+            }
+            if self.web_url.is_none() {
+                out.push("JOBHUNT_WEB_URL is not set (the links in emails)".into());
+            }
+        }
+        if matches!(self.email, Some(EmailConfig::File { .. })) && self.is_production() {
+            out.push("JOBHUNT_EMAIL_PROVIDER=file is refused in production".into());
         }
         out
     }
@@ -508,6 +674,27 @@ impl CloudConfig {
                 status: "missing".into(),
                 required: true,
             },
+        });
+        out.push(Setting {
+            name: "JOBHUNT_WEB_URL",
+            status: self
+                .web_url
+                .as_ref()
+                .map_or_else(|| "missing".into(), ToString::to_string),
+            required: false,
+        });
+        out.push(Setting {
+            name: "JOBHUNT_EMAIL_PROVIDER",
+            status: match &self.email {
+                Some(e @ EmailConfig::Resend { from, .. }) => {
+                    format!("{} (from {from}, API key set)", e.provider())
+                }
+                Some(e @ EmailConfig::File { path, .. }) => {
+                    format!("{} ({})", e.provider(), path.display())
+                }
+                None => "none (email notifications unavailable)".into(),
+            },
+            required: false,
         });
         out
     }
@@ -673,6 +860,49 @@ mod tests {
                 .all(|p| p.contains("DATABASE_URL"))
         );
         assert!(c.app.config.sources.specs().unwrap().len() >= 10);
+    }
+
+    #[test]
+    fn email_and_notification_settings() {
+        let base = [
+            ("DATABASE_URL", "postgres://x"),
+            ("JOBHUNT_ENCRYPTION_KEYS", KEY),
+        ];
+        // Without email, the notifier names what is missing.
+        let text = config(&base).problems(Role::Notifier).join("\n");
+        assert!(text.contains("email is not configured"), "{text}");
+        assert!(text.contains("JOBHUNT_WEB_URL"), "{text}");
+        let mut vars = base.to_vec();
+        vars.extend([
+            ("JOBHUNT_EMAIL_PROVIDER", "resend"),
+            ("JOBHUNT_RESEND_API_KEY", "re_secret_value"),
+            ("JOBHUNT_EMAIL_FROM", "JobHunt <n@jobhunt.test>"),
+            ("JOBHUNT_WEB_URL", "https://app.jobhunt.test"),
+            ("JOBHUNT_NOTIFY_MAX_ITEMS", "40"),
+        ]);
+        let c = config(&vars);
+        assert!(
+            c.problems(Role::Notifier).is_empty(),
+            "{:?}",
+            c.problems(Role::Notifier)
+        );
+        assert_eq!(c.notify.max_items, 5, "an email stays short");
+        assert!(matches!(c.email, Some(EmailConfig::Resend { .. })));
+        let report = format!("{:?} {:?}", c.report(), c);
+        assert!(!report.contains("re_secret_value"), "{report}");
+        // Half-configured providers and the file provider in production.
+        let text = config(&[("JOBHUNT_EMAIL_PROVIDER", "resend")])
+            .problems(Role::Worker)
+            .join("\n");
+        assert!(text.contains("JOBHUNT_RESEND_API_KEY"), "{text}");
+        let text = config(&[
+            ("JOBHUNT_EMAIL_PROVIDER", "file"),
+            ("JOBHUNT_EMAIL_FILE", "/tmp/mail.jsonl"),
+            ("JOBHUNT_ENV", "production"),
+        ])
+        .problems(Role::Worker)
+        .join("\n");
+        assert!(text.contains("refused in production"), "{text}");
     }
 
     #[test]

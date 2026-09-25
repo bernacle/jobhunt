@@ -470,6 +470,15 @@ async fn authkit_style_providers_are_accepted() {
     let (status, b) = server.get("/api/v1/account", &mcp).await;
     assert_eq!(status, StatusCode::OK, "{b}");
     assert_eq!(a["id"], b["id"]);
+    // The web app signs in with its own OAuth client for the API: still
+    // the same person, the same account.
+    let web = server.oidc_token("user_01ALICE", |c, _| {
+        c["client_id"] = json!("web-client");
+        c["azp"] = json!("web-client");
+    });
+    let (status, w) = server.get("/api/v1/account", &web).await;
+    assert_eq!(status, StatusCode::OK, "{w}");
+    assert_eq!(a["id"], w["id"]);
 
     for (why, token) in [
         (
@@ -890,9 +899,11 @@ async fn hosted_mcp_serves_the_same_tools_per_account() {
     assert_eq!(
         names,
         [
+            "get_feed",
             "get_job",
             "get_pipeline",
             "get_profile",
+            "get_taste",
             "mark_applied",
             "prepare_application_context",
             "record_feedback",
@@ -927,6 +938,33 @@ async fn hosted_mcp_serves_the_same_tools_per_account() {
         .unwrap();
     let saved: FeedbackResult = serde_json::from_value(saved.structured_content.unwrap()).unwrap();
     assert!(saved.recorded);
+    // The same account state the web shows: the feed knows it is saved
+    // (so it is not "new"), and taste lists what was said.
+    let feed = client
+        .call_tool(call("get_feed", json!({"limit": 3})))
+        .await
+        .unwrap();
+    assert_ne!(feed.is_error, Some(true), "{:?}", feed.content);
+    let feed: jobhunt_app::feed::FeedView =
+        serde_json::from_value(feed.structured_content.unwrap()).unwrap();
+    assert!(feed.items.iter().all(|i| i.item.id != id));
+    assert_eq!(feed.pipeline.saved, 1);
+    let (_, web_feed) = server.get("/api/v1/feed?limit=3", &alice).await;
+    assert_eq!(web_feed["pipeline"]["saved"], 1);
+    let taste = client
+        .call_tool(call("get_taste", json!({})))
+        .await
+        .unwrap();
+    let taste: jobhunt_app::taste_view::TasteView =
+        serde_json::from_value(taste.structured_content.unwrap()).unwrap();
+    assert_eq!(taste.feedback_events, 1);
+    let too_many = client
+        .call_tool(call("get_feed", json!({"limit": 50})))
+        .await;
+    assert!(
+        too_many.is_err() || too_many.unwrap().is_error == Some(true),
+        "the feed stays short"
+    );
     let unknown = client
         .call_tool(call(
             "get_job",

@@ -107,6 +107,7 @@ pub enum SourceOutcome {
 pub enum WorkerKind {
     Discovery,
     Verification,
+    Notification,
 }
 
 impl WorkerKind {
@@ -114,6 +115,7 @@ impl WorkerKind {
         match self {
             Self::Discovery => "discovery",
             Self::Verification => "verification",
+            Self::Notification => "notification",
         }
     }
 }

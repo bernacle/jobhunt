@@ -132,6 +132,8 @@ pub struct TokenList {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum FeedbackInput {
+    /// Looked at it, no opinion. Carries no weight in learned taste.
+    Seen,
     Save,
     Unsave,
     Reject,
@@ -192,4 +194,110 @@ pub struct ErrorDetail {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
+}
+
+/// `GET /api/v1/feed`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FeedQuery {
+    /// Items at most, 1 to 10 (default 5).
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+/// `GET /api/v1/profile/claims`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ClaimsQuery {
+    /// Claims at most (default: all of them).
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+/// `POST /api/v1/profile/claims`: confirm, reject or reset claims.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DecideClaimsRequest {
+    /// `clm_…` ids.
+    pub ids: Vec<String>,
+    pub decision: jobhunt_app::profile_edit::ClaimDecision,
+    /// Why (kept on the claims verbatim).
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// `PUT /api/v1/profile/resume?file_name=…` (the body is the file).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ResumeQuery {
+    /// The file's name; its extension decides how it is read (`.pdf`,
+    /// `.txt`, `.md`). Defaults from the content type.
+    #[serde(default)]
+    pub file_name: Option<String>,
+}
+
+/// One notification email, for the settings page (never its content).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct DeliveryView {
+    pub id: String,
+    /// `recommendations` or `confirmation`.
+    pub kind: String,
+    /// `pending`, `sent`, `failed` or `abandoned`.
+    pub status: String,
+    /// Opportunities in it.
+    pub opportunities: u32,
+    pub created_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sent_at: Option<DateTime<Utc>>,
+}
+
+/// `GET /api/v1/notifications`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct NotificationSettingsView {
+    /// Whether this service can send email at all.
+    pub available: bool,
+    /// Emails about strong new matches are on.
+    pub email_enabled: bool,
+    /// `immediate` (soon after a strong match appears, at most one email
+    /// every few hours) or `daily` (at most one a day).
+    pub cadence: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    /// `none`, `unconfirmed` (a link was sent; nothing else is sent until
+    /// it is followed) or `confirmed`.
+    pub email_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirmation_sent_at: Option<DateTime<Utc>>,
+    /// Hours between emails at most, with the `immediate` cadence.
+    pub min_interval_hours: u64,
+    /// Opportunities in one email at most.
+    pub max_items: usize,
+    /// The latest emails, newest first.
+    pub recent: Vec<DeliveryView>,
+}
+
+/// `PUT /api/v1/notifications`. Absent fields are left as they are.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateNotificationsRequest {
+    #[serde(default)]
+    pub email_enabled: Option<bool>,
+    /// `immediate` or `daily`.
+    #[serde(default)]
+    pub cadence: Option<String>,
+    /// The address to notify. A new address is sent a confirmation link;
+    /// nothing else is sent to it until it is confirmed.
+    #[serde(default)]
+    pub email: Option<String>,
+    /// Send the confirmation link again.
+    #[serde(default)]
+    pub resend_confirmation: bool,
+}
+
+/// `POST /api/v1/notifications/confirm`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ConfirmEmailRequest {
+    /// The token from the confirmation link.
+    pub token: String,
 }

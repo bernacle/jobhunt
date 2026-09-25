@@ -63,6 +63,125 @@ pub struct UnresolvedClaim {
     pub text: String,
     /// Why it needs review.
     pub why: String,
+    /// What it is about ("Senior Engineer at Acme", a project's name);
+    /// absent for the profile in general.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub about: Option<String>,
+    /// `exp_…`, `proj_…` or `edu_…` it is about.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub about_id: Option<String>,
+    /// `extracted` (read from the resume), `inferred` (concluded by
+    /// JobHunt) or `user_entered`.
+    #[serde(default)]
+    pub provenance: String,
+    /// How sure the reading is: `high`, `medium` or `low`.
+    #[serde(default)]
+    pub confidence: String,
+    /// The resume's own words behind it, verbatim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
+    /// The resume section the words are from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
+    /// The file the words are from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document: Option<String>,
+    /// For inferred claims: what the inference rests on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub basis: Option<String>,
+}
+
+impl UnresolvedClaim {
+    pub fn of(data: &ProfileData, c: &Claim) -> Self {
+        let (about, about_id) = match c.subject {
+            Subject::Profile => (None, None),
+            Subject::Experience(id) => {
+                (data.experience(id).map(|e| e.label()), Some(id.to_string()))
+            }
+            Subject::Project(id) => (
+                data.projects
+                    .iter()
+                    .find(|p| p.id == id)
+                    .map(|p| p.name.clone()),
+                Some(id.to_string()),
+            ),
+            Subject::Education(id) => (
+                data.education
+                    .iter()
+                    .find(|e| e.id == id)
+                    .map(|e| e.institution.clone()),
+                Some(id.to_string()),
+            ),
+        };
+        let source = c.source.as_ref();
+        Self {
+            id: c.id.to_string(),
+            kind: c.kind.as_str().to_owned(),
+            text: c.text.clone(),
+            why: data.standing(c).describe().to_owned(),
+            about,
+            about_id,
+            provenance: c.provenance.as_str().to_owned(),
+            confidence: c.confidence.as_str().to_owned(),
+            snippet: source.map(|s| s.snippet.clone()),
+            section: source.and_then(|s| s.section.clone()),
+            document: source.and_then(|s| {
+                data.documents
+                    .iter()
+                    .find(|d| d.id == s.document)
+                    .and_then(|d| d.file_name.clone())
+            }),
+            basis: c.basis.clone(),
+        }
+    }
+}
+
+/// A project.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ProjectSummary {
+    /// `proj_…`.
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub period: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub technologies: Vec<String>,
+    pub stale: bool,
+}
+
+/// An education entry.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct EducationSummary {
+    /// `edu_…`.
+    pub id: String,
+    pub institution: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub degree: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub period: Option<String>,
+    pub stale: bool,
+}
+
+/// A resume imported into the profile (never its text).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct DocumentSummary {
+    /// `doc_…`.
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_name: Option<String>,
+    /// `pdf`, `text` or `markdown`.
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pages: Option<u32>,
+    pub first_imported_at: String,
+    pub last_imported_at: String,
+    /// The most recently imported one: the resume the profile follows.
+    pub current: bool,
 }
 
 /// The answer of `get_profile`.
@@ -83,6 +202,13 @@ pub struct ProfileView {
     pub role_signals: Vec<Signal>,
     /// Seniority and ownership signals (led, mentored, founding).
     pub ownership_signals: Vec<Signal>,
+    #[serde(default)]
+    pub projects: Vec<ProjectSummary>,
+    #[serde(default)]
+    pub education: Vec<EducationSummary>,
+    /// Imported resumes, the current one first.
+    #[serde(default)]
+    pub documents: Vec<DocumentSummary>,
     /// Preferences in effect.
     pub preferences: Vec<PreferenceView>,
     /// What the person said, verbatim.
@@ -197,6 +323,59 @@ impl ProfileView {
                 .into_iter()
                 .map(signal)
                 .collect(),
+            projects: data
+                .visible_projects()
+                .into_iter()
+                .map(|p| ProjectSummary {
+                    id: p.id.to_string(),
+                    name: p.name.clone(),
+                    role: p.role.clone(),
+                    period: p.period().display(),
+                    description: p.description.clone(),
+                    technologies: names(
+                        &data
+                            .claims_about(Subject::Project(p.id), &[ClaimKind::Technology])
+                            .into_iter()
+                            .filter(not_rejected)
+                            .collect::<Vec<_>>(),
+                    ),
+                    stale: p.meta.is_stale(),
+                })
+                .collect(),
+            education: data
+                .visible_education()
+                .into_iter()
+                .map(|e| EducationSummary {
+                    id: e.id.to_string(),
+                    institution: e.institution.clone(),
+                    degree: e.degree.clone(),
+                    field: e.field.clone(),
+                    period: e.period().display(),
+                    stale: e.meta.is_stale(),
+                })
+                .collect(),
+            documents: {
+                let current = data.latest_document().map(|d| d.id);
+                let mut docs: Vec<DocumentSummary> = data
+                    .documents
+                    .iter()
+                    .map(|d| DocumentSummary {
+                        id: d.id.to_string(),
+                        file_name: d.file_name.clone(),
+                        kind: d.kind.as_str().to_owned(),
+                        pages: d.pages,
+                        first_imported_at: crate::views::time(d.first_imported_at),
+                        last_imported_at: crate::views::time(d.last_imported_at),
+                        current: Some(d.id) == current,
+                    })
+                    .collect();
+                docs.sort_by(|a, b| {
+                    b.current
+                        .cmp(&a.current)
+                        .then(b.last_imported_at.cmp(&a.last_imported_at))
+                });
+                docs
+            },
             preferences: data
                 .preferences
                 .iter()
@@ -207,12 +386,7 @@ impl ProfileView {
             needs_review: review
                 .iter()
                 .take(REVIEW_SHOWN)
-                .map(|c| UnresolvedClaim {
-                    id: c.id.to_string(),
-                    kind: c.kind.as_str().to_owned(),
-                    text: c.text.clone(),
-                    why: data.standing(c).describe().to_owned(),
-                })
+                .map(|c| UnresolvedClaim::of(data, c))
                 .collect(),
             needs_review_total: review.len(),
             gaps: data.gaps().into_iter().map(|g| g.message).collect(),

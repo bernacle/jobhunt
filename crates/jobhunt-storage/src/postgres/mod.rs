@@ -22,6 +22,7 @@ pub mod accounts;
 mod cache;
 pub mod crypto;
 mod jobs;
+pub mod notify;
 mod profile;
 mod rotate;
 pub mod schedule;
@@ -43,6 +44,10 @@ pub use accounts::{
     Account, ApiToken, IdentityLink, NewApiToken, TOKEN_PREFIX, TokenCheck, UserId, hash_token,
 };
 pub use crypto::{CryptoError, Keyring};
+pub use notify::{
+    Cadence, Delivery, DeliveryKind, DeliverySummary, NewDelivery, NotificationSettings,
+    NotifiedItem, NotifyAccount, SettingsChange, new_confirmation_token, new_delivery_id,
+};
 pub use rotate::Reencrypted;
 pub use schedule::{
     ClaimedSource, ScheduleRow, ScheduleSettings, ScheduledSource, SourceOutcome, SourceTier,

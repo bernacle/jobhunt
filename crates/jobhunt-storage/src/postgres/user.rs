@@ -21,7 +21,7 @@ use super::cache::Cache;
 use super::{PgStore, corrupt, query_error};
 use crate::sqlite::StoreStats;
 use crate::state::{StateImport, StateImported};
-use crate::store::{Shown, Store, WriteGuard};
+use crate::store::{FeedMark, Shown, Store, WriteGuard};
 
 /// One person's view of the cloud store: the shared corpus, and their own
 /// private data only (see [`super`]).
@@ -703,6 +703,8 @@ impl Store for PgUserStore {
                 "INSERT INTO user_opportunities (user_id, opportunity_id, first_shown_at, \
                  last_shown_at, last_tier, times_shown, seq) VALUES ($1, $2, $3, $3, $4, 1, $5) \
                  ON CONFLICT (user_id, opportunity_id) DO UPDATE SET \
+                 first_shown_at = CASE WHEN user_opportunities.times_shown = 0 \
+                 THEN excluded.first_shown_at ELSE user_opportunities.first_shown_at END, \
                  last_shown_at = excluded.last_shown_at, last_tier = excluded.last_tier, \
                  times_shown = user_opportunities.times_shown + 1, seq = excluded.seq",
             )
@@ -737,6 +739,111 @@ impl Store for PgUserStore {
             .await
             .map_err(query_error("committing a shortlist"))?;
         Ok(())
+    }
+
+    async fn feed_marks(
+        &self,
+        ids: &[OpportunityId],
+    ) -> Result<HashMap<OpportunityId, FeedMark>, StorageError> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let wanted: Vec<String> = ids.iter().map(ToString::to_string).collect();
+        type Row = (
+            String,
+            Option<DateTime<Utc>>,
+            Option<DateTime<Utc>>,
+            i32,
+            Option<DateTime<Utc>>,
+            Option<DateTime<Utc>>,
+        );
+        let rows: Vec<Row> = sqlx::query_as(
+            "SELECT opportunity_id, \
+             CASE WHEN times_shown > 0 THEN first_shown_at END, \
+             CASE WHEN times_shown > 0 THEN last_shown_at END, \
+             times_shown, resurfaced_at, dismissed_at \
+             FROM user_opportunities WHERE user_id = $1 AND opportunity_id = ANY($2)",
+        )
+        .bind(self.user.as_str())
+        .bind(&wanted)
+        .fetch_all(self.shared.pool())
+        .await
+        .map_err(query_error("loading the feed's state"))?;
+        rows.into_iter()
+            .map(|(id, first, last, times, resurfaced, dismissed)| {
+                let opportunity = id.parse().map_err(|e| corrupt(&id, e))?;
+                Ok((
+                    opportunity,
+                    FeedMark {
+                        first_shown_at: first,
+                        last_shown_at: last,
+                        times_shown: u32::try_from(times).unwrap_or(0),
+                        resurfaced_at: resurfaced,
+                        dismissed_at: dismissed,
+                    },
+                ))
+            })
+            .collect()
+    }
+
+    async fn record_resurfaced(
+        &self,
+        ids: &[OpportunityId],
+        at: DateTime<Utc>,
+    ) -> Result<(), StorageError> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let wanted: Vec<String> = ids.iter().map(ToString::to_string).collect();
+        sqlx::query(
+            "UPDATE user_opportunities SET resurfaced_at = $3 \
+             WHERE user_id = $1 AND opportunity_id = ANY($2)",
+        )
+        .bind(self.user.as_str())
+        .bind(&wanted)
+        .bind(at)
+        .execute(self.shared.pool())
+        .await
+        .map_err(query_error("recording resurfaced opportunities"))?;
+        Ok(())
+    }
+
+    async fn record_dismissed(
+        &self,
+        id: OpportunityId,
+        at: DateTime<Utc>,
+    ) -> Result<(), StorageError> {
+        let mut tx = self
+            .shared
+            .pool()
+            .begin()
+            .await
+            .map_err(query_error("starting a transaction"))?;
+        let seq = next_seq(&mut tx, &self.user).await?;
+        sqlx::query(
+            "INSERT INTO user_opportunities (user_id, opportunity_id, first_shown_at, \
+             last_shown_at, last_tier, times_shown, seq, dismissed_at) \
+             VALUES ($1, $2, $3, $3, NULL, 0, $4, $3) \
+             ON CONFLICT (user_id, opportunity_id) DO UPDATE SET dismissed_at = excluded.dismissed_at",
+        )
+        .bind(self.user.as_str())
+        .bind(id.to_string())
+        .bind(at)
+        .bind(seq)
+        .execute(&mut *tx)
+        .await
+        .map_err(query_error("putting an opportunity aside"))?;
+        tx.commit()
+            .await
+            .map_err(query_error("putting an opportunity aside"))?;
+        Ok(())
+    }
+
+    async fn next_discovery_due(&self) -> Result<Option<DateTime<Utc>>, StorageError> {
+        sqlx::query_scalar("SELECT MIN(next_due_at) FROM source_schedule WHERE enabled")
+            .fetch_one(self.shared.pool())
+            .await
+            .map_err(query_error("reading the discovery schedule"))
     }
 
     async fn shutdown(&self) {

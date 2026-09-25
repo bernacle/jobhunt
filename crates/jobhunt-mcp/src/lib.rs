@@ -30,11 +30,13 @@
 use std::sync::Arc;
 
 use jobhunt_app::context::ApplicationContext;
+use jobhunt_app::feed::{FeedRequest, FeedView, MAX_FEED_LIMIT};
 use jobhunt_app::feedback::{FeedbackResult, PipelineView};
 use jobhunt_app::inspect::{JobDetail, VerificationReport};
 use jobhunt_app::preferences::{PreferenceInput, PreferenceUpdate, PreferenceUpdateResult};
 use jobhunt_app::profile_view::ProfileView;
 use jobhunt_app::shortlist::MAX_LIMIT;
+use jobhunt_app::taste_view::TasteView;
 use jobhunt_app::{
     AppError, FindRequest, LocalApp, Progress, ProgressEvent, RefreshMode, SearchResults, now,
 };
@@ -58,9 +60,11 @@ jobs from company job boards, verifies them at the employer's own sources, check
 against the person's profile, and ranks them by what the person wants and has told it through \
 feedback. Everything is stored locally; these tools work on the same state as the `jobhunt` \
 command.\n\
-Typical flow: search_jobs for the short list worth the person's time; get_job or verify_job to \
+Typical flow: get_feed for what is new since the person last looked (\"find me new jobs\"), \
+or search_jobs for the short list worth their time; get_job or verify_job to \
 look closer; save_job, reject_job (with the person's reason, verbatim) or mark_applied to record \
-what they decide; update_preferences when they say what they want. Later searches reflect all \
+what they decide; update_preferences when they say what they want (\"only small teams\"); \
+get_taste for what JobHunt believes they want and what it learned. Later searches reflect all \
 of it. prepare_application_context gathers the evidence the person has approved for an \
 application: use only the facts it returns, as written.\n\
 Ids: opportunity ids look like opp_<32 hex>; job ids (job_…) and unique prefixes are accepted \
@@ -269,6 +273,17 @@ pub struct UpdatePreferencesParams {
     /// Preference (pref_…) or statement (stmt_…) ids to remove.
     #[serde(default)]
     pub remove: Vec<String>,
+}
+
+/// Arguments of `get_feed`.
+#[derive(Debug, Clone, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FeedParams {
+    /// How many items at most, 1 to 10. Default 5: the feed is meant to be
+    /// finished.
+    #[serde(default)]
+    #[schemars(range(min = 1, max = 10))]
+    pub limit: Option<u8>,
 }
 
 /// Arguments of `get_pipeline`.
@@ -535,6 +550,70 @@ impl JobHuntServer {
         })
         .await?;
         Ok(Json(results))
+    }
+
+    #[tool(
+        name = "get_feed",
+        description = "What is new for the person since they last looked: the few \
+        recommendations (strong fits and jobs worth reviewing) they have not dealt with yet, \
+        plus ones they reviewed that changed materially (pay published, remote policy, \
+        reopened), each with why it may be worth their time and what to consider. Empty \
+        (caught_up: true) when nothing new is worth their time; it never pads the list with \
+        weaker matches. Items stay until the person saves, rejects, applies or puts them aside. \
+        Needs a profile.",
+        annotations(
+            title = "What's new",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn get_feed(
+        &self,
+        Parameters(p): Parameters<FeedParams>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<Json<FeedView>, ToolError> {
+        let limit = usize::from(p.limit.unwrap_or(5));
+        if limit == 0 || limit > MAX_FEED_LIMIT {
+            return Err(AppError::InvalidArguments(format!(
+                "limit must be between 1 and {MAX_FEED_LIMIT}"
+            ))
+            .into());
+        }
+        let app = self.app(&context, "get_feed")?;
+        let request = FeedRequest {
+            limit,
+            ..FeedRequest::default()
+        };
+        let at = now();
+        let view = long_running(&context, &app, move |app| async move {
+            let feed = app.feed(&request, &LogProgress, at).await?;
+            Ok(FeedView::of(&feed, at))
+        })
+        .await?;
+        Ok(Json(view))
+    }
+
+    #[tool(
+        name = "get_taste",
+        description = "What JobHunt believes the person wants, in two parts kept apart: what \
+        they said (preferences and their own statements, which always win) and what it learned \
+        from their feedback (patterns with confidence and the feedback behind each, including \
+        contradictory or weak ones that are not used). Use it to explain recommendations or \
+        before changing preferences.",
+        annotations(
+            title = "Get preferences and learned taste",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn get_taste(
+        &self,
+        context: RequestContext<RoleServer>,
+    ) -> Result<Json<TasteView>, ToolError> {
+        let app = self.app(&context, "get_taste")?;
+        Ok(Json(app.taste_view().await?))
     }
 
     #[tool(

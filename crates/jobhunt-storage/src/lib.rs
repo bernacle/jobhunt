@@ -32,4 +32,4 @@ mod verification;
 
 pub use sqlite::{SqliteJobStore, StoreStats};
 pub use state::{ProfileWrite, StateImport, StateImported};
-pub use store::{Shown, Store, WriteGuard};
+pub use store::{FeedMark, Shown, Store, WriteGuard};

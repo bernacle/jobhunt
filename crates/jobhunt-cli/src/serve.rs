@@ -1,5 +1,5 @@
 //! The cloud process modes of the same binary: `jobhunt server`,
-//! `jobhunt worker discovery|verification`, `jobhunt migrate`, and
+//! `jobhunt worker discovery|verification|notify`, `jobhunt migrate`, and
 //! `jobhunt admin …` for operators. Their configuration comes from the
 //! environment (see `jobhunt_cloud::config`), not from the local config
 //! file.
@@ -29,6 +29,9 @@ pub enum WorkerKind {
     },
     /// Re-verify the jobs that matter and are not fresh, then exit.
     Verification,
+    /// Email people about strong new recommendations (and retry emails
+    /// that failed), then exit.
+    Notify,
 }
 
 #[derive(Debug, clap::Args)]
@@ -81,6 +84,10 @@ pub async fn worker(args: WorkerArgs, config: CloudConfig) -> anyhow::Result<Exi
         }
         WorkerKind::Verification => {
             let summary = server::verification_worker(config).await?;
+            print_json(&summary)
+        }
+        WorkerKind::Notify => {
+            let summary = server::notification_worker(config).await?;
             print_json(&summary)
         }
     }

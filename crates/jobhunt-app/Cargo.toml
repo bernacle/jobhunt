@@ -17,6 +17,7 @@ jobhunt-eligibility.workspace = true
 jobhunt-jobs.workspace = true
 jobhunt-profile.workspace = true
 jobhunt-ranking.workspace = true
+jobhunt-resume.workspace = true
 jobhunt-sources.workspace = true
 jobhunt-storage.workspace = true
 schemars.workspace = true
@@ -29,7 +30,6 @@ tracing.workspace = true
 url.workspace = true
 
 [dev-dependencies]
-jobhunt-resume.workspace = true
 tempfile.workspace = true
 
 [lints]

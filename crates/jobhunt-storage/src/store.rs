@@ -53,6 +53,21 @@ pub struct Shown {
     pub tier: Tier,
 }
 
+/// What the person's feed remembers about one opportunity (backends with
+/// per-person search state only).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeedMark {
+    /// When a shortlist or the feed first showed it (`None`: only ever put
+    /// aside).
+    pub first_shown_at: Option<DateTime<Utc>>,
+    pub last_shown_at: Option<DateTime<Utc>>,
+    pub times_shown: u32,
+    /// When the feed last brought it back because it changed materially.
+    pub resurfaced_at: Option<DateTime<Utc>>,
+    /// When the person last put it aside ("not now").
+    pub dismissed_at: Option<DateTime<Utc>>,
+}
+
 /// A storage backend for the whole application (see the module docs).
 #[async_trait]
 pub trait Store:
@@ -108,6 +123,41 @@ pub trait Store:
     /// state ignore it.
     async fn record_shown(&self, _shown: &[Shown], _at: DateTime<Utc>) -> Result<(), StorageError> {
         Ok(())
+    }
+
+    /// What the feed remembers about these opportunities (only those it
+    /// has a mark for). Backends without per-person search state have
+    /// none.
+    async fn feed_marks(
+        &self,
+        _ids: &[OpportunityId],
+    ) -> Result<HashMap<OpportunityId, FeedMark>, StorageError> {
+        Ok(HashMap::new())
+    }
+
+    /// Records that the feed brought these opportunities back because they
+    /// changed materially.
+    async fn record_resurfaced(
+        &self,
+        _ids: &[OpportunityId],
+        _at: DateTime<Utc>,
+    ) -> Result<(), StorageError> {
+        Ok(())
+    }
+
+    /// Records that the person put an opportunity aside ("not now").
+    async fn record_dismissed(
+        &self,
+        _id: OpportunityId,
+        _at: DateTime<Utc>,
+    ) -> Result<(), StorageError> {
+        Ok(())
+    }
+
+    /// When the background discovery next reads a source, where discovery
+    /// is scheduled (the cloud); `None` otherwise.
+    async fn next_discovery_due(&self) -> Result<Option<DateTime<Utc>>, StorageError> {
+        Ok(None)
     }
 
     /// The local bookkeeping of cloud sync, when this backend keeps one
