@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use jobhunt_core::{ErrorChain, SourceKey};
-use jobhunt_jobs::{Discovery, DiscoveryReport};
+use jobhunt_jobs::{Discovery, DiscoveryReport, JobRepository};
 use jobhunt_sources::{CareersPage, HttpClient, SourceSpec, careers};
 use url::Url;
 
@@ -43,6 +43,10 @@ pub enum RefreshReason {
     Fresh { oldest: DateTime<Utc> },
     /// Refreshing was turned off.
     Disabled,
+    /// Job boards are read by scheduled workers, not by searches
+    /// ([`crate::DiscoveryMode::Background`]); `oldest` is when the
+    /// least recently read source was read.
+    Background { oldest: Option<DateTime<Utc>> },
 }
 
 impl RefreshReason {
@@ -55,6 +59,15 @@ impl RefreshReason {
             Self::Stale { oldest } => format!("sources last read {}", ago(now - *oldest)),
             Self::Fresh { oldest } => format!("every source read {}", ago(now - *oldest)),
             Self::Disabled => "working offline".into(),
+            Self::Background {
+                oldest: Some(oldest),
+            } => format!(
+                "job boards are read in the background; the oldest was read {}",
+                ago(now - *oldest)
+            ),
+            Self::Background { oldest: None } => {
+                "job boards are read in the background; none has been read yet".into()
+            }
         }
     }
 }
@@ -92,15 +105,57 @@ impl std::str::FromStr for SourceArg {
     }
 }
 
+/// The HTTP client discovery uses, from configuration.
+pub fn http_client(config: &AppConfig) -> Result<HttpClient, AppError> {
+    HttpClient::new(config.discovery.http_settings())
+        .map_err(|e| AppError::Config(format!("HTTP client: {e}")))
+}
+
+/// Every configured source, including boards found on configured careers
+/// pages (pages that cannot be read are reported in `warnings`).
+pub async fn configured_sources(
+    config: &AppConfig,
+    http: &HttpClient,
+    warnings: &mut Vec<String>,
+) -> Result<Vec<SourceSpec>, AppError> {
+    select_sources(&[], config, http, false, warnings).await
+}
+
+/// Runs the discovery pipeline over `specs`, storing into `store`: the one
+/// implementation of discovery, used by `find` and by the cloud's
+/// scheduled workers alike (conditional requests, lifecycle, history and
+/// grouping included).
+pub async fn run_discovery(
+    store: &dyn JobRepository,
+    config: &AppConfig,
+    http: &HttpClient,
+    specs: &[SourceSpec],
+) -> Result<DiscoveryReport, AppError> {
+    let base = std::env::var(DISCOVERY_ENDPOINT_OVERRIDE)
+        .ok()
+        .filter(|b| !b.trim().is_empty());
+    let sources = specs
+        .iter()
+        .map(|spec| spec.build_at(http, base.as_deref()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| AppError::InvalidArguments(e.to_string()))?;
+    let settings = &config.discovery;
+    Discovery::new(store)
+        .with_concurrency(settings.concurrency)
+        .with_validator_max_age(settings.validator_max_age())
+        .run(&sources)
+        .await
+        .map_err(|e| AppError::storage("saving discovered jobs", e))
+}
+
 impl LocalApp {
     fn http(&self) -> Result<HttpClient, AppError> {
-        HttpClient::new(self.config().discovery.http_settings())
-            .map_err(|e| AppError::Config(format!("HTTP client: {e}")))
+        http_client(self.config())
     }
 
     /// Whether any open job is stored.
     pub async fn has_open_jobs(&self) -> Result<bool, AppError> {
-        use jobhunt_jobs::{JobQuery, JobRepository, JobStatus};
+        use jobhunt_jobs::{JobQuery, JobStatus};
         let query = JobQuery {
             status: Some(JobStatus::Open),
             limit: Some(1),
@@ -119,6 +174,15 @@ impl LocalApp {
             .specs()
             .map_err(|e| AppError::Config(e.to_string()))?;
         let checked: HashMap<SourceKey, DateTime<Utc>> = self.store().last_checked().await?;
+        if self.discovery_mode() == crate::DiscoveryMode::Background {
+            let oldest = configured
+                .iter()
+                .filter_map(|s| checked.get(s.key()))
+                .min()
+                .copied()
+                .or_else(|| checked.values().min().copied());
+            return Ok(RefreshReason::Background { oldest });
+        }
         let never = configured
             .iter()
             .filter(|s| !checked.contains_key(s.key()))
@@ -143,7 +207,8 @@ impl LocalApp {
     }
 
     /// Reads sources when `mode` says so: every configured source, or the
-    /// requested ones.
+    /// requested ones. In [`crate::DiscoveryMode::Background`] nothing is
+    /// read: scheduled workers keep the shared corpus fresh.
     pub async fn refresh(
         &self,
         mode: RefreshMode,
@@ -151,6 +216,13 @@ impl LocalApp {
         progress: &dyn Progress,
         now: DateTime<Utc>,
     ) -> Result<Refresh, AppError> {
+        if self.discovery_mode() == crate::DiscoveryMode::Background {
+            return Ok(Refresh {
+                reason: self.freshness(now).await?,
+                report: None,
+                warnings: Vec::new(),
+            });
+        }
         let reason = match mode {
             RefreshMode::Never => RefreshReason::Disabled,
             RefreshMode::Always => RefreshReason::Requested,
@@ -170,25 +242,11 @@ impl LocalApp {
         let http = self.http()?;
         let mut warnings = Vec::new();
         let specs = select_sources(requested, self.config(), &http, false, &mut warnings).await?;
-        let base = std::env::var(DISCOVERY_ENDPOINT_OVERRIDE)
-            .ok()
-            .filter(|b| !b.trim().is_empty());
-        let sources = specs
-            .iter()
-            .map(|spec| spec.build_at(&http, base.as_deref()))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| AppError::InvalidArguments(e.to_string()))?;
         progress.note(ProgressEvent::Refreshing {
-            sources: sources.len(),
+            sources: specs.len(),
             reason: reason.clone(),
         });
-        let config = &self.config().discovery;
-        let report = Discovery::new(self.store())
-            .with_concurrency(config.concurrency)
-            .with_validator_max_age(config.validator_max_age())
-            .run(&sources)
-            .await
-            .map_err(|e| AppError::storage("saving discovered jobs", e))?;
+        let report = run_discovery(self.store(), self.config(), &http, &specs).await?;
         if report.succeeded() == 0 && !report.sources.is_empty() {
             let detail = report
                 .failures()

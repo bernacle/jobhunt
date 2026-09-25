@@ -34,7 +34,7 @@ pub mod profile;
 pub mod rules;
 pub mod zones;
 
-pub use cache::{CacheKey, EligibilityRepository, cached_assess};
+pub use cache::{CacheKey, EligibilityRepository, cached_assess, cached_assess_many};
 pub use decision::{
     ConflictNote, Eligibility, EligibilityDecision, EvidenceRef, OptionDecision, ProfileFact,
     RULES_VERSION, Reason, RuleId, Verdict,

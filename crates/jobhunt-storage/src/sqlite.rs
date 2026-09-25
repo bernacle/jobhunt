@@ -93,6 +93,10 @@ static REWRITE_SQL: LazyLock<String> = LazyLock::new(|| {
 pub struct SqliteJobStore {
     pub(crate) pool: SqlitePool,
     location: String,
+    /// Serializes read-modify-write use cases within this process (see
+    /// [`crate::Store::write_lock`]); other processes are covered by
+    /// SQLite's own locking and the profile's revisions.
+    pub(crate) writes: std::sync::Arc<tokio::sync::Mutex<()>>,
 }
 
 impl SqliteJobStore {
@@ -165,7 +169,11 @@ impl SqliteJobStore {
             }
         }
         info!(database = %location, "job store ready");
-        Ok(Self { pool, location })
+        Ok(Self {
+            pool,
+            location,
+            writes: std::sync::Arc::default(),
+        })
     }
 
     /// Human-readable location of the database (a path or `:memory:`).
@@ -1427,7 +1435,11 @@ mod tests {
                 "profile_skill_evidence",
                 "profile_skills",
                 "profiles",
-                "source_scans"
+                "source_scans",
+                "sync_account",
+                "sync_conflicts",
+                "sync_entities",
+                "sync_feedback"
             ]
         );
     }

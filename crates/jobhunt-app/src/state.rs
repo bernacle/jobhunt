@@ -34,7 +34,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use chrono::{DateTime, Utc};
-use jobhunt_jobs::{JobRecord, JobRepository, OpportunityId};
+use jobhunt_jobs::{JobRecord, OpportunityId};
 use jobhunt_profile::{ProfileEvent, ProfileEventKind, ProfileExport};
 use jobhunt_ranking::{FeedbackAction, FeedbackEvent};
 use jobhunt_storage::{ProfileWrite, StateImport, StateImported};

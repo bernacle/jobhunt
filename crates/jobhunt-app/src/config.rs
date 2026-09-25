@@ -27,6 +27,18 @@ pub struct AppConfig {
     pub discovery: DiscoveryConfig,
     pub verification: VerificationConfig,
     pub sources: SourcesConfig,
+    pub cloud: CloudClientConfig,
+}
+
+/// JobHunt Cloud, as this machine's client (`jobhunt login`, `jobhunt
+/// sync`). Nothing here is needed to use JobHunt locally.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CloudClientConfig {
+    /// The server `jobhunt login` signs in to when `--server` is not
+    /// given (`JOBHUNT_CLOUD_URL` overrides it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

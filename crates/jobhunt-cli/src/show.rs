@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use jobhunt_app::inspect::JobDetail;
 use jobhunt_eligibility::Assessment;
 use jobhunt_jobs::verification::OpportunityTrust;
-use jobhunt_jobs::{JobEvent, JobEventKind, JobRecord, JobRepository, JobStatus};
+use jobhunt_jobs::{JobEvent, JobEventKind, JobRecord, JobStatus};
 use jobhunt_ranking::{Gate, OpportunityState, Ranking, Sentiment};
 
 use crate::config::LoadedConfig;

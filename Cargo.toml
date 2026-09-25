@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/jobhunt-app",
+    "crates/jobhunt-cloud",
     "crates/jobhunt-core",
     "crates/jobhunt-eligibility",
     "crates/jobhunt-jobs",
@@ -24,6 +25,7 @@ publish = false
 [workspace.dependencies]
 # Internal crates
 jobhunt-app = { path = "crates/jobhunt-app" }
+jobhunt-cloud = { path = "crates/jobhunt-cloud" }
 jobhunt-core = { path = "crates/jobhunt-core" }
 jobhunt-eligibility = { path = "crates/jobhunt-eligibility" }
 jobhunt-jobs = { path = "crates/jobhunt-jobs" }
@@ -35,14 +37,19 @@ jobhunt-sources = { path = "crates/jobhunt-sources" }
 jobhunt-storage = { path = "crates/jobhunt-storage" }
 
 # External crates
+aes-gcm = "0.10"
 anstream = "1"
 anstyle = "1"
 anyhow = "1"
 async-trait = "0.1"
+axum = { version = "0.8", default-features = false, features = ["json", "query", "tokio", "http1", "http2", "matched-path"] }
+base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 clap = { version = "4.5", features = ["derive", "env"] }
 directories = "6"
 futures = "0.3"
+http = "1"
+jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto", "use_pem"] }
 pdf-extract = "0.12.1"
 rmcp = { version = "3.4.1", default-features = false, features = ["server", "macros", "schemars", "transport-io"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "charset", "gzip"] }
@@ -50,10 +57,12 @@ schemars = "1.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "sqlite", "postgres", "chrono", "json", "migrate", "macros"] }
 tempfile = "3"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tower = { version = "0.5", default-features = false, features = ["util"] }
+tower-http = { version = "0.6", features = ["trace", "cors", "timeout", "limit", "request-id", "sensitive-headers", "catch-panic"] }
 toml = "1.1"
 unicode-normalization = "0.1"
 tracing = "0.1"

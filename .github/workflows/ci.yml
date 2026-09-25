@@ -3,7 +3,7 @@
 # Everything here is offline: no job talks to Ashby, Greenhouse, Lever or
 # YC. Live source checks run separately in live.yml and never block merges.
 #
-# The job names (fmt, clippy, test, docs, msrv, ci-passed) are the status
+# The job names (fmt, clippy, test, cloud, docs, msrv, ci-passed) are the status
 # check names used by branch protection. Renaming a job means updating the
 # protection rule (see CONTRIBUTING.md and .github/rulesets/main.json).
 #
@@ -119,6 +119,80 @@ jobs:
           ALL_PROXY: http://127.0.0.1:9
           NO_PROXY: localhost,127.0.0.1,::1
 
+  cloud:
+    # The cloud backend against a real PostgreSQL: the storage contract on
+    # both backends, multi-user isolation, encryption at rest, sync,
+    # distributed leases, the HTTP API, hosted MCP, and the binary's
+    # server/worker/migrate modes end to end. The other jobs never start
+    # a database; their Postgres tests skip. Here a missing database is a
+    # failure (JOBHUNT_REQUIRE_POSTGRES).
+    name: cloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        # The major version Railway's Postgres template deploys.
+        image: postgres:18
+        env:
+          POSTGRES_USER: jobhunt
+          POSTGRES_PASSWORD: jobhunt
+          POSTGRES_DB: jobhunt
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jobhunt"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      JOBHUNT_TEST_DATABASE_URL: postgres://jobhunt:jobhunt@127.0.0.1:5432/jobhunt
+      JOBHUNT_REQUIRE_POSTGRES: "1"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Rust (stable)
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build the cloud tests (Cargo.lock must be up to date)
+        run: |
+          cargo fetch --locked
+          cargo test --frozen --no-run -p jobhunt-storage -p jobhunt-app -p jobhunt-cloud -p jobhunt-cli
+      # As in `test`: an unreachable proxy, so nothing reaches the internet
+      # (the local Postgres and mock servers are exempt).
+      - name: Storage contract (SQLite and Postgres), isolation, encryption, sync, leases
+        run: cargo test --frozen --no-fail-fast -p jobhunt-storage --tests
+        env:
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          ALL_PROXY: http://127.0.0.1:9
+          NO_PROXY: localhost,127.0.0.1,::1
+      - name: Sync end to end (two local machines, one cloud account)
+        run: cargo test --frozen --no-fail-fast -p jobhunt-app --test sync
+        env:
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          ALL_PROXY: http://127.0.0.1:9
+          NO_PROXY: localhost,127.0.0.1,::1
+      - name: HTTP API, authentication and hosted MCP (real HTTP, MCP client)
+        run: cargo test --frozen --no-fail-fast -p jobhunt-cloud
+        env:
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          ALL_PROXY: http://127.0.0.1:9
+          NO_PROXY: localhost,127.0.0.1,::1
+      - name: Binary end to end (server, migrate, workers, login, sync, offline)
+        run: cargo test --frozen --no-fail-fast -p jobhunt-cli --test cloud_e2e
+        env:
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          ALL_PROXY: http://127.0.0.1:9
+          NO_PROXY: localhost,127.0.0.1,::1
+
   docs:
     name: docs
     runs-on: ubuntu-latest
@@ -177,7 +251,7 @@ jobs:
     # Require this one (or all of the above) in branch protection.
     name: ci-passed
     if: always()
-    needs: [fmt, clippy, test, docs, msrv]
+    needs: [fmt, clippy, test, cloud, docs, msrv]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -10,7 +10,12 @@ does and how it is built, see the [README](README.md).
   Day-to-day development uses current stable.
 - A C compiler, for the bundled SQLite and TLS libraries.
 
-Nothing else: no Docker, no database server, no network access for tests.
+Nothing else for the local product: no Docker, no database server, no
+network access for tests. The cloud tests also need a PostgreSQL server
+(16 or newer) where the user may create databases: set
+`JOBHUNT_TEST_DATABASE_URL` (e.g. `postgres://postgres:postgres@127.0.0.1/postgres`)
+and they run; without it they are skipped. Each test creates and drops its
+own database.
 
 ## Build and test
 
@@ -31,9 +36,18 @@ The CLI and the MCP server are interfaces to one local application:
   verify, record feedback, update preferences, application context,
   export/import) live in `jobhunt-app`, on `LocalApp`, together with the
   serializable views they return;
-- `jobhunt-cli` and `jobhunt-mcp` only parse arguments, call one
-  `LocalApp` use case and present the answer. A rule written in a command
-  or a tool handler is a bug: the other interface would disagree.
+- `jobhunt-cli`, `jobhunt-mcp` and `jobhunt-cloud`'s HTTP handlers only
+  parse arguments, call one `App` use case and present the answer. A rule
+  written in a command, a tool handler or an API handler is a bug: the
+  other interfaces would disagree.
+- storage goes through the repository traits (`jobhunt_storage::Store`);
+  a behavior both backends must share gets a case in
+  `crates/jobhunt-storage/tests/contract.rs`, which runs it on SQLite and
+  Postgres. Postgres schema changes are new migrations under
+  `migrations/postgres`, like SQLite's.
+- private data in Postgres is only reachable through `PgUserStore` (one
+  account's view) and is sealed with `Keyring` before it is written; never
+  log it (ids and counts only).
 
 `jobhunt-app` and everything below it must never print: `jobhunt mcp`'s
 stdout belongs to the protocol. Report progress through `Progress`, logs
@@ -54,7 +68,9 @@ the fixtures); they are test hooks, not user settings.
 ## The quality gate: `./scripts/check.sh`
 
 Run this before pushing, and before calling any task done (people and coding
-agents alike). It runs the same checks as required CI, cheapest first,
+agents alike). With `JOBHUNT_TEST_DATABASE_URL` set it also runs the
+Postgres tests; `./scripts/check.sh --cloud` requires them (as CI's `cloud`
+job does). It runs the same checks as required CI, cheapest first,
 stops at the first failure, names it, and exits non-zero:
 
 | Step | Command |
@@ -129,6 +145,7 @@ request and every push to `main`. Its jobs are the required status checks:
 | --- | --- |
 | `fmt` | unformatted code |
 | `clippy` | any clippy or compiler warning, on every target |
+| `cloud` | any failing test against a real PostgreSQL 18 service: the storage contract on both backends, isolation, encryption, sync, leases, the HTTP API, authentication, hosted MCP, and the binary's cloud modes end to end (a missing database fails the job) |
 | `test` | a compile error (build step), then any failing unit, integration or doc test: model, lifecycle, dedupe, SQLite, migrations, adapters, end-to-end discovery, resume reading and parsing, profile re-import and evidence rules, the profile CLI flow, verification (domain, HTTP verifiers against mocks, SQLite), the eligibility rule matrix and region definitions, eligibility on real postings, and verify/show/check/find through the CLI; ranking (job facets, reason reading, feedback state, learned taste, signals, gates, pay, briefs), feedback and rankings in SQLite, and rank/why/feedback/taste/pipeline through the CLI |
 | `docs` | any rustdoc warning (broken intra-doc links, …) |
 | `msrv` | code or a dependency that needs a newer Rust than `rust-version` |
@@ -201,7 +218,7 @@ Intended rules: protection against accidents, not bureaucracy.
 
 - Changes arrive through pull requests; direct pushes, force pushes and
   branch deletion are blocked.
-- Required status checks: `fmt`, `clippy`, `test`, `docs`, `msrv`,
+- Required status checks: `fmt`, `clippy`, `test`, `cloud`, `docs`, `msrv`,
   `ci-passed`, from GitHub Actions, and the branch must be up to date with
   `main` before merging.
 - Zero required approvals.

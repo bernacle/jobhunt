@@ -39,16 +39,23 @@ impl Checked {
     }
 }
 
+/// The verifier that asks sources over HTTP, from configuration: the one
+/// verifier, used by `verify`, `find` and the cloud's scheduled
+/// re-verification alike.
+pub fn http_verifier(config: &crate::AppConfig) -> Result<HttpVerifier, AppError> {
+    let http = HttpClient::new(config.discovery.http_settings())
+        .map_err(|e| AppError::VerificationUnavailable(format!("HTTP client: {e}")))?;
+    Ok(match std::env::var(VERIFY_ENDPOINT_OVERRIDE) {
+        Ok(base) if !base.trim().is_empty() => {
+            HttpVerifier::with_hosts(http, VerifierHosts::all_at(&base))
+        }
+        _ => HttpVerifier::new(http),
+    })
+}
+
 impl LocalApp {
     fn verifier(&self) -> Result<HttpVerifier, AppError> {
-        let http = HttpClient::new(self.config().discovery.http_settings())
-            .map_err(|e| AppError::VerificationUnavailable(format!("HTTP client: {e}")))?;
-        Ok(match std::env::var(VERIFY_ENDPOINT_OVERRIDE) {
-            Ok(base) if !base.trim().is_empty() => {
-                HttpVerifier::with_hosts(http, VerifierHosts::all_at(&base))
-            }
-            _ => HttpVerifier::new(http),
-        })
+        http_verifier(self.config())
     }
 
     /// The profile as eligibility reads it, when there is one.

@@ -40,6 +40,10 @@ pub enum ErrorKind {
     Config,
     /// The local database failed.
     Storage,
+    /// No valid credentials: sign in (`jobhunt login`) or send a token.
+    Unauthenticated,
+    /// JobHunt Cloud could not be reached, or answered with an error.
+    CloudUnavailable,
 }
 
 impl ErrorKind {
@@ -57,6 +61,8 @@ impl ErrorKind {
             Self::InvalidImport => "invalid_import",
             Self::Config => "config",
             Self::Storage => "storage",
+            Self::Unauthenticated => "unauthenticated",
+            Self::CloudUnavailable => "cloud_unavailable",
         }
     }
 }
@@ -95,6 +101,10 @@ pub enum AppError {
     InvalidImport(String),
     #[error("invalid configuration: {0}")]
     Config(String),
+    #[error("{0}")]
+    Unauthenticated(String),
+    #[error("{0}")]
+    CloudUnavailable(String),
     #[error("the local database failed while {operation}")]
     Storage {
         operation: String,
@@ -118,6 +128,8 @@ impl AppError {
             Self::InvalidImport(_) => ErrorKind::InvalidImport,
             Self::Config(_) => ErrorKind::Config,
             Self::Storage { .. } => ErrorKind::Storage,
+            Self::Unauthenticated(_) => ErrorKind::Unauthenticated,
+            Self::CloudUnavailable(_) => ErrorKind::CloudUnavailable,
         }
     }
 
@@ -154,6 +166,10 @@ impl AppError {
                 "Check the network connection and try again; stored jobs are still available offline.",
             ),
             Self::Conflict(_) => Some("Run the same request again."),
+            Self::Unauthenticated(_) => Some("Sign in with `jobhunt login`."),
+            Self::CloudUnavailable(_) => Some(
+                "Everything still works offline on this machine; run `jobhunt sync` again later.",
+            ),
             _ => None,
         }
     }

@@ -264,6 +264,16 @@ impl SourceSpec {
         }
     }
 
+    /// The configured display name of the company, if any.
+    pub fn company(&self) -> Option<&str> {
+        match self {
+            Self::Ashby { board, .. } => board.company.as_deref(),
+            Self::Greenhouse { board, .. } => board.company.as_deref(),
+            Self::Lever { site, .. } => site.company.as_deref(),
+            Self::Yc { company, .. } => company.company.as_deref(),
+        }
+    }
+
     pub fn build(&self, http: &HttpClient) -> Result<Box<JobSource>, SourceError> {
         self.build_at(http, None)
     }

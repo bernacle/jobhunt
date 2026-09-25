@@ -105,6 +105,19 @@ fn jobhunt_app_error_chain(error: &AppError) -> String {
 }
 
 impl ToolError {
+    /// A failure with a stable code (`unauthenticated`, …).
+    pub fn new(code: &'static str, message: impl Into<String>, hint: Option<&'static str>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+            hint,
+        }
+    }
+
+    pub fn code(&self) -> &'static str {
+        self.code
+    }
+
     fn cancelled() -> Self {
         Self {
             code: "cancelled",
@@ -373,24 +386,65 @@ fn standard_schema(schema: &JsonObject) -> JsonObject {
     }
 }
 
-/// The server: one [`LocalApp`], shared by concurrent requests.
+/// Where a tool call's application comes from.
+///
+/// Locally there is one application, shared by every request
+/// ([`LocalApps`]). A hosted server builds one per request, for the
+/// account the request authenticated as (see `jobhunt-cloud`); a request
+/// without one is refused before any tool runs. Tools never choose whose
+/// data they touch.
+pub trait AppProvider: Send + Sync + 'static {
+    /// The application for this request.
+    fn app(&self, context: &RequestContext<RoleServer>) -> Result<Arc<LocalApp>, ToolError>;
+
+    /// Called once per tool call (usage logging). Must not block.
+    fn on_tool(&self, _context: &RequestContext<RoleServer>, _tool: &'static str) {}
+
+    /// Instructions sent to clients at initialization.
+    fn instructions(&self) -> &str {
+        INSTRUCTIONS
+    }
+
+    /// Where the data lives, for the server's description.
+    fn description(&self) -> &str {
+        "High-signal job discovery: your profile, verified opportunities, rankings and \
+         feedback, from your local JobHunt database."
+    }
+}
+
+/// The local server's provider: one application for every request.
+#[derive(Debug, Clone)]
+pub struct LocalApps(pub Arc<LocalApp>);
+
+impl AppProvider for LocalApps {
+    fn app(&self, _context: &RequestContext<RoleServer>) -> Result<Arc<LocalApp>, ToolError> {
+        Ok(Arc::clone(&self.0))
+    }
+}
+
+/// The server: the tools, over an [`AppProvider`].
 #[derive(Clone)]
 pub struct JobHuntServer {
-    app: Arc<LocalApp>,
+    apps: Arc<dyn AppProvider>,
     tool_router: ToolRouter<Self>,
 }
 
 impl std::fmt::Debug for JobHuntServer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("JobHuntServer")
-            .field("app", &self.app)
-            .finish_non_exhaustive()
+        f.debug_struct("JobHuntServer").finish_non_exhaustive()
     }
 }
 
 #[tool_router]
 impl JobHuntServer {
+    /// The local server, over one application.
     pub fn new(app: Arc<LocalApp>) -> Self {
+        Self::with_provider(Arc::new(LocalApps(app)))
+    }
+
+    /// A server whose applications come from `apps` (hosted: one per
+    /// authenticated request).
+    pub fn with_provider(apps: Arc<dyn AppProvider>) -> Self {
         let mut tool_router = Self::tool_router();
         for route in tool_router.map.values_mut() {
             let tool = &mut route.attr;
@@ -400,19 +454,33 @@ impl JobHuntServer {
                 .as_ref()
                 .map(|schema| Arc::new(standard_schema(schema)));
         }
-        Self { app, tool_router }
+        Self { apps, tool_router }
+    }
+
+    /// The application for this call (and the usage hook).
+    fn app(
+        &self,
+        context: &RequestContext<RoleServer>,
+        tool: &'static str,
+    ) -> Result<Arc<LocalApp>, ToolError> {
+        let app = self.apps.app(context)?;
+        self.apps.on_tool(context, tool);
+        Ok(app)
     }
 
     async fn feedback(
         &self,
+        context: &RequestContext<RoleServer>,
+        tool: &'static str,
         id: &str,
         action: FeedbackAction,
         reason: Option<&str>,
     ) -> Result<Json<FeedbackResult>, ToolError> {
+        let app = self.app(context, tool)?;
+        // Ids and the action only: the reason is the person's words.
         tracing::info!(id, action = action.as_str(), "recording feedback");
-        let opportunity = self.app.resolve(id).await?;
-        let outcome = self
-            .app
+        let opportunity = app.resolve(id).await?;
+        let outcome = app
             .record_feedback(&opportunity, action, reason, now())
             .await?;
         Ok(Json(FeedbackResult::of(&outcome)))
@@ -457,9 +525,11 @@ impl JobHuntServer {
             },
             verify: p.refresh != RefreshInput::Never && p.verify.unwrap_or(true),
         };
-        tracing::info!(query = %request.text, limit, "search_jobs");
+        let app = self.app(&context, "search_jobs")?;
+        // The query is the person's words: its length only.
+        tracing::info!(query_len = request.text.len(), limit, "search_jobs");
         let at = now();
-        let results = long_running(&context, &self.app, move |app| async move {
+        let results = long_running(&context, &app, move |app| async move {
             let found = app.find(&request, &LogProgress, at).await?;
             Ok(SearchResults::of(&found, at))
         })
@@ -483,9 +553,11 @@ impl JobHuntServer {
     async fn get_job(
         &self,
         Parameters(p): Parameters<GetJobParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<Json<JobDetail>, ToolError> {
-        let opportunity = self.app.resolve(&p.id).await?;
-        let inspection = self.app.inspect(&opportunity, false, now()).await?;
+        let app = self.app(&context, "get_job")?;
+        let opportunity = app.resolve(&p.id).await?;
+        let inspection = app.inspect(&opportunity, false, now()).await?;
         Ok(Json(JobDetail::of(
             &inspection,
             p.include_sources,
@@ -513,13 +585,14 @@ impl JobHuntServer {
         Parameters(p): Parameters<VerifyJobParams>,
         context: RequestContext<RoleServer>,
     ) -> Result<Json<VerificationReport>, ToolError> {
-        let opportunity = self.app.resolve(&p.id).await?;
+        let app = self.app(&context, "verify_job")?;
+        let opportunity = app.resolve(&p.id).await?;
         let mode = if p.force {
             VerifyMode::Force
         } else {
             VerifyMode::IfDue
         };
-        let report = long_running(&context, &self.app, move |app| async move {
+        let report = long_running(&context, &app, move |app| async move {
             let checked = app.verify(&opportunity, mode, &LogProgress, now()).await?;
             Ok(VerificationReport::of(&opportunity, &checked))
         })
@@ -539,8 +612,12 @@ impl JobHuntServer {
             open_world_hint = false
         )
     )]
-    async fn get_profile(&self) -> Result<Json<ProfileView>, ToolError> {
-        Ok(Json(self.app.profile_view().await?))
+    async fn get_profile(
+        &self,
+        context: RequestContext<RoleServer>,
+    ) -> Result<Json<ProfileView>, ToolError> {
+        let app = self.app(&context, "get_profile")?;
+        Ok(Json(app.profile_view().await?))
     }
 
     #[tool(
@@ -561,13 +638,15 @@ impl JobHuntServer {
     async fn update_preferences(
         &self,
         Parameters(p): Parameters<UpdatePreferencesParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<Json<PreferenceUpdateResult>, ToolError> {
+        let app = self.app(&context, "update_preferences")?;
         let update = PreferenceUpdate {
             statement: p.statement,
             set: p.set,
             remove: p.remove,
         };
-        let changes = self.app.update_preferences(&update, now()).await?;
+        let changes = app.update_preferences(&update, now()).await?;
         Ok(Json(PreferenceUpdateResult::of(&changes)))
     }
 
@@ -587,9 +666,16 @@ impl JobHuntServer {
     async fn save_job(
         &self,
         Parameters(p): Parameters<FeedbackParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<Json<FeedbackResult>, ToolError> {
-        self.feedback(&p.id, FeedbackAction::Save, p.reason.as_deref())
-            .await
+        self.feedback(
+            &context,
+            "save_job",
+            &p.id,
+            FeedbackAction::Save,
+            p.reason.as_deref(),
+        )
+        .await
     }
 
     #[tool(
@@ -610,9 +696,16 @@ impl JobHuntServer {
     async fn reject_job(
         &self,
         Parameters(p): Parameters<FeedbackParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<Json<FeedbackResult>, ToolError> {
-        self.feedback(&p.id, FeedbackAction::Reject, p.reason.as_deref())
-            .await
+        self.feedback(
+            &context,
+            "reject_job",
+            &p.id,
+            FeedbackAction::Reject,
+            p.reason.as_deref(),
+        )
+        .await
     }
 
     #[tool(
@@ -631,9 +724,16 @@ impl JobHuntServer {
     async fn mark_applied(
         &self,
         Parameters(p): Parameters<FeedbackParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<Json<FeedbackResult>, ToolError> {
-        self.feedback(&p.id, FeedbackAction::Applied, p.reason.as_deref())
-            .await
+        self.feedback(
+            &context,
+            "mark_applied",
+            &p.id,
+            FeedbackAction::Applied,
+            p.reason.as_deref(),
+        )
+        .await
     }
 
     #[tool(
@@ -652,6 +752,7 @@ impl JobHuntServer {
     async fn record_feedback(
         &self,
         Parameters(p): Parameters<RecordFeedbackParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<Json<FeedbackResult>, ToolError> {
         let action = match p.action {
             OtherFeedback::Like => FeedbackAction::Like,
@@ -660,7 +761,14 @@ impl JobHuntServer {
             OtherFeedback::Interview => FeedbackAction::Interview,
             OtherFeedback::Offer => FeedbackAction::Offer,
         };
-        self.feedback(&p.id, action, p.reason.as_deref()).await
+        self.feedback(
+            &context,
+            "record_feedback",
+            &p.id,
+            action,
+            p.reason.as_deref(),
+        )
+        .await
     }
 
     #[tool(
@@ -676,8 +784,10 @@ impl JobHuntServer {
     async fn get_pipeline(
         &self,
         Parameters(p): Parameters<PipelineParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<Json<PipelineView>, ToolError> {
-        let entries = self.app.pipeline(p.include_rejected).await?;
+        let app = self.app(&context, "get_pipeline")?;
+        let entries = app.pipeline(p.include_rejected).await?;
         Ok(Json(PipelineView::of(&entries)))
     }
 
@@ -699,13 +809,14 @@ impl JobHuntServer {
     async fn prepare_application_context(
         &self,
         Parameters(p): Parameters<ContextParams>,
+        context: RequestContext<RoleServer>,
     ) -> Result<Json<ApplicationContext>, ToolError> {
-        let opportunity = self.app.resolve(&p.id).await?;
-        let context = self
-            .app
+        let app = self.app(&context, "prepare_application_context")?;
+        let opportunity = app.resolve(&p.id).await?;
+        let prepared = app
             .application_context(&opportunity, p.include_contact_details, now())
             .await?;
-        Ok(Json(context))
+        Ok(Json(prepared))
     }
 }
 
@@ -716,12 +827,9 @@ impl ServerHandler for JobHuntServer {
             .with_server_info(
                 Implementation::new("jobhunt", env!("CARGO_PKG_VERSION"))
                     .with_title("JobHunt")
-                    .with_description(
-                        "High-signal job discovery: your profile, verified opportunities, \
-                         rankings and feedback, from your local JobHunt database.",
-                    ),
+                    .with_description(self.apps.description()),
             )
-            .with_instructions(INSTRUCTIONS)
+            .with_instructions(self.apps.instructions())
     }
 }
 

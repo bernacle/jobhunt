@@ -1,8 +1,8 @@
 //! Turning what someone typed (`opp_…`, `job_…`, or a unique prefix of
 //! either) into a logical opportunity and its source records.
 
-use jobhunt_jobs::{JobId, JobRecord, JobRepository, OpportunityId};
-use jobhunt_storage::SqliteJobStore;
+use jobhunt_jobs::{JobId, JobRecord, OpportunityId};
+use jobhunt_storage::Store;
 
 use crate::error::AppError;
 
@@ -43,7 +43,7 @@ enum Wanted {
     Opportunity(OpportunityId),
 }
 
-pub(crate) async fn resolve(store: &SqliteJobStore, input: &str) -> Result<Opportunity, AppError> {
+pub(crate) async fn resolve(store: &dyn Store, input: &str) -> Result<Opportunity, AppError> {
     let input = input.trim().to_ascii_lowercase();
     let wanted = if let Ok(job) = input.parse::<JobId>() {
         Wanted::Job(job)
@@ -73,7 +73,7 @@ pub(crate) async fn resolve(store: &SqliteJobStore, input: &str) -> Result<Oppor
     }
 }
 
-async fn by_prefix(store: &SqliteJobStore, input: &str) -> Result<Wanted, AppError> {
+async fn by_prefix(store: &dyn Store, input: &str) -> Result<Wanted, AppError> {
     let (kind, hex) = input.split_once('_').unwrap_or(("", input));
     let valid =
         hex.len() >= MIN_SHORT_ID && hex.len() < 32 && hex.chars().all(|c| c.is_ascii_hexdigit());

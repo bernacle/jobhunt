@@ -15,11 +15,98 @@ use crate::render::{DIM, plural};
 pub async fn run(loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
     with_app!(loaded, |app| {
         let d = app.doctor(jobhunt_app::now()).await?;
+        let cloud = cloud_lines(&app).await;
         finish(
-            write(&mut anstream::stdout().lock(), &d, loaded),
+            write(&mut anstream::stdout().lock(), &d, loaded)
+                .and_then(|()| write_cloud(&mut anstream::stdout().lock(), &cloud)),
             "the report",
         )
     })
+}
+
+/// The JobHunt Cloud section: where the session is kept and whether there
+/// is one (never its tokens), and where sync stands. No network.
+async fn cloud_lines(app: &jobhunt_app::App) -> Vec<(bool, String)> {
+    let mut lines = Vec::new();
+    match crate::cloud::vault() {
+        Ok(vault) => {
+            match vault.load() {
+                Ok(Some(session)) => lines.push((
+                    true,
+                    format!(
+                        "Cloud: signed in to {} as {} ({:?}){}",
+                        session.server,
+                        session.user_id,
+                        session.kind,
+                        if session.expiring(chrono::Utc::now()) && session.refresh_token.is_none() {
+                            "; the session expired, run `jobhunt login`"
+                        } else {
+                            ""
+                        }
+                    ),
+                )),
+                Ok(None) => lines.push((
+                    true,
+                    "Cloud: not signed in (optional; `jobhunt login` to sync)".into(),
+                )),
+                Err(e) => lines.push((false, format!("Cloud: {e}"))),
+            }
+            lines.push((
+                true,
+                format!("Cloud session stored in {}", vault.describe()),
+            ));
+        }
+        Err(e) => lines.push((false, format!("Cloud: {e}"))),
+    }
+    // In a cloud environment (the service's variables are set), what the
+    // cloud processes would find: present, missing or invalid, never values.
+    if [
+        "DATABASE_URL",
+        "JOBHUNT_OIDC_ISSUER",
+        "JOBHUNT_ENCRYPTION_KEYS",
+    ]
+    .iter()
+    .any(|v| std::env::var_os(v).is_some())
+    {
+        let cloud = crate::serve::cloud_config();
+        for setting in cloud.report() {
+            let good = !setting.required
+                || !(setting.status.starts_with("missing")
+                    || setting.status.starts_with("invalid"));
+            lines.push((
+                good,
+                format!("Cloud config {}: {}", setting.name, setting.status),
+            ));
+        }
+        for problem in cloud.problems(jobhunt_cloud::Role::Server) {
+            lines.push((false, format!("Cloud config: {problem}")));
+        }
+    }
+    if let Ok(status) = app.sync_status().await
+        && let Some(account) = &status.account
+    {
+        lines.push((
+            status.conflicts.is_empty(),
+            format!(
+                "Sync: last {} with {}; {} feedback to send; {} conflicts",
+                account
+                    .last_sync_at
+                    .map_or_else(|| "never".into(), |t| t.to_rfc3339()),
+                account.server,
+                status.unsynced_feedback,
+                status.conflicts.len()
+            ),
+        ));
+    }
+    lines
+}
+
+fn write_cloud(out: &mut impl Write, lines: &[(bool, String)]) -> io::Result<()> {
+    writeln!(out)?;
+    for (good, text) in lines {
+        ok(out, *good, text)?;
+    }
+    out.flush()
 }
 
 fn ok(out: &mut impl Write, good: bool, text: &str) -> io::Result<()> {

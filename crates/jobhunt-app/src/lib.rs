@@ -25,7 +25,9 @@
 //! * [`LocalApp::application_context`] ([`context`]): evidence a client may
 //!   use to help with an application, only what the evidence policy allows;
 //! * [`LocalApp::export_state`] / [`LocalApp::import_state`] ([`state`]);
-//! * [`LocalApp::doctor`] ([`doctor`]).
+//! * [`LocalApp::doctor`] ([`doctor`]);
+//! * [`LocalApp::sync`] ([`sync`]): merge the person's state with JobHunt
+//!   Cloud.
 //!
 //! [`views`] holds the typed, serializable answers (the MCP tools'
 //! structured content and output schemas).
@@ -46,6 +48,7 @@ pub mod profile_view;
 pub mod resolve;
 pub mod shortlist;
 pub mod state;
+pub mod sync;
 pub mod verify;
 pub mod views;
 
@@ -53,14 +56,16 @@ use chrono::{DateTime, Utc};
 use jobhunt_jobs::verification::FreshnessPolicy;
 use jobhunt_profile::ProfileService;
 use jobhunt_ranking::{RankingService, RuleReader};
-use jobhunt_storage::SqliteJobStore;
-use tokio::sync::Mutex;
+use std::sync::Arc;
+
+use jobhunt_storage::{SqliteJobStore, Store};
 
 pub use config::{AppConfig, LoadedConfig, Paths};
 pub use discover::{Refresh, RefreshMode, RefreshReason, SourceArg};
 pub use error::{AppError, ErrorKind};
 pub use resolve::{Opportunity, short_id};
 pub use shortlist::{FindRequest, Found, SearchResults};
+pub use sync::{Remote, Side, SyncReport, SyncTransport};
 
 /// Something a long use case is doing, for front-ends that show progress
 /// (the CLI prints it on stderr; the MCP server logs it).
@@ -88,32 +93,53 @@ impl Progress for Quiet {
     fn note(&self, _event: ProgressEvent) {}
 }
 
-/// The local application: configuration plus the open database.
-///
-/// Safe to share between concurrent requests (`Arc<LocalApp>`): the SQLite
-/// store is a connection pool in WAL mode with a busy timeout, and
-/// read-modify-write use cases (feedback, preferences, imports) take a
-/// process-wide write lock so concurrent requests cannot interleave their
-/// checks and writes. Other processes (a CLI command next to an MCP
-/// server) are covered by SQLite's own locking and the profile's
-/// optimistic revisions: a lost race is reported as
-/// [`ErrorKind::Conflict`], never silently merged.
-pub struct LocalApp {
-    loaded: LoadedConfig,
-    store: SqliteJobStore,
-    pub(crate) writes: Mutex<()>,
+/// Where discovery happens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DiscoveryMode {
+    /// Searches read the configured job boards themselves when stored jobs
+    /// are stale (the local product).
+    #[default]
+    OnDemand,
+    /// Scheduled workers keep one shared corpus fresh (JobHunt Cloud);
+    /// searches never read job boards. They still verify their best
+    /// candidates, and verifications are shared by everyone.
+    Background,
 }
 
-impl std::fmt::Debug for LocalApp {
+/// The application: configuration plus one person's view of a store.
+///
+/// Locally that is the SQLite file ([`App::open`]); in the cloud it is a
+/// user-scoped view of Postgres ([`App::from_parts`]), one per request. The
+/// use cases are the same either way.
+///
+/// Safe to share between concurrent requests (`Arc<App>`).
+/// Read-modify-write use cases (feedback, preferences, imports) run under
+/// the store's write lock ([`Store::write_lock`]: a process-wide mutex for
+/// SQLite, a per-person advisory lock in Postgres), so concurrent requests
+/// cannot interleave their checks and writes. Other writers are covered by
+/// the profile's optimistic revisions: a lost race is reported as
+/// [`ErrorKind::Conflict`], never silently merged.
+pub struct App {
+    loaded: Arc<LoadedConfig>,
+    store: Arc<dyn Store>,
+    discovery: DiscoveryMode,
+}
+
+/// The local application (the name the CLI and the stdio MCP server use).
+pub type LocalApp = App;
+
+impl std::fmt::Debug for App {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LocalApp")
-            .field("database", &self.loaded.database)
+        f.debug_struct("App")
+            .field("store", &self.store.location())
+            .field("discovery", &self.discovery)
             .finish_non_exhaustive()
     }
 }
 
-impl LocalApp {
-    /// Opens (creating and migrating if needed) the configured database.
+impl App {
+    /// Opens (creating and migrating if needed) the configured local
+    /// database.
     pub async fn open(loaded: LoadedConfig) -> Result<Self, AppError> {
         let store = SqliteJobStore::open(&loaded.database)
             .await
@@ -121,18 +147,28 @@ impl LocalApp {
         Ok(Self::with_store(loaded, store))
     }
 
-    /// An application over an already open store (tests).
-    pub fn with_store(loaded: LoadedConfig, store: SqliteJobStore) -> Self {
+    /// An application over an already open store, discovering on demand.
+    pub fn with_store(loaded: LoadedConfig, store: impl Store + 'static) -> Self {
+        Self::from_parts(Arc::new(loaded), Arc::new(store), DiscoveryMode::OnDemand)
+    }
+
+    /// An application over a shared configuration and store (the cloud
+    /// builds one per request).
+    pub fn from_parts(
+        loaded: Arc<LoadedConfig>,
+        store: Arc<dyn Store>,
+        discovery: DiscoveryMode,
+    ) -> Self {
         Self {
             loaded,
             store,
-            writes: Mutex::new(()),
+            discovery,
         }
     }
 
-    /// Closes the database, flushing the write-ahead log.
+    /// Closes the store (for SQLite, flushing the write-ahead log).
     pub async fn close(self) {
-        self.store.close().await;
+        self.store.shutdown().await;
     }
 
     pub fn loaded(&self) -> &LoadedConfig {
@@ -143,8 +179,12 @@ impl LocalApp {
         &self.loaded.config
     }
 
-    pub fn store(&self) -> &SqliteJobStore {
-        &self.store
+    pub fn store(&self) -> &(dyn Store + 'static) {
+        self.store.as_ref()
+    }
+
+    pub fn discovery_mode(&self) -> DiscoveryMode {
+        self.discovery
     }
 
     /// When a verification is fresh, stale, or reused.
@@ -153,28 +193,27 @@ impl LocalApp {
     }
 
     /// The ranking use cases, with the configured freshness policy.
-    pub fn ranking(&self) -> RankingService<'_, SqliteJobStore> {
-        RankingService::new(&self.store, &RuleReader).with_policy(self.policy())
+    pub fn ranking(&self) -> RankingService<'_, dyn Store> {
+        RankingService::new(self.store(), &RuleReader).with_policy(self.policy())
     }
 
-    /// The profile use cases for the local profile.
-    pub fn profiles(&self) -> ProfileService<'_, SqliteJobStore> {
-        ProfileService::new(&self.store)
+    /// The profile use cases for the person's profile.
+    pub fn profiles(&self) -> ProfileService<'_, dyn Store> {
+        ProfileService::new(self.store())
     }
 
     /// The opportunity an id (`opp_…`, `job_…`, or a unique prefix of
     /// either) refers to, with every source record.
     pub async fn resolve(&self, id: &str) -> Result<Opportunity, AppError> {
-        resolve::resolve(&self.store, id).await
+        resolve::resolve(self.store(), id).await
     }
 
-    /// Runs a read-modify-write use case under the process-wide write
-    /// lock.
-    pub(crate) async fn exclusive<T, F>(&self, f: F) -> T
+    /// Runs a read-modify-write use case under the store's write lock.
+    pub(crate) async fn exclusive<T, F>(&self, f: F) -> Result<T, AppError>
     where
-        F: std::future::Future<Output = T>,
+        F: std::future::Future<Output = Result<T, AppError>>,
     {
-        let _guard = self.writes.lock().await;
+        let _guard = self.store.write_lock().await?;
         f.await
     }
 }

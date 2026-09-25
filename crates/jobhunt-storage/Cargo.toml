@@ -1,6 +1,6 @@
 [package]
 name = "jobhunt-storage"
-description = "Storage backends for JobHunt. Currently: local SQLite."
+description = "Storage backends for JobHunt: local SQLite and cloud Postgres."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,8 +8,11 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+aes-gcm.workspace = true
 async-trait.workspace = true
+base64.workspace = true
 chrono.workspace = true
+futures.workspace = true
 jobhunt-core.workspace = true
 jobhunt-eligibility.workspace = true
 jobhunt-jobs.workspace = true
@@ -17,11 +20,14 @@ jobhunt-profile.workspace = true
 jobhunt-ranking.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+jobhunt-resume.workspace = true
 tempfile.workspace = true
 
 [lints]

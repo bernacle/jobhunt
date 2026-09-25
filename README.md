@@ -10,6 +10,11 @@ the terminal (`jobhunt`), or from an AI assistant that speaks the Model
 Context Protocol (`jobhunt mcp`): both are interfaces to the same
 application, the same profile, jobs, rankings and feedback.
 
+Optionally, [JobHunt Cloud](#jobhunt-cloud) keeps discovering and
+verifying jobs while your laptop is closed: `jobhunt login`, `jobhunt
+sync`, and the same use cases over an HTTP API and a hosted MCP endpoint.
+The local product never needs it.
+
 ```text
 $ jobhunt find
 Checked 11 open jobs
@@ -1468,6 +1473,45 @@ mode); it cannot start a local stdio server. JobHunt does not ship an HTTP
 transport (it would expose your local profile on the network), so ChatGPT
 is not supported directly today.
 
+## JobHunt Cloud
+
+The same application, hosted: an account your machines sync with,
+scheduled discovery and re-verification of one shared job corpus, an HTTP
+API (`/api/v1`) and a hosted MCP endpoint (`/mcp`) for remote assistants.
+The full design, deployment and configuration reference is in
+[docs/cloud.md](docs/cloud.md).
+
+```bash
+jobhunt login --server https://jobhunt.example.com   # sign in in the browser (device code)
+jobhunt sync                                         # merge profile, decisions, preferences, feedback
+jobhunt sync --status                                # offline: where sync stands, conflicts
+jobhunt sync --keep local                            # resolve conflicts (or --keep cloud, --record <id>)
+jobhunt account                                      # the account and this machine's sync state
+jobhunt token create "Claude Desktop"                # a personal access token for an MCP client
+jobhunt logout [--everywhere]
+```
+
+- **Offline first.** Only `login`, `logout`, `account`, `sync` and `token`
+  reach the cloud; every other command works on the local database,
+  online or not. When the cloud is unreachable, `sync` says so and changes
+  nothing.
+- **Sync** merges per record, never "last writer wins" for the whole
+  profile: a change on one side wins, different fields changed on both
+  sides merge, and the same field changed differently (a claim confirmed
+  here and rejected there) is a conflict that is shown and kept until you
+  choose. Feedback merges by union and is never lost.
+- **Shared corpus.** Job boards are read once for everyone by a scheduled
+  worker (conditional requests, the same lifecycle and history), and the
+  jobs that matter to someone are re-verified in the background.
+  Eligibility and ranking stay per person.
+- **Private data** (profile, resume text, claims, preferences, feedback
+  reasons, eligibility decisions, rankings) is isolated per account and
+  encrypted by the application (AES-256-GCM) before it reaches Postgres.
+- **Deployment**: one binary with process modes (`jobhunt server`,
+  `jobhunt migrate`, `jobhunt worker discovery|verification`), a
+  Dockerfile, and Railway Infrastructure as Code in
+  [.railway/railway.ts](.railway/railway.ts).
+
 ## Your data: export and import
 
 `jobhunt export` writes everything that is yours and can't be rebuilt, as
@@ -1517,6 +1561,12 @@ tool is called:
 
 Errors sent to clients never include local file paths. Nothing is sent to
 a model provider by JobHunt itself; no AI API key is used or needed.
+
+With JobHunt Cloud, only what `jobhunt sync` sends leaves your machine
+(your profile records and feedback, and the jobs that feedback is about),
+to your own account. In the cloud it is isolated per account and
+encrypted by the application; logs carry ids, never your text; usage
+events are counts. See [docs/cloud.md](docs/cloud.md#encryption).
 
 ## Logging
 
@@ -1570,21 +1620,30 @@ crates/
                     tiers, decision briefs, the rank cache, RankingService.
   jobhunt-sources   Adapters (Ashby, Greenhouse, Lever, YC), careers-page board
                     detection, the HTTP verifiers, and the shared HTTP client.
-  jobhunt-storage   Storage backends. SQLite today (jobs, profiles,
-                    verifications, eligibility decisions, feedback, rankings).
-  jobhunt-app       The local application every front-end shares: config
-                    loading, opening the database, and the use cases (find:
+  jobhunt-storage   Storage backends behind the repository traits (bundled
+                    as `Store`): local SQLite, and Postgres for the cloud
+                    (shared corpus, per-account encrypted private data,
+                    sync, leases, accounts, usage).
+  jobhunt-app       The application every front-end shares (over any
+                    Store): config loading, opening the database, sync,
+                    and the use cases (find:
                     refresh + rank + verify; resolve ids; inspect; verify;
                     feedback; preferences; profile view; application
                     context; export/import; doctor) with their typed,
                     serializable answers. No printing, no protocol code.
-  jobhunt-mcp       The MCP server (rmcp, stdio): each tool is a thin
-                    adapter over one jobhunt-app use case.
+  jobhunt-mcp       The MCP server (rmcp): each tool is a thin adapter over
+                    one jobhunt-app use case; served over stdio locally,
+                    over Streamable HTTP by the cloud.
+  jobhunt-cloud     JobHunt Cloud: environment configuration, OIDC and
+                    token authentication, the HTTP API, hosted MCP,
+                    scheduled workers, usage events, the cloud client.
   jobhunt-cli       The `jobhunt` binary: arguments, logging, human output,
-                    and `jobhunt mcp`; every command calls jobhunt-app.
+                    `jobhunt mcp`, login/sync, and the cloud process modes
+                    (server, migrate, workers); every command calls
+                    jobhunt-app.
 ```
 
-Dependencies only point downward: `cli → mcp → app`, `app → sources,
+Dependencies only point downward: `cli → cloud → mcp → app`, `app → sources,
 storage → jobs → core`, `app, storage → profile → core`, `app →
 eligibility → jobs, profile`, and `app, storage → ranking → eligibility`
 (the CLI also uses `resume` to read resume files). `jobhunt-jobs` and `jobhunt-profile` do not depend on any HTTP,
@@ -1596,6 +1655,8 @@ place where they meet.
 ```bash
 ./scripts/check.sh                  # the full local quality gate (what CI requires)
 cargo test                          # everything offline
+JOBHUNT_TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1/postgres \
+  cargo test                        # also the cloud tests against a real Postgres
 cargo test -p jobhunt-sources --test ashby_live -- --ignored --nocapture
 cargo test -p jobhunt-sources --test greenhouse_live -- --ignored --nocapture
 cargo test -p jobhunt-sources --test lever_live -- --ignored --nocapture
@@ -1610,6 +1671,35 @@ The live tests read several real boards per family (override them with
 timings, and fail if a listing is incomplete, more than 5% of postings are
 rejected, or any converted posting is invalid.
 
+Tests that need Postgres (the storage contract's Postgres half, isolation,
+encryption at rest, sync, leases, the HTTP API, hosted MCP, the binary's
+cloud modes) create a fresh database per test on the server named by
+`JOBHUNT_TEST_DATABASE_URL` (any user allowed to create databases), and
+are skipped without it; CI's `cloud` job runs them against Postgres 18
+with `JOBHUNT_REQUIRE_POSTGRES=1`, which turns a skip into a failure.
+
+- `jobhunt-storage` (both backends): one repository contract run against
+  SQLite and Postgres (lifecycle and history, not-modified and failed
+  scans, search and prefixes, identity, verification, profiles and
+  revisions, feedback, rankings, eligibility cache, atomic imports, the
+  write lock) plus a whole scenario whose rankings must match; Postgres
+  only: per-account isolation and deletion, shared jobs with per-person
+  eligibility, encryption at rest and ciphertexts bound to their owner,
+  key rotation, sync compare-and-set and idempotency, concurrent writers,
+  source and verification leases (exclusive, expiring, backing off),
+  accounts and tokens, concurrent migrations, usage events.
+- `jobhunt-app` (sync): first sync, repeats, a second machine, changes both
+  ways, field merges, conflicting decisions surfaced and resolved,
+  offline changes synced later, feedback by union.
+- `jobhunt-cloud`: configuration validation, OIDC tokens against a mock
+  provider (audience, issuer, expiry, unknown key, algorithm confusion),
+  personal tokens and logout, every API endpoint's view and error codes,
+  account isolation, sync over HTTP, the device flow, and hosted MCP
+  through the official MCP client (same tools, per-account data,
+  401 challenge).
+- `jobhunt-cli` (`cloud_e2e`): the binary's `migrate`, `server`, two
+  concurrent discovery workers against recorded boards, verification,
+  `login`, `sync` from two machines, `token`, offline behavior, `logout`.
 - `jobhunt-core`: URL normalization against real ATS URL variants (and URLs
   that must stay distinct), stable IDs, fingerprints, HTML-to-text.
 - `jobhunt-jobs`: lifecycle rules, closing safeguards, conditional fetches,
@@ -1772,10 +1862,10 @@ Local product and MCP:
 
 - Not built yet: application assistance (writing answers, cover letters,
   tailored resumes; `prepare_application_context` only prepares evidence),
-  scheduled discovery, notifications, and any hosted or multi-user
-  version.
-- `jobhunt mcp` speaks stdio only. Clients that need a remote HTTPS server
-  (ChatGPT) can't use it directly.
+  notifications, a web interface, billing. JobHunt Cloud's own
+  limitations are listed in [docs/cloud.md](docs/cloud.md#known-limitations).
+- `jobhunt mcp` speaks stdio; remote clients that need HTTPS use JobHunt
+  Cloud's hosted `/mcp` endpoint.
 - The MCP server has no resources or prompts; the tools cover the product.
   It reports progress on stderr, not as MCP progress notifications.
 - Discovery and verification run with a process-wide lock only around

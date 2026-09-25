@@ -52,7 +52,7 @@ impl LocalApp {
         };
         let state = ranking.state(&opportunity.records).await?;
         if mark_seen {
-            self.exclusive(ranking.mark_seen(&opportunity.records, now))
+            self.exclusive(async { Ok(ranking.mark_seen(&opportunity.records, now).await?) })
                 .await?;
         }
         Ok(Inspection {
