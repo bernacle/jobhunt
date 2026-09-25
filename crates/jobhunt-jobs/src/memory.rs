@@ -328,7 +328,7 @@ impl VerificationRepository for MemoryRepository {
             .filter(|v| v.job_id == job)
             .cloned()
             .collect();
-        out.sort_by(|a, b| b.attempted_at.cmp(&a.attempted_at));
+        out.sort_by_key(|v| std::cmp::Reverse(v.attempted_at));
         Ok(out)
     }
 
