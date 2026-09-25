@@ -84,11 +84,6 @@ company = "Palantir"
 site = "zoox"
 company = "Zoox"
 
-[[sources.lever]]
-site = "qonto"
-company = "Qonto"
-region = "eu"
-
 [[sources.yc]]
 slug = "posthog"
 
