@@ -138,8 +138,9 @@ verification request with `JOBHUNT_VERIFY_ENDPOINT=http://127.0.0.1:<port>`
 
 ## Continuous integration
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull
-request and every push to `main`. Its jobs are the required status checks:
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull
+requests that are ready for review (not on drafts) and on every push to
+`main`. Its jobs are the required status checks:
 
 | Check | What fails it |
 | --- | --- |
@@ -175,6 +176,22 @@ Notes:
   one a month for GitHub Actions. They go through the same checks,
   including `msrv`.
 
+### Draft pull requests skip CI
+
+The repository is private, so Actions minutes are limited (3,000 a month
+on GitHub Pro), and one full run costs about 25 of them. CI runs when its
+result matters: on pull requests that are ready for review and on `main`.
+
+- **Draft pull requests skip every job**, `ci-passed` included. GitHub counts
+  a skipped required check as passing. That's acceptable because a draft
+  can't be merged, and marking it **Ready for review** runs the whole suite
+  for real; those results replace the skips. Every push to a ready PR runs
+  it again.
+- The flow: open the pull request as a draft (`gh pr create --draft`), run
+  `./scripts/check.sh` locally while iterating, and mark it ready
+  (`gh pr ready`) when it's done. For a longer round of changes after
+  that, convert it back to a draft (`gh pr ready --undo`).
+
 ### Live source validation
 
 [`.github/workflows/live.yml`](.github/workflows/live.yml) runs the live
@@ -209,8 +226,9 @@ the adapter (with a new fixture) in a PR.
    never changes an eligibility decision. Schema changes are new, additive
    migrations; never edit an existing one.
 3. Run `./scripts/check.sh`.
-4. Open a PR against `main`. Merge when CI is green. A solo maintainer
-   doesn't need approvals.
+4. Open a **draft** PR against `main`; CI doesn't run on drafts. When the
+   change is done, mark it ready for review, which runs CI. Merge when CI is
+   green. A solo maintainer doesn't need approvals.
 
 ## Branch protection for `main`
 
