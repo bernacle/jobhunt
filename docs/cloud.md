@@ -448,14 +448,13 @@ First deployment:
      JOBHUNT_ENCRYPTION_KEYS="k1:$(openssl rand -base64 32)" \
      JOBHUNT_OIDC_ISSUER=https://<subdomain>.authkit.app \
      JOBHUNT_OIDC_AUDIENCE="https://<api domain>,https://<api domain>/mcp" \
-     JOBHUNT_OIDC_CLI_CLIENT_ID=<the environment's client id> \
+     JOBHUNT_OIDC_CLI_CLIENT_ID=<the CLI application's client id> \
      JOBHUNT_PUBLIC_URL=https://<api domain>
    ```
 
 5. Give `api` a public domain (`railway domain -s api`, or a custom
    domain); generated domains are not managed by the IaC file.
-6. In the identity provider. For WorkOS AuthKit (the production
-   environment):
+6. In the identity provider. For WorkOS AuthKit:
    - enable at least one sign-in method (Magic Auth, Google, GitHub, …);
    - under the OAuth resources (resource indicators), add
      `https://<api domain>` (the CLI's, as default) and
@@ -463,8 +462,12 @@ First deployment:
    - optionally enable dynamic client registration, so MCP clients can
      sign in with OAuth instead of a personal access token.
 
-   The CLI uses the environment's client id with the device code grant
-   (AuthKit's CLI Auth needs no other setup). For Auth0 instead: an API
+   - create a **public OAuth application** for the CLI (Applications →
+     OAuth, public client, no secret) and use its client id as
+     `JOBHUNT_OIDC_CLI_CLIENT_ID`; AuthKit's device endpoint refuses the
+     environment's own client id (`invalid_client`).
+
+   For Auth0 instead: an API
    whose identifier is the audience, a native application with the device
    code grant and refresh token rotation, and
    `JOBHUNT_OIDC_AUDIENCE_PARAMETER=audience`.
