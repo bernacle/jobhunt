@@ -45,9 +45,16 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Auth {
     Dev,
+    /// OpenID Connect discovery; the issuer ends with a slash (Auth0).
     Oidc,
+    /// RFC 8414 metadata only; the issuer has no trailing slash, and MCP
+    /// tokens carry the `/mcp` resource as audience (WorkOS AuthKit).
+    Rfc8414,
+    /// No metadata at all: the JWKS and endpoints are set by hand.
+    Manual,
 }
 
 struct Server {
@@ -55,6 +62,8 @@ struct Server {
     db: TestDatabase,
     store: PgStore,
     provider: Option<MockServer>,
+    /// The issuer of the provider's tokens.
+    issuer: String,
     http: reqwest::Client,
     task: tokio::task::JoinHandle<()>,
 }
@@ -73,24 +82,59 @@ impl Server {
         .into_iter()
         .map(|(k, v)| (k.to_owned(), v))
         .collect();
-        let provider = match auth {
+        let (provider, issuer) = match auth {
             Auth::Dev => {
                 vars.insert("JOBHUNT_AUTH_MODE".into(), "dev".into());
                 vars.insert("JOBHUNT_AUTH_DEV_SECRET".into(), DEV_SECRET.into());
-                None
+                (None, String::new())
             }
-            Auth::Oidc => {
+            Auth::Oidc | Auth::Rfc8414 | Auth::Manual => {
                 let provider = MockServer::start().await;
-                let issuer = format!("{}/", provider.uri());
-                Mock::given(path("/.well-known/openid-configuration"))
-                    .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                        "issuer": issuer,
-                        "jwks_uri": format!("{}/jwks", provider.uri()),
-                        "token_endpoint": format!("{}/oauth/token", provider.uri()),
-                        "device_authorization_endpoint": format!("{}/oauth/device/code", provider.uri()),
-                    })))
-                    .mount(&provider)
-                    .await;
+                let uri = provider.uri();
+                let issuer = if auth == Auth::Oidc {
+                    format!("{uri}/")
+                } else {
+                    uri.clone()
+                };
+                let metadata = json!({
+                    "issuer": issuer,
+                    "jwks_uri": format!("{uri}/jwks"),
+                    "token_endpoint": format!("{uri}/oauth/token"),
+                    "device_authorization_endpoint": format!("{uri}/oauth/device/code"),
+                });
+                match auth {
+                    Auth::Oidc => {
+                        Mock::given(path("/.well-known/openid-configuration"))
+                            .respond_with(ResponseTemplate::new(200).set_body_json(metadata))
+                            .mount(&provider)
+                            .await;
+                        vars.insert("JOBHUNT_OIDC_AUDIENCE".into(), AUDIENCE.into());
+                        vars.insert("JOBHUNT_OIDC_AUDIENCE_PARAMETER".into(), "audience".into());
+                    }
+                    Auth::Rfc8414 => {
+                        Mock::given(path("/.well-known/oauth-authorization-server"))
+                            .respond_with(ResponseTemplate::new(200).set_body_json(metadata))
+                            .mount(&provider)
+                            .await;
+                        vars.insert(
+                            "JOBHUNT_OIDC_AUDIENCE".into(),
+                            format!("{AUDIENCE}, {base}/mcp"),
+                        );
+                    }
+                    _ => {
+                        vars.insert("JOBHUNT_OIDC_AUDIENCE".into(), AUDIENCE.into());
+                        vars.insert("JOBHUNT_OIDC_AUDIENCE_PARAMETER".into(), "none".into());
+                        vars.insert("JOBHUNT_OIDC_JWKS_URL".into(), format!("{uri}/jwks"));
+                        vars.insert(
+                            "JOBHUNT_OIDC_DEVICE_AUTHORIZATION_URL".into(),
+                            format!("{uri}/authorize/device"),
+                        );
+                        vars.insert(
+                            "JOBHUNT_OIDC_TOKEN_URL".into(),
+                            format!("{uri}/authenticate"),
+                        );
+                    }
+                }
                 let jwk: Value = serde_json::from_str(
                     &std::fs::read_to_string(fixture("test_signing_key.jwk.json")).unwrap(),
                 )
@@ -99,10 +143,9 @@ impl Server {
                     .respond_with(ResponseTemplate::new(200).set_body_json(json!({"keys": [jwk]})))
                     .mount(&provider)
                     .await;
-                vars.insert("JOBHUNT_OIDC_ISSUER".into(), issuer);
-                vars.insert("JOBHUNT_OIDC_AUDIENCE".into(), AUDIENCE.into());
+                vars.insert("JOBHUNT_OIDC_ISSUER".into(), issuer.clone());
                 vars.insert("JOBHUNT_OIDC_CLI_CLIENT_ID".into(), "cli-client".into());
-                Some(provider)
+                (Some(provider), issuer)
             }
         };
         let config = CloudConfig::from_env(&move |name: &str| vars.get(name).cloned());
@@ -125,6 +168,7 @@ impl Server {
             db,
             store,
             provider,
+            issuer,
             http: reqwest::Client::new(),
             task,
         })
@@ -145,7 +189,7 @@ impl Server {
     }
 
     fn oidc_token(&self, subject: &str, tweak: impl FnOnce(&mut Value, &mut Header)) -> String {
-        let issuer = format!("{}/", self.provider.as_ref().unwrap().uri());
+        let issuer = &self.issuer;
         let now = Utc::now().timestamp();
         let mut claims = json!({
             "iss": issuer, "aud": AUDIENCE, "sub": subject, "iat": now - 5, "exp": now + 600,
@@ -367,7 +411,7 @@ async fn requests_without_valid_tokens_are_refused() {
             "symmetric algorithm",
             jsonwebtoken::encode(
                 &Header::new(Algorithm::HS256),
-                &json!({"iss": format!("{}/", server.provider.as_ref().unwrap().uri()),
+                &json!({"iss": server.issuer,
                         "aud": AUDIENCE, "sub": "x", "exp": Utc::now().timestamp() + 60}),
                 &EncodingKey::from_secret(b"guess"),
             )
@@ -381,6 +425,95 @@ async fn requests_without_valid_tokens_are_refused() {
         assert_eq!(status, StatusCode::UNAUTHORIZED, "{why}: {body}");
         assert_eq!(error_code(&body), "unauthenticated", "{why}");
     }
+    server.finish().await;
+}
+
+/// A provider that publishes only RFC 8414 metadata, names itself without
+/// a trailing slash, and gives MCP clients tokens for the `/mcp` resource
+/// (WorkOS AuthKit does all three).
+#[tokio::test]
+async fn authkit_style_providers_are_accepted() {
+    let Some(server) = Server::start(Auth::Rfc8414).await else {
+        return;
+    };
+    assert!(!server.issuer.ends_with('/'));
+    let (status, config, _) = server
+        .call(reqwest::Method::GET, "/api/v1/auth/config", None, None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(config["issuer"], server.issuer);
+    assert_eq!(config["audience"], AUDIENCE);
+    assert_eq!(config["audience_parameter"], "resource");
+    assert!(
+        config["device_authorization_endpoint"]
+            .as_str()
+            .unwrap()
+            .ends_with("/oauth/device/code")
+    );
+    let (_, meta, _) = server
+        .call(
+            reqwest::Method::GET,
+            "/.well-known/oauth-protected-resource/mcp",
+            None,
+            None,
+        )
+        .await;
+    assert_eq!(meta["authorization_servers"][0], server.issuer);
+
+    // The CLI's token (the API) and an MCP client's (the /mcp resource)
+    // are the same person.
+    let cli = server.oidc_token("user_01ALICE", |_, _| {});
+    let resource = format!("{}/mcp", server.base);
+    let mcp = server.oidc_token("user_01ALICE", |c, _| c["aud"] = json!(resource));
+    let (status, a) = server.get("/api/v1/account", &cli).await;
+    assert_eq!(status, StatusCode::OK, "{a}");
+    let (status, b) = server.get("/api/v1/account", &mcp).await;
+    assert_eq!(status, StatusCode::OK, "{b}");
+    assert_eq!(a["id"], b["id"]);
+
+    for (why, token) in [
+        (
+            "another audience",
+            server.oidc_token("user_01ALICE", |c, _| c["aud"] = json!("https://evil.test")),
+        ),
+        (
+            "another issuer",
+            server.oidc_token("user_01ALICE", |c, _| c["iss"] = json!("https://evil.test")),
+        ),
+    ] {
+        let (status, body) = server.get("/api/v1/account", &token).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{why}: {body}");
+    }
+    server.finish().await;
+}
+
+/// A provider without metadata: the JWKS and the CLI's endpoints are set
+/// by hand, and no audience parameter is sent (the provider sets `aud`).
+#[tokio::test]
+async fn providers_without_metadata_use_endpoints_set_by_hand() {
+    let Some(server) = Server::start(Auth::Manual).await else {
+        return;
+    };
+    let (status, config, _) = server
+        .call(reqwest::Method::GET, "/api/v1/auth/config", None, None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(config.get("audience_parameter").is_none(), "{config}");
+    assert!(
+        config["device_authorization_endpoint"]
+            .as_str()
+            .unwrap()
+            .ends_with("/authorize/device")
+    );
+    assert!(
+        config["token_endpoint"]
+            .as_str()
+            .unwrap()
+            .ends_with("/authenticate")
+    );
+    let token = server.oidc_token("user_01BOB", |_, _| {});
+    let (status, body) = server.get("/api/v1/account", &token).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
     server.finish().await;
 }
 
@@ -928,7 +1061,9 @@ async fn device_flow_signs_in_refreshes_and_revokes() {
     Mock::given(method("POST"))
         .and(path("/oauth/device/code"))
         .and(body_string_contains("client_id=cli-client"))
-        .and(body_string_contains("audience="))
+        .and(body_string_contains(
+            "resource=https%3A%2F%2Fapi.jobhunt.test",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "device_code": "dev-123", "user_code": "ABCD-EFGH",
             "verification_uri": "https://id.test/activate",
@@ -975,6 +1110,7 @@ async fn device_flow_signs_in_refreshes_and_revokes() {
         mode: "oidc".into(),
         issuer: Some(format!("{}/", provider.uri())),
         audience: Some(AUDIENCE.into()),
+        audience_parameter: Some("resource".into()),
         cli_client_id: Some("cli-client".into()),
         scopes: Some("openid offline_access".into()),
         device_authorization_endpoint: Some(format!("{}/oauth/device/code", provider.uri())),

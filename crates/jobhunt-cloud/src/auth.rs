@@ -7,10 +7,11 @@
 //! [`Principal`]: the internal account id, never the provider's data.
 //!
 //! * [`OidcVerifier`] verifies JWTs against the issuer's published keys
-//!   (OpenID discovery, then its JWKS, cached; an unknown key id triggers
-//!   one refresh, rate limited). Only asymmetric algorithms are accepted;
-//!   the issuer, the audience (the API's identifier) and the expiry are
-//!   checked.
+//!   (OpenID Connect discovery, else OAuth authorization server metadata
+//!   (RFC 8414), else a JWKS URL set by hand; the keys are cached and an
+//!   unknown key id triggers one refresh, rate limited). Only asymmetric
+//!   algorithms are accepted; the issuer, the audience (the API's
+//!   identifier) and the expiry are checked.
 //! * [`DevVerifier`] signs and verifies HS256 tokens with a shared secret,
 //!   for local development and tests; the configuration refuses it in
 //!   production.
@@ -34,6 +35,8 @@ use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
 use url::Url;
+
+use crate::config::OidcSettings;
 
 /// How a request authenticated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -111,11 +114,13 @@ fn classify(error: &jsonwebtoken::errors::Error) -> AuthError {
     }
 }
 
-/// The parts of the provider's OpenID configuration JobHunt uses.
+/// The parts of the provider's metadata JobHunt uses (OpenID Connect
+/// discovery and RFC 8414 share these names).
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ProviderMetadata {
     pub issuer: String,
-    pub jwks_uri: String,
+    #[serde(default)]
+    pub jwks_uri: Option<String>,
     #[serde(default)]
     pub token_endpoint: Option<String>,
     #[serde(default)]
@@ -138,8 +143,7 @@ struct Keys {
 
 /// Verifies access tokens from an OpenID Connect provider.
 pub struct OidcVerifier {
-    issuer: Url,
-    audience: String,
+    settings: OidcSettings,
     http: reqwest::Client,
     metadata: RwLock<Option<ProviderMetadata>>,
     keys: RwLock<Option<Keys>>,
@@ -149,21 +153,20 @@ pub struct OidcVerifier {
 impl std::fmt::Debug for OidcVerifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OidcVerifier")
-            .field("issuer", &self.issuer.as_str())
-            .field("audience", &self.audience)
+            .field("issuer", &self.settings.issuer)
+            .field("audiences", &self.settings.audiences)
             .finish_non_exhaustive()
     }
 }
 
 impl OidcVerifier {
-    pub fn new(issuer: Url, audience: String) -> Result<Self, AuthError> {
+    pub fn new(settings: OidcSettings) -> Result<Self, AuthError> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
             .map_err(|e| AuthError::Unavailable(e.to_string()))?;
         Ok(Self {
-            issuer,
-            audience,
+            settings,
             http,
             metadata: RwLock::new(None),
             keys: RwLock::new(None),
@@ -191,30 +194,76 @@ impl OidcVerifier {
         serde_json::from_slice(&bytes).map_err(|e| AuthError::Unavailable(format!("{url}: {e}")))
     }
 
-    /// The provider's metadata (fetched once).
+    /// The provider's metadata (fetched once), with the endpoints set by
+    /// hand taking precedence. With a JWKS URL set by hand there is no
+    /// discovery at all.
     pub async fn metadata(&self) -> Result<ProviderMetadata, AuthError> {
         if let Some(m) = self.metadata.read().await.as_ref() {
             return Ok(m.clone());
         }
-        let url = format!(
-            "{}/.well-known/openid-configuration",
-            self.issuer.as_str().trim_end_matches('/')
+        let manual = &self.settings.endpoints;
+        let mut metadata = if manual.jwks_uri.is_some() {
+            ProviderMetadata {
+                issuer: self.settings.issuer.clone(),
+                jwks_uri: None,
+                token_endpoint: None,
+                device_authorization_endpoint: None,
+                revocation_endpoint: None,
+                authorization_endpoint: None,
+            }
+        } else {
+            self.discover().await?
+        };
+        let set = |slot: &mut Option<String>, value: &Option<String>| {
+            if value.is_some() {
+                slot.clone_from(value);
+            }
+        };
+        set(&mut metadata.jwks_uri, &manual.jwks_uri);
+        set(&mut metadata.token_endpoint, &manual.token);
+        set(
+            &mut metadata.device_authorization_endpoint,
+            &manual.device_authorization,
         );
-        let metadata: ProviderMetadata = self.get_json(&url).await?;
-        if metadata.issuer != self.issuer.as_str() {
-            return Err(AuthError::Unavailable(format!(
-                "the provider says its issuer is {:?}, not {:?}; fix JOBHUNT_OIDC_ISSUER",
-                metadata.issuer,
-                self.issuer.as_str()
-            )));
+        set(&mut metadata.revocation_endpoint, &manual.revocation);
+        if metadata.jwks_uri.is_none() {
+            return Err(AuthError::Unavailable(
+                "the provider publishes no jwks_uri; set JOBHUNT_OIDC_JWKS_URL".into(),
+            ));
         }
         *self.metadata.write().await = Some(metadata.clone());
         Ok(metadata)
     }
 
+    /// OpenID Connect discovery, then RFC 8414 authorization server
+    /// metadata (WorkOS AuthKit publishes the latter).
+    async fn discover(&self) -> Result<ProviderMetadata, AuthError> {
+        let issuer = &self.settings.issuer;
+        let mut failures = Vec::new();
+        for url in metadata_urls(issuer) {
+            match self.get_json::<ProviderMetadata>(&url).await {
+                Ok(metadata) if same_issuer(&metadata.issuer, issuer) => return Ok(metadata),
+                Ok(metadata) => {
+                    return Err(AuthError::Unavailable(format!(
+                        "the provider says its issuer is {:?}, not {issuer:?}; fix \
+                         JOBHUNT_OIDC_ISSUER",
+                        metadata.issuer
+                    )));
+                }
+                Err(e) => failures.push(e.to_string()),
+            }
+        }
+        Err(AuthError::Unavailable(format!(
+            "no provider metadata for {issuer} ({}); set JOBHUNT_OIDC_JWKS_URL if it \
+             publishes none",
+            failures.join("; ")
+        )))
+    }
+
     async fn fetch_keys(&self) -> Result<(), AuthError> {
         let metadata = self.metadata().await?;
-        let set: JwkSet = self.get_json(&metadata.jwks_uri).await?;
+        let jwks_uri = metadata.jwks_uri.as_deref().unwrap_or_default();
+        let set: JwkSet = self.get_json(jwks_uri).await?;
         *self.keys.write().await = Some(Keys {
             set,
             fetched: Instant::now(),
@@ -276,15 +325,42 @@ impl TokenVerifier for OidcVerifier {
             )));
         }
         let key = self.key(header.kid.as_deref()).await?;
+        // The configured issuer, and the provider's own spelling of it
+        // (they may differ by a trailing slash).
+        let metadata = self.metadata().await?;
         let mut validation = Validation::new(header.alg);
-        validation.set_issuer(&[self.issuer.as_str()]);
-        validation.set_audience(&[&self.audience]);
+        validation.set_issuer(&[self.settings.issuer.as_str(), metadata.issuer.as_str()]);
+        validation.set_audience(&self.settings.audiences);
         validation.set_required_spec_claims(&["exp", "iss", "sub", "aud"]);
         validation.leeway = 60;
         let data =
             jsonwebtoken::decode::<Claims>(token, &key, &validation).map_err(|e| classify(&e))?;
         Ok(identity_of(data.claims))
     }
+}
+
+/// Where an issuer's metadata may be: OpenID Connect discovery, then RFC
+/// 8414 (the well-known segment goes between the host and the issuer's
+/// path), then the common variant that appends it to the issuer.
+fn metadata_urls(issuer: &str) -> Vec<String> {
+    let trimmed = issuer.trim_end_matches('/');
+    let mut urls = vec![format!("{trimmed}/.well-known/openid-configuration")];
+    if let Ok(url) = Url::parse(issuer) {
+        let origin = url.origin().ascii_serialization();
+        let path = url.path().trim_end_matches('/');
+        urls.push(format!(
+            "{origin}/.well-known/oauth-authorization-server{path}"
+        ));
+        if !path.is_empty() {
+            urls.push(format!("{trimmed}/.well-known/oauth-authorization-server"));
+        }
+    }
+    urls
+}
+
+/// The same issuer, ignoring a trailing slash.
+fn same_issuer(a: &str, b: &str) -> bool {
+    a.trim_end_matches('/') == b.trim_end_matches('/')
 }
 
 /// The issuer of development tokens.
@@ -469,5 +545,26 @@ mod tests {
         let expired = dev.mint("alice", chrono::Duration::minutes(-5)).unwrap();
         assert_eq!(dev.verify(&expired).await, Err(AuthError::Expired));
         assert!(dev.verify("garbage").await.is_err());
+    }
+
+    #[test]
+    fn metadata_is_looked_up_where_providers_publish_it() {
+        assert_eq!(
+            metadata_urls("https://acme.authkit.app"),
+            [
+                "https://acme.authkit.app/.well-known/openid-configuration",
+                "https://acme.authkit.app/.well-known/oauth-authorization-server",
+            ]
+        );
+        assert_eq!(
+            metadata_urls("https://id.example.com/tenants/7/"),
+            [
+                "https://id.example.com/tenants/7/.well-known/openid-configuration",
+                "https://id.example.com/.well-known/oauth-authorization-server/tenants/7",
+                "https://id.example.com/tenants/7/.well-known/oauth-authorization-server",
+            ]
+        );
+        assert!(same_issuer("https://a.test/", "https://a.test"));
+        assert!(!same_issuer("https://a.test", "https://b.test"));
     }
 }

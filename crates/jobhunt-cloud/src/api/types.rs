@@ -20,6 +20,10 @@ pub struct AuthConfigView {
     /// The audience to request tokens for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audience: Option<String>,
+    /// The request parameter that carries it (`resource`, RFC 8707, or
+    /// `audience`); absent means none is sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audience_parameter: Option<String>,
     /// The public client the CLI signs in with (device authorization).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cli_client_id: Option<String>,

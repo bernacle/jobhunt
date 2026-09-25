@@ -107,19 +107,22 @@ workers.
 ## Accounts and authentication
 
 JobHunt keeps no passwords and no personal details of an account. People
-sign in with an **OpenID Connect provider** (Auth0 is the reference
-choice: it supports the device authorization grant the CLI uses, JWT
-access tokens for an API audience, refresh token rotation, revocation and
-dynamic client registration for MCP clients; Okta, Zitadel and Keycloak
-work the same way). An account is an internal id (`usr_<32 hex>`) linked
-to the `(issuer, subject)` of the provider's tokens.
+sign in with an **OpenID Connect provider**. The deployment uses **WorkOS
+AuthKit**: it has the device authorization grant the CLI uses, JWT
+access tokens bound to a resource (RFC 8707), refresh tokens, and OAuth
+for MCP clients with dynamic client registration. Nothing in the code is
+specific to it; Auth0, Okta, Zitadel and Keycloak work through the same
+settings. An account is an internal id (`usr_<32 hex>`) linked to the
+`(issuer, subject)` of the provider's tokens.
 
 - **Access tokens** (JWTs) are verified against the issuer's published
-  keys (OpenID discovery → JWKS, cached 10 minutes; an unknown key id
-  triggers one rate-limited refresh, for key rotation). Only asymmetric
-  algorithms are accepted; the issuer, the audience
-  (`JOBHUNT_OIDC_AUDIENCE`) and the expiry are checked (60 s leeway). The
-  first valid token of an identity creates its account.
+  keys (OpenID discovery, else RFC 8414 authorization server metadata,
+  else `JOBHUNT_OIDC_JWKS_URL`; keys cached 10 minutes, and an unknown key
+  id triggers one rate-limited refresh, for key rotation). Only asymmetric
+  algorithms are accepted; the issuer (exactly as configured: a trailing
+  slash matters), the audience (one of `JOBHUNT_OIDC_AUDIENCE`) and the
+  expiry are checked (60 s leeway). The first valid token of an identity
+  creates its account.
 - **Personal access tokens** (`jh_pat_…`, 256 random bits) are for MCP
   clients and scripts without OAuth. They expire (default 90 days, at most
   365), are listed without their secret, and are revocable. Only their
@@ -443,18 +446,28 @@ First deployment:
    ```bash
    railway variable set -s api \
      JOBHUNT_ENCRYPTION_KEYS="k1:$(openssl rand -base64 32)" \
-     JOBHUNT_OIDC_ISSUER=https://<tenant>.auth0.com/ \
-     JOBHUNT_OIDC_AUDIENCE=https://api.<your domain> \
-     JOBHUNT_OIDC_CLI_CLIENT_ID=<native app client id> \
+     JOBHUNT_OIDC_ISSUER=https://<subdomain>.authkit.app \
+     JOBHUNT_OIDC_AUDIENCE="https://<api domain>,https://<api domain>/mcp" \
+     JOBHUNT_OIDC_CLI_CLIENT_ID=<the environment's client id> \
      JOBHUNT_PUBLIC_URL=https://<api domain>
    ```
 
 5. Give `api` a public domain (`railway domain -s api`, or a custom
    domain); generated domains are not managed by the IaC file.
-6. In the identity provider: an API whose identifier is the audience; a
-   native application with the device code grant and refresh token
-   rotation enabled for the CLI; dynamic client registration (or a
-   pre-registered client) for MCP clients.
+6. In the identity provider. For WorkOS AuthKit (the production
+   environment):
+   - enable at least one sign-in method (Magic Auth, Google, GitHub, …);
+   - under the OAuth resources (resource indicators), add
+     `https://<api domain>` (the CLI's, as default) and
+     `https://<api domain>/mcp` (MCP clients');
+   - optionally enable dynamic client registration, so MCP clients can
+     sign in with OAuth instead of a personal access token.
+
+   The CLI uses the environment's client id with the device code grant
+   (AuthKit's CLI Auth needs no other setup). For Auth0 instead: an API
+   whose identifier is the audience, a native application with the device
+   code grant and refresh token rotation, and
+   `JOBHUNT_OIDC_AUDIENCE_PARAMETER=audience`.
 7. Deploy (pushes to `main`, or `railway up`), then
    [validate](#validating-a-deployment).
 
@@ -478,9 +491,12 @@ startup with every problem listed.
 | `DATABASE_URL` | all | yes | `${{Postgres.DATABASE_URL}}` (private network). Secret. |
 | `JOBHUNT_ENCRYPTION_KEYS` | server, `admin reencrypt` | yes | `<id>:<base64 32 bytes>[,…]`; first encrypts. Secret. |
 | `JOBHUNT_OIDC_ISSUER` | server | yes (OIDC) | the provider's issuer URL, exactly as in its tokens |
-| `JOBHUNT_OIDC_AUDIENCE` | server | yes (OIDC) | the API identifier tokens must be issued for |
+| `JOBHUNT_OIDC_AUDIENCE` | server | yes (OIDC) | the accepted `aud` values, comma separated; the first is the one the CLI asks for |
+| `JOBHUNT_OIDC_AUDIENCE_PARAMETER` | server | no | how the CLI asks for it: `resource` (RFC 8707, default), `audience` (Auth0) or `none` |
 | `JOBHUNT_OIDC_CLI_CLIENT_ID` | server | for CLI login | the public client of the device flow |
 | `JOBHUNT_OIDC_SCOPES` | server | no | `openid offline_access` |
+| `JOBHUNT_OIDC_JWKS_URL` | server | no | the provider's keys, for providers without metadata (skips discovery) |
+| `JOBHUNT_OIDC_DEVICE_AUTHORIZATION_URL`, `_TOKEN_URL`, `_REVOCATION_URL` | server | no | endpoints the provider's metadata lacks (each overrides it) |
 | `JOBHUNT_AUTH_MODE` | server | no | `oidc`; `dev` for development only (refused in production) |
 | `JOBHUNT_AUTH_DEV_SECRET` | server | with `dev` | 32+ characters |
 | `JOBHUNT_PUBLIC_URL` | server | in production | the https URL clients use; falls back to `https://$RAILWAY_PUBLIC_DOMAIN` |

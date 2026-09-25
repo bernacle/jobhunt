@@ -279,7 +279,8 @@ pub struct DeviceFlow {
     token_endpoint: String,
     client_id: String,
     scopes: String,
-    audience: Option<String>,
+    /// The request parameter and the audience to ask for.
+    audience: Option<(String, String)>,
 }
 
 impl DeviceFlow {
@@ -312,7 +313,10 @@ impl DeviceFlow {
                 .scopes
                 .clone()
                 .unwrap_or_else(|| "openid offline_access".into()),
-            audience: config.audience.clone(),
+            audience: config
+                .audience_parameter
+                .clone()
+                .zip(config.audience.clone()),
         })
     }
 
@@ -375,8 +379,8 @@ impl DeviceFlow {
             ("client_id", self.client_id.as_str()),
             ("scope", self.scopes.as_str()),
         ];
-        if let Some(a) = &self.audience {
-            form.push(("audience", a.as_str()));
+        if let Some((parameter, audience)) = &self.audience {
+            form.push((parameter.as_str(), audience.as_str()));
         }
         self.form(&self.device_endpoint, &form).await?.map_err(|e| {
             AppError::Unauthenticated(format!(

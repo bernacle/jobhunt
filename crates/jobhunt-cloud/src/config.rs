@@ -30,32 +30,74 @@ pub fn process_env(name: &str) -> Option<String> {
 /// How the service authenticates people.
 #[derive(Clone, PartialEq, Eq)]
 pub enum AuthConfig {
-    /// A standards-based OpenID Connect provider (Auth0, Okta, Zitadel,
-    /// Keycloak, …): access tokens are JWTs verified against the issuer's
-    /// published keys; the CLI signs in with the device authorization
-    /// grant.
-    Oidc {
-        issuer: Url,
-        /// The API identifier access tokens must be issued for (`aud`).
-        audience: String,
-        /// The public (no secret) client the CLI uses for the device flow.
-        cli_client_id: Option<String>,
-        scopes: String,
-    },
+    /// A standards-based OpenID Connect / OAuth 2 provider (WorkOS AuthKit,
+    /// Auth0, Okta, Zitadel, Keycloak, …): access tokens are JWTs verified
+    /// against the issuer's published keys; the CLI signs in with the
+    /// device authorization grant.
+    Oidc(OidcSettings),
     /// Local development and tests only: HS256 tokens minted by the server
     /// itself. Refused in production.
     Dev { secret: String },
 }
 
+/// The identity provider, and what its tokens must say.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OidcSettings {
+    /// The issuer identifier, exactly as in the tokens' `iss` (no
+    /// normalization: `https://x.authkit.app` and `https://x.authkit.app/`
+    /// are different issuers).
+    pub issuer: String,
+    /// The accepted `aud` values (`JOBHUNT_OIDC_AUDIENCE`, comma separated);
+    /// the first is the one the CLI asks for.
+    pub audiences: Vec<String>,
+    /// The public (no secret) client the CLI uses for the device flow.
+    pub cli_client_id: Option<String>,
+    pub scopes: String,
+    /// How the CLI names the audience it asks for.
+    pub audience_parameter: AudienceParameter,
+    /// Endpoints set by hand, for providers that do not publish them in
+    /// their metadata. With a JWKS URL set, discovery is skipped.
+    pub endpoints: ProviderEndpoints,
+}
+
+/// The request parameter that names the audience a token is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AudienceParameter {
+    /// `resource` (RFC 8707 resource indicators: WorkOS AuthKit, Okta, …).
+    Resource,
+    /// `audience` (Auth0).
+    Audience,
+    /// Not sent: the provider decides (e.g. from a token template).
+    None,
+}
+
+impl AudienceParameter {
+    /// The form field, if any.
+    pub fn field(self) -> Option<&'static str> {
+        match self {
+            Self::Resource => Some("resource"),
+            Self::Audience => Some("audience"),
+            Self::None => None,
+        }
+    }
+}
+
+/// Provider endpoints configured by hand (each overrides the metadata).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProviderEndpoints {
+    pub jwks_uri: Option<String>,
+    pub device_authorization: Option<String>,
+    pub token: Option<String>,
+    pub revocation: Option<String>,
+}
+
 impl std::fmt::Debug for AuthConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Oidc {
-                issuer, audience, ..
-            } => f
+            Self::Oidc(settings) => f
                 .debug_struct("Oidc")
-                .field("issuer", &issuer.as_str())
-                .field("audience", audience)
+                .field("issuer", &settings.issuer)
+                .field("audiences", &settings.audiences)
                 .finish_non_exhaustive(),
             Self::Dev { .. } => f.write_str("Dev"),
         }
@@ -137,6 +179,67 @@ fn parse<T: std::str::FromStr>(
     }
 }
 
+/// The identity provider settings (`JOBHUNT_OIDC_*`).
+fn oidc_settings(
+    env: Env<'_>,
+    issuer: String,
+    audience: &str,
+    problems: &mut Vec<String>,
+) -> Option<AuthConfig> {
+    let issuer = issuer.trim().to_owned();
+    if Url::parse(&issuer).is_err() {
+        problems.push("JOBHUNT_OIDC_ISSUER is not a URL".into());
+        return None;
+    }
+    let audiences: Vec<String> = audience
+        .split(',')
+        .map(str::trim)
+        .filter(|a| !a.is_empty())
+        .map(str::to_owned)
+        .collect();
+    if audiences.is_empty() {
+        problems.push("JOBHUNT_OIDC_AUDIENCE is empty".into());
+        return None;
+    }
+    let audience_parameter = match env("JOBHUNT_OIDC_AUDIENCE_PARAMETER")
+        .as_deref()
+        .map(str::trim)
+    {
+        None | Some("resource") => AudienceParameter::Resource,
+        Some("audience") => AudienceParameter::Audience,
+        Some("none") => AudienceParameter::None,
+        Some(other) => {
+            problems.push(format!(
+                "JOBHUNT_OIDC_AUDIENCE_PARAMETER must be \"resource\", \"audience\" or \
+                 \"none\", not {other:?}"
+            ));
+            AudienceParameter::Resource
+        }
+    };
+    let mut url = |name: &str| {
+        let value = env(name)?.trim().to_owned();
+        if Url::parse(&value).is_err() {
+            problems.push(format!("{name} is not a URL"));
+            return None;
+        }
+        Some(value)
+    };
+    let endpoints = ProviderEndpoints {
+        jwks_uri: url("JOBHUNT_OIDC_JWKS_URL"),
+        device_authorization: url("JOBHUNT_OIDC_DEVICE_AUTHORIZATION_URL"),
+        token: url("JOBHUNT_OIDC_TOKEN_URL"),
+        revocation: url("JOBHUNT_OIDC_REVOCATION_URL"),
+    };
+    Some(AuthConfig::Oidc(OidcSettings {
+        issuer,
+        audiences,
+        cli_client_id: env("JOBHUNT_OIDC_CLI_CLIENT_ID"),
+        scopes: env("JOBHUNT_OIDC_SCOPES").unwrap_or_else(|| "openid offline_access".into()),
+        audience_parameter,
+        endpoints,
+    }))
+}
+
 fn hours(value: u64) -> Duration {
     Duration::from_secs(value.saturating_mul(3600))
 }
@@ -182,19 +285,9 @@ impl CloudConfig {
                 }
             },
             "oidc" => match (env("JOBHUNT_OIDC_ISSUER"), env("JOBHUNT_OIDC_AUDIENCE")) {
-                (Some(issuer), Some(audience)) => match Url::parse(issuer.trim()) {
-                    Ok(issuer) => Some(AuthConfig::Oidc {
-                        issuer,
-                        audience,
-                        cli_client_id: env("JOBHUNT_OIDC_CLI_CLIENT_ID"),
-                        scopes: env("JOBHUNT_OIDC_SCOPES")
-                            .unwrap_or_else(|| "openid offline_access".into()),
-                    }),
-                    Err(_) => {
-                        problems.push("JOBHUNT_OIDC_ISSUER is not a URL".into());
-                        None
-                    }
-                },
+                (Some(issuer), Some(audience)) => {
+                    oidc_settings(env, issuer, &audience, &mut problems)
+                }
                 _ => None,
             },
             other => {
@@ -391,16 +484,13 @@ impl CloudConfig {
             },
         ];
         out.push(match &self.auth {
-            Some(AuthConfig::Oidc {
-                issuer,
-                audience,
-                cli_client_id,
-                ..
-            }) => Setting {
+            Some(AuthConfig::Oidc(settings)) => Setting {
                 name: "JOBHUNT_OIDC_ISSUER / _AUDIENCE / _CLI_CLIENT_ID",
                 status: format!(
-                    "{issuer} / {audience} / {}",
-                    if cli_client_id.is_some() {
+                    "{} / {} / {}",
+                    settings.issuer,
+                    settings.audiences.join(","),
+                    if settings.cli_client_id.is_some() {
                         "set"
                     } else {
                         "missing (CLI login unavailable)"
@@ -583,5 +673,64 @@ mod tests {
                 .all(|p| p.contains("DATABASE_URL"))
         );
         assert!(c.app.config.sources.specs().unwrap().len() >= 10);
+    }
+
+    #[test]
+    fn identity_provider_settings_are_read_verbatim() {
+        let c = config(&[
+            ("JOBHUNT_OIDC_ISSUER", " https://acme.authkit.app "),
+            (
+                "JOBHUNT_OIDC_AUDIENCE",
+                "https://api.jobhunt.test, https://api.jobhunt.test/mcp,",
+            ),
+            ("JOBHUNT_OIDC_CLI_CLIENT_ID", "client_01"),
+        ]);
+        let Some(AuthConfig::Oidc(settings)) = &c.auth else {
+            panic!("{:?}", c.auth);
+        };
+        // No normalization: tokens say exactly this.
+        assert_eq!(settings.issuer, "https://acme.authkit.app");
+        assert_eq!(
+            settings.audiences,
+            ["https://api.jobhunt.test", "https://api.jobhunt.test/mcp"]
+        );
+        assert_eq!(settings.audience_parameter, AudienceParameter::Resource);
+        assert_eq!(settings.endpoints, ProviderEndpoints::default());
+
+        let c = config(&[
+            ("JOBHUNT_OIDC_ISSUER", "https://example.auth0.com/"),
+            ("JOBHUNT_OIDC_AUDIENCE", "https://api.jobhunt.test"),
+            ("JOBHUNT_OIDC_AUDIENCE_PARAMETER", "audience"),
+            ("JOBHUNT_OIDC_JWKS_URL", "https://example.auth0.com/jwks"),
+        ]);
+        let Some(AuthConfig::Oidc(settings)) = &c.auth else {
+            panic!("{:?}", c.auth);
+        };
+        assert_eq!(settings.audience_parameter, AudienceParameter::Audience);
+        assert_eq!(
+            settings.endpoints.jwks_uri.as_deref(),
+            Some("https://example.auth0.com/jwks")
+        );
+
+        let c = config(&[
+            ("JOBHUNT_OIDC_ISSUER", "https://acme.authkit.app"),
+            ("JOBHUNT_OIDC_AUDIENCE", " , "),
+            ("JOBHUNT_OIDC_AUDIENCE_PARAMETER", "aud"),
+            ("JOBHUNT_OIDC_TOKEN_URL", "not a url"),
+        ]);
+        let text = c.problems(Role::Server).join("\n");
+        assert!(text.contains("JOBHUNT_OIDC_AUDIENCE is empty"), "{text}");
+        let c = config(&[
+            ("JOBHUNT_OIDC_ISSUER", "https://acme.authkit.app"),
+            ("JOBHUNT_OIDC_AUDIENCE", "x"),
+            ("JOBHUNT_OIDC_AUDIENCE_PARAMETER", "aud"),
+            ("JOBHUNT_OIDC_TOKEN_URL", "not a url"),
+        ]);
+        let text = c.problems(Role::Server).join("\n");
+        assert!(text.contains("JOBHUNT_OIDC_AUDIENCE_PARAMETER"), "{text}");
+        assert!(
+            text.contains("JOBHUNT_OIDC_TOKEN_URL is not a URL"),
+            "{text}"
+        );
     }
 }

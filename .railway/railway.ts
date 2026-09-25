@@ -45,6 +45,7 @@ export default defineRailway((ctx) => {
       JOBHUNT_OIDC_ISSUER: preserve(),
       JOBHUNT_OIDC_AUDIENCE: preserve(),
       JOBHUNT_OIDC_CLI_CLIENT_ID: preserve(),
+      JOBHUNT_OIDC_AUDIENCE_PARAMETER: preserve(),
       JOBHUNT_ALLOWED_ORIGINS: preserve(),
     },
     deploy: {

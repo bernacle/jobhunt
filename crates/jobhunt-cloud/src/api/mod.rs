@@ -103,11 +103,9 @@ impl ApiState {
         usage: UsageLog,
     ) -> Result<Self, crate::config::ConfigProblems> {
         let (auth, oidc, dev) = match &config.auth {
-            Some(AuthConfig::Oidc {
-                issuer, audience, ..
-            }) => {
+            Some(AuthConfig::Oidc(settings)) => {
                 let verifier = Arc::new(
-                    OidcVerifier::new(issuer.clone(), audience.clone())
+                    OidcVerifier::new(settings.clone())
                         .map_err(|e| crate::config::ConfigProblems(vec![e.to_string()]))?,
                 );
                 (
@@ -315,13 +313,15 @@ async fn protected_resource(State(state): State<ApiState>) -> Result<Response, A
         ));
     };
     let issuer = match &state.config().auth {
-        Some(AuthConfig::Oidc { issuer, .. }) => vec![issuer.to_string()],
+        Some(AuthConfig::Oidc(settings)) => vec![settings.issuer.clone()],
         _ => Vec::new(),
     };
     let scopes = match &state.config().auth {
-        Some(AuthConfig::Oidc { scopes, .. }) => {
-            scopes.split_whitespace().map(str::to_owned).collect()
-        }
+        Some(AuthConfig::Oidc(settings)) => settings
+            .scopes
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect(),
         _ => Vec::<String>::new(),
     };
     Ok(Json(serde_json::json!({
@@ -336,22 +336,18 @@ async fn protected_resource(State(state): State<ApiState>) -> Result<Response, A
 
 async fn auth_config(State(state): State<ApiState>) -> Result<Json<AuthConfigView>, ApiError> {
     Ok(Json(match &state.config().auth {
-        Some(AuthConfig::Oidc {
-            issuer,
-            audience,
-            cli_client_id,
-            scopes,
-        }) => {
+        Some(AuthConfig::Oidc(settings)) => {
             let metadata = match &state.inner.oidc {
                 Some(v) => v.metadata().await.ok(),
                 None => None,
             };
             AuthConfigView {
                 mode: "oidc".into(),
-                issuer: Some(issuer.to_string()),
-                audience: Some(audience.clone()),
-                cli_client_id: cli_client_id.clone(),
-                scopes: Some(scopes.clone()),
+                issuer: Some(settings.issuer.clone()),
+                audience: settings.audiences.first().cloned(),
+                audience_parameter: settings.audience_parameter.field().map(str::to_owned),
+                cli_client_id: settings.cli_client_id.clone(),
+                scopes: Some(settings.scopes.clone()),
                 device_authorization_endpoint: metadata
                     .as_ref()
                     .and_then(|m| m.device_authorization_endpoint.clone()),
@@ -363,6 +359,7 @@ async fn auth_config(State(state): State<ApiState>) -> Result<Json<AuthConfigVie
             mode: "dev".into(),
             issuer: None,
             audience: None,
+            audience_parameter: None,
             cli_client_id: None,
             scopes: None,
             device_authorization_endpoint: None,
