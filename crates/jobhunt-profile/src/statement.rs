@@ -19,8 +19,8 @@ use jobhunt_core::text::clean_line;
 
 use crate::infer::{canonical_domain, domains_in};
 use crate::preferences::{
-    Arrangement, Certainty, CompanyTrait, CompensationBound, PayPeriod, PreferenceValue, Stance,
-    WorkAspect, WorkMode,
+    Arrangement, Certainty, CompanyTrait, CompensationBound, Engagement, PayPeriod,
+    PreferenceValue, Stance, WorkAspect, WorkMode,
 };
 use crate::words::{Pattern, Word, span_text, words};
 
@@ -573,11 +573,82 @@ fn read_clause(clause: &str, statement: &str) -> Vec<ReadPreference> {
                 Certainty::Certain
             },
         );
-    } else if has_any(&ws, &["authorized to work", "work permit", "right to work"]) {
-        push(
+    }
+    let authorized_in = place_after(
+        clause,
+        &ws,
+        &[
+            "authorized to work in",
+            "authorised to work in",
+            "eligible to work in",
+            "right to work in",
+            "work permit for",
+            "work permit in",
+        ],
+    );
+    let names_authorization = has_any(
+        &ws,
+        &[
+            "authorized to work",
+            "authorised to work",
+            "eligible to work",
+            "work permit",
+            "right to work",
+        ],
+    );
+    match authorized_in {
+        Some(place) if polarity != Polarity::Unwanted => push(
+            PreferenceValue::WorkAuthorization { place },
+            Stance::Required,
+            if hedged {
+                Certainty::Uncertain
+            } else {
+                Certainty::Certain
+            },
+        ),
+        None if names_authorization && !has_any(&ws, &["sponsor*", "visa*"]) => push(
             PreferenceValue::Sponsorship { needed: false },
             Stance::Required,
             Certainty::Uncertain,
+        ),
+        _ => {}
+    }
+    // "open to B2B contracts", "as a contractor", "no freelance".
+    if has_any(
+        &ws,
+        &[
+            "contractor*",
+            "b2b",
+            "freelanc*",
+            "contract work",
+            "contract roles",
+            "contract basis",
+            "independent contract*",
+        ],
+    ) {
+        push(
+            PreferenceValue::Engagement {
+                engagement: Engagement::Contractor,
+            },
+            stance,
+            certainty,
+        );
+    }
+    if has_any(
+        &ws,
+        &[
+            "as an employee",
+            "full time employment",
+            "permanent employment",
+            "employee only",
+        ],
+    ) {
+        push(
+            PreferenceValue::Engagement {
+                engagement: Engagement::Employee,
+            },
+            stance,
+            certainty,
         );
     }
     let place = current_place(clause, &ws);
@@ -1195,15 +1266,24 @@ fn compensation(ws: &[Word], money: &[Amount], hedged: bool, statement: &str) ->
 
 /// "based in Lisbon, Portugal" → "Lisbon, Portugal".
 fn current_place(clause: &str, ws: &[Word]) -> Option<String> {
-    for cue in [
-        "based in",
-        "live in",
-        "living in",
-        "located in",
-        "i m in",
-        "i am in",
-        "reside in",
-    ] {
+    place_after(
+        clause,
+        ws,
+        &[
+            "based in",
+            "live in",
+            "living in",
+            "located in",
+            "i m in",
+            "i am in",
+            "reside in",
+        ],
+    )
+}
+
+/// The place named right after the first of `cues` in the clause.
+fn place_after(clause: &str, ws: &[Word], cues: &[&str]) -> Option<String> {
+    for cue in cues.iter().copied() {
         if let Some(range) = Pattern::new(cue).find(ws) {
             let start = ws[range.end - 1].span.end;
             let rest = &clause[start..];
@@ -1379,6 +1459,37 @@ mod tests {
             currency("Based in Tokyo, at least ¥8m").0.as_deref(),
             Some("JPY")
         );
+    }
+
+    #[test]
+    fn reads_work_authorization_and_engagement() {
+        let out = read(
+            "I'm based in São Paulo and authorized to work in Portugal. Open to B2B contracts.",
+        );
+        assert_eq!(
+            find(&out, "current_location").value,
+            PreferenceValue::CurrentLocation {
+                place: "São Paulo".into()
+            }
+        );
+        let auth = find(&out, "work_authorization:portugal");
+        assert_eq!(auth.stance, Stance::Required);
+        assert_eq!(auth.certainty, Certainty::Certain);
+        let contractor = find(&out, "engagement:contractor");
+        assert_eq!(contractor.stance, Stance::Acceptable);
+
+        // Authorization without a place is only a hint that no sponsorship
+        // is needed, and it is marked uncertain.
+        let out = read("I have the right to work.");
+        let sponsorship = find(&out, "sponsorship");
+        assert_eq!(
+            sponsorship.value,
+            PreferenceValue::Sponsorship { needed: false }
+        );
+        assert_eq!(sponsorship.certainty, Certainty::Uncertain);
+
+        let out = read("No freelance or contractor roles, please.");
+        assert_eq!(find(&out, "engagement:contractor").stance, Stance::Unwanted);
     }
 
     #[test]

@@ -9,7 +9,7 @@ use std::str::FromStr;
 use anyhow::{Context, bail};
 use chrono::Utc;
 use jobhunt_core::{ErrorChain, SourceKey};
-use jobhunt_eligibility::{Assessment, Fit, assess_record};
+use jobhunt_eligibility::{Eligibility, EligibilityDecision, evaluate_record};
 use jobhunt_jobs::{
     Discovery, DiscoveryReport, JobId, JobQuery, JobRecord, JobRepository, JobStatus,
     OpportunityId, ScanKind,
@@ -43,22 +43,23 @@ pub struct FindArgs {
     #[arg(long)]
     pub offline: bool,
 
-    /// Only show jobs your profile says you can take ("yes" or "likely").
+    /// Only show jobs your profile says you can take (eligible, or
+    /// conditionally eligible: relocating, or sponsorship the posting offers).
     #[arg(long, conflicts_with = "possible")]
     pub eligible: bool,
 
-    /// Hide jobs your profile rules out; keep the unknowns.
+    /// Hide jobs your profile rules out; keep the uncertain ones.
     #[arg(long)]
     pub possible: bool,
 }
 
 impl FindArgs {
-    /// The lowest fit to show, when filtering by eligibility.
-    fn min_fit(&self) -> Option<Fit> {
+    /// The lowest decision to show, when filtering by eligibility.
+    fn min_status(&self) -> Option<Eligibility> {
         if self.eligible {
-            Some(Fit::Likely)
+            Some(Eligibility::Conditional)
         } else if self.possible {
-            Some(Fit::Unknown)
+            Some(Eligibility::Uncertain)
         } else {
             None
         }
@@ -143,8 +144,8 @@ pub async fn run(args: FindArgs, loaded: &LoadedConfig, verbosity: u8) -> anyhow
         Some(report)
     };
 
-    let user = eligibility::user_constraints(&store).await?;
-    let (records, total, verdicts) = match (args.min_fit(), &user) {
+    let user = eligibility::profile_facts(&store).await?;
+    let (records, total, verdicts) = match (args.min_status(), &user) {
         (Some(_), None) => {
             store.close().await;
             bail!(
@@ -158,8 +159,9 @@ pub async fn run(args: FindArgs, loaded: &LoadedConfig, verbosity: u8) -> anyhow
             let mut kept = Vec::new();
             let mut verdicts = HashMap::new();
             for record in store.search(&query).await? {
-                let a = assess_record(&record, user);
-                if a.fit >= min {
+                let a = evaluate_record(&record, user);
+                // A job its source says is gone is never offered as a match.
+                if a.status >= min && verified_closed(&store, &record).await?.is_none() {
                     verdicts.insert(record.id, a);
                     kept.push(record);
                 }
@@ -173,18 +175,25 @@ pub async fn run(args: FindArgs, loaded: &LoadedConfig, verbosity: u8) -> anyhow
             let total = store.count(&query).await?;
             let verdicts = user
                 .iter()
-                .flat_map(|u| records.iter().map(move |r| (r.id, assess_record(r, u))))
+                .flat_map(|u| records.iter().map(move |r| (r.id, evaluate_record(r, u))))
                 .collect();
             (records, total, verdicts)
         }
     };
     let also_listed = other_listings(&store, &records).await?;
+    let mut closed = HashMap::new();
+    for record in &records {
+        if let Some(at) = verified_closed(&store, record).await? {
+            closed.insert(record.id, at);
+        }
+    }
     store.close().await;
 
     match print_results(
         &records,
         &also_listed,
         &verdicts,
+        &closed,
         total,
         report.as_ref(),
         &args,
@@ -195,6 +204,20 @@ pub async fn run(args: FindArgs, loaded: &LoadedConfig, verbosity: u8) -> anyhow
             Ok(ExitCode::SUCCESS)
         }
     }
+}
+
+/// When the job's latest verification found it closed, if that is newer
+/// than discovery's last sighting.
+async fn verified_closed(
+    store: &SqliteJobStore,
+    record: &JobRecord,
+) -> anyhow::Result<Option<chrono::DateTime<Utc>>> {
+    use jobhunt_jobs::verification::{ListingStatus, VerificationRepository};
+    Ok(store
+        .latest_verification(record.id)
+        .await?
+        .filter(|v| v.listing == ListingStatus::Closed && v.attempted_at >= record.last_seen_at)
+        .map(|v| v.attempted_at))
 }
 
 /// Other open source records of each shown opportunity.
@@ -341,7 +364,8 @@ pub(crate) fn report_problems(report: &DiscoveryReport) {
 fn print_results(
     records: &[JobRecord],
     also_listed: &HashMap<OpportunityId, Vec<JobRecord>>,
-    verdicts: &HashMap<JobId, Assessment>,
+    verdicts: &HashMap<JobId, EligibilityDecision>,
+    closed: &HashMap<JobId, chrono::DateTime<Utc>>,
     total: u64,
     report: Option<&DiscoveryReport>,
     args: &FindArgs,
@@ -359,7 +383,7 @@ fn print_results(
     } else if records.is_empty() {
         let hint = match (report, args.query.is_empty()) {
             _ if args.eligible => {
-                "No matching jobs fit your profile. Try --possible to include the unknowns."
+                "No matching jobs fit your profile. Try --possible to include the uncertain ones."
             }
             _ if args.possible => "Your profile rules out every matching job.",
             (None, _) => "No stored jobs match. Run without --offline to fetch fresh jobs.",
@@ -368,7 +392,7 @@ fn print_results(
         };
         writeln!(out, "{hint}")?;
     } else {
-        render::jobs(&mut out, records, also_listed, verdicts, now)?;
+        render::jobs(&mut out, records, also_listed, verdicts, closed, now)?;
         let shown = records.len() as u64;
         if shown < total {
             writeln!(

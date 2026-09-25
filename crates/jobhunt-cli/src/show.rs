@@ -6,7 +6,8 @@ use std::process::ExitCode;
 
 use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
-use jobhunt_eligibility::{UserConstraints, verify};
+use jobhunt_eligibility::Assessment;
+use jobhunt_jobs::verification::{OpportunityTrust, cached};
 use jobhunt_jobs::{
     JobEvent, JobEventKind, JobId, JobRecord, JobRepository, JobStatus, OpportunityId,
 };
@@ -59,7 +60,11 @@ pub async fn run(args: ShowArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCo
             return Err(error);
         }
     };
-    let user = eligibility::user_constraints(&store).await?;
+    let now = Utc::now();
+    let verified = cached(&store, &records).await?;
+    let (_, assessment, trust) =
+        crate::verify::assessment(&store, &verified, &loaded.config.verification.policy(), now)
+            .await?;
     let mut histories = Vec::with_capacity(records.len());
     for record in &records {
         histories.push(store.history(record.id).await?);
@@ -67,7 +72,14 @@ pub async fn run(args: ShowArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCo
     store.close().await;
 
     let mut out = anstream::stdout().lock();
-    match write_details(&mut out, &records, &histories, user.as_ref()) {
+    match write_details(
+        &mut out,
+        &records,
+        &histories,
+        &trust,
+        assessment.as_ref(),
+        now,
+    ) {
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(ExitCode::SUCCESS),
         other => {
             other.context("could not write the job")?;
@@ -80,7 +92,9 @@ fn write_details(
     out: &mut impl Write,
     records: &[JobRecord],
     histories: &[Vec<JobEvent>],
-    user: Option<&UserConstraints>,
+    trust: &OpportunityTrust,
+    assessment: Option<&Assessment>,
+    now: DateTime<Utc>,
 ) -> io::Result<()> {
     let main = &records[0];
     let job = &main.posting;
@@ -127,15 +141,22 @@ fn write_details(
     field("Opportunity", Some(main.opportunity_id.to_string()))?;
 
     writeln!(out)?;
+    writeln!(out, "Verification:")?;
+    eligibility::verification(out, trust, now, "  ", false)?;
+    writeln!(out)?;
     writeln!(out, "Eligibility:")?;
-    match user.and_then(|u| eligibility::best(records, u)) {
-        Some((_, assessment)) => {
-            writeln!(out, "  {}", eligibility::verdict(&assessment))?;
-            eligibility::checks(out, &assessment, "    ", false)?;
+    match assessment {
+        Some(a) => {
+            writeln!(out, "  {}", eligibility::verdict(&a.decision))?;
+            if !a.recommendable()
+                && a.decision.status >= jobhunt_eligibility::Eligibility::Conditional
+            {
+                writeln!(out, "  {DIM}{}{DIM:#}", a.listing_reason().conclusion)?;
+            }
             writeln!(
                 out,
-                "  {DIM}Evidence and details: jobhunt check {}{DIM:#}",
-                main.id
+                "  {DIM}Why, with evidence: jobhunt check {id} · verify again: jobhunt verify {id}{DIM:#}",
+                id = main.id
             )?;
         }
         None => writeln!(
@@ -143,7 +164,6 @@ fn write_details(
             "  No career profile yet: run `jobhunt init <resume>` or `jobhunt preferences set location <place>`."
         )?,
     }
-    eligibility::verification(out, &verify(records, Utc::now()), "  ")?;
 
     writeln!(out)?;
     writeln!(

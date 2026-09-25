@@ -117,3 +117,46 @@ pub fn find(title: &str) -> JobRecord {
         .find(|r| r.posting.title == title)
         .unwrap_or_else(|| panic!("no fixture job titled {title:?}"))
 }
+
+/// A synthetic posting at `source` with the given location text, workplace
+/// type and description, for rule tests.
+pub fn job(
+    source: &str,
+    location: &str,
+    workplace: Option<jobhunt_jobs::WorkplaceType>,
+    description: &str,
+) -> JobRecord {
+    let key: SourceKey = source.parse().unwrap();
+    let id = format!("{:x}", {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (source, location, description).hash(&mut h);
+        h.finish()
+    });
+    let posting = JobPosting {
+        provenance: jobhunt_core::Provenance {
+            source: key.clone(),
+            source_record_id: Some(id.clone()),
+            fetched_from: None,
+        },
+        url: CanonicalUrl::parse(&format!("https://jobs.example.com/{}/{id}", key.instance()))
+            .unwrap(),
+        apply_url: None,
+        company: "ExampleCo".into(),
+        title: "Senior Backend Engineer".into(),
+        department: None,
+        team: None,
+        location: (!location.is_empty()).then(|| location.to_owned()),
+        locations: Vec::new(),
+        employment_type: None,
+        workplace_type: workplace,
+        is_remote: None,
+        compensation: None,
+        work_authorization: None,
+        description_text: (!description.is_empty()).then(|| description.to_owned()),
+        description_html: None,
+        posted_at: None,
+        source_updated_at: None,
+    };
+    record(posting, now())
+}

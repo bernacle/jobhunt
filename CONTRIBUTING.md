@@ -74,6 +74,22 @@ JOBHUNT_LIVE_LEVER_SITES=spotify cargo test -p jobhunt-sources --test lever_live
 The families are `ashby`, `greenhouse`, `lever` and `yc`; the README lists
 the override variables.
 
+The live verification test (`crates/jobhunt-eligibility/tests/verification_live.rs`,
+also `#[ignore]`d) reads one listing per board, verifies up to
+`JOBHUNT_LIVE_VERIFY_JOBS` (default 3) of its jobs through their
+single-job endpoints and application pages, asks for a job that doesn't
+exist (it must be "not found", not an error), and prints the location,
+restriction and compensation facts read from each. Override the boards with
+`JOBHUNT_LIVE_VERIFY_ASHBY`, `…_GREENHOUSE`, `…_LEVER`, `…_YC`:
+
+```bash
+cargo test -p jobhunt-eligibility --test verification_live -- --ignored --nocapture --test-threads 1
+```
+
+Offline, the `jobhunt` binary can be pointed at a local server for every
+verification request with `JOBHUNT_VERIFY_ENDPOINT=http://127.0.0.1:<port>`
+(the CLI end-to-end tests do). It is a test hook, not a user setting.
+
 ## Continuous integration
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every pull
@@ -83,7 +99,7 @@ request and every push to `main`. Its jobs are the required status checks:
 | --- | --- |
 | `fmt` | unformatted code |
 | `clippy` | any clippy or compiler warning, on every target |
-| `test` | a compile error (build step), then any failing unit, integration or doc test: model, lifecycle, dedupe, SQLite, migrations, adapters, end-to-end discovery, resume reading and parsing, profile re-import and evidence rules, the profile CLI flow, eligibility on real postings and through the CLI |
+| `test` | a compile error (build step), then any failing unit, integration or doc test: model, lifecycle, dedupe, SQLite, migrations, adapters, end-to-end discovery, resume reading and parsing, profile re-import and evidence rules, the profile CLI flow, verification (domain, HTTP verifiers against mocks, SQLite), the eligibility rule matrix and region definitions, eligibility on real postings, and verify/show/check/find through the CLI |
 | `docs` | any rustdoc warning (broken intra-doc links, …) |
 | `msrv` | code or a dependency that needs a newer Rust than `rust-version` |
 | `ci-passed` | any of the above not succeeding |
@@ -115,10 +131,11 @@ Notes:
 ### Live source validation
 
 [`.github/workflows/live.yml`](.github/workflows/live.yml) runs the live
-tests, one job per family (`live (ashby)`, `live (greenhouse)`, …), on
+tests, one job per family (`live (ashby)`, `live (greenhouse)`, …) plus
+`live (verification)`, on
 Monday, Wednesday and Friday mornings (UTC) and on demand: **Actions → Live
-sources → Run workflow**, optionally choosing one family and your own
-boards. It is never a required check and never runs on pull requests, so a
+sources → Run workflow**, optionally choosing one family (or
+`verification`) and your own boards. It is never a required check and never runs on pull requests, so a
 third-party outage cannot block a merge. A red run means a source changed,
 went away, or was down. Look at the family's log, then re-run it or fix
 the adapter (with a new fixture) in a PR.
@@ -130,9 +147,13 @@ the adapter (with a new fixture) in a PR.
    change needs an offline regression test (fixture or mock server, not a
    live one); so does a change to resume parsing (a fixture under
    `crates/jobhunt-resume/tests/fixtures/`) or to the profile's re-import
-   or evidence rules, and to an eligibility rule (a case in
-   `crates/jobhunt-eligibility/tests/assessments.rs`, on a real posting
-   where one shows it). Schema changes are new, additive migrations; never
+   or evidence rules, and to an eligibility rule or the normalization it
+   reads (a case in `crates/jobhunt-eligibility/tests/rule_matrix.rs`, and
+   in `real_postings.rs` where a real posting shows it; region changes in
+   `regions.rs`). A change that can change a decision bumps
+   `RULES_VERSION` (`jobhunt-eligibility/src/decision.rs`) so stored
+   decisions are not reused; a change to how verifications are read bumps
+   `VERIFICATION_REVISION`. Schema changes are new, additive migrations; never
    edit an existing one.
 3. Run `./scripts/check.sh`.
 4. Open a PR against `main`. Merge when CI is green. A solo maintainer

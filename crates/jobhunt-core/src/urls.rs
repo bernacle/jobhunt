@@ -134,6 +134,14 @@ impl CanonicalUrl {
     pub fn into_string(self) -> String {
         self.0
     }
+
+    /// The host, lowercase (`jobs.lever.co`, `stripe.com`).
+    pub fn host(&self) -> String {
+        Url::parse(&self.0)
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_owned))
+            .unwrap_or_default()
+    }
 }
 
 fn normalize_query(url: &mut Url) {

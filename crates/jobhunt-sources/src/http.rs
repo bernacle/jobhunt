@@ -57,6 +57,16 @@ pub enum Conditional {
     NotModified,
 }
 
+/// Response of [`HttpClient::probe`]: whatever status the URL answered
+/// with, after redirects.
+#[derive(Debug)]
+pub struct Probe {
+    pub status: u16,
+    /// Where the redirects (if any) ended.
+    pub final_url: Url,
+    pub body: Vec<u8>,
+}
+
 /// Cheap to clone; clones share the connection pool and host limits.
 #[derive(Debug, Clone)]
 pub struct HttpClient {
@@ -87,8 +97,9 @@ impl HttpClient {
 
     /// GETs `url` and returns the body of a successful (2xx) response.
     ///
-    /// Non-success statuses become [`SourceError::Status`]; transport
-    /// failures become [`SourceError::Request`]. Transient failures are
+    /// Non-success statuses become [`SourceError::Status`]; timeouts
+    /// [`SourceError::Timeout`]; other transport failures
+    /// [`SourceError::Request`]. Transient failures are
     /// retried with exponential backoff first.
     pub async fn get_bytes(&self, url: &Url) -> Result<Vec<u8>, SourceError> {
         match self.get_conditional(url, None).await? {
@@ -134,6 +145,51 @@ impl HttpClient {
                 Err(failure) => return Err(failure.into_source_error(url)),
             }
         }
+    }
+
+    /// GETs `url` and reports the answer whatever its status (a 404 is an
+    /// answer, not an error), following redirects. Transient failures (429,
+    /// 5xx, timeouts, connection errors) are retried first like every
+    /// request; a status that stays transient is returned as the answer.
+    pub async fn probe(&self, url: &Url) -> Result<Probe, SourceError> {
+        let mut attempt = 0;
+        loop {
+            let result = {
+                let _permit = self.host_permit(url).await;
+                self.probe_once(url).await
+            };
+            let transient = match &result {
+                Ok(probe) => probe.status == 429 || (500..=599).contains(&probe.status),
+                Err(failure) => failure.is_transient(),
+            };
+            if transient && attempt < self.settings.max_retries {
+                let delay = self.settings.retry_base_delay * 2u32.saturating_pow(attempt);
+                attempt += 1;
+                warn!(url = %url, attempt, "transient answer to a probe, retrying");
+                tokio::time::sleep(delay).await;
+                continue;
+            }
+            return result.map_err(|failure| failure.into_source_error(url));
+        }
+    }
+
+    async fn probe_once(&self, url: &Url) -> Result<Probe, Failure> {
+        debug!(url = %url, "GET (probe)");
+        let response = self
+            .inner
+            .get(url.clone())
+            .send()
+            .await
+            .map_err(Failure::Transport)?;
+        let status = response.status().as_u16();
+        let final_url = response.url().clone();
+        let body = response.bytes().await.map_err(Failure::Transport)?;
+        debug!(url = %url, status, final_url = %final_url, "probe answered");
+        Ok(Probe {
+            status,
+            final_url,
+            body: body.to_vec(),
+        })
     }
 
     async fn host_permit(&self, url: &Url) -> Option<tokio::sync::OwnedSemaphorePermit> {
@@ -220,6 +276,9 @@ impl Failure {
             Self::Status { status, .. } => SourceError::Status {
                 url: url.to_string(),
                 status,
+            },
+            Self::Transport(error) if error.is_timeout() => SourceError::Timeout {
+                url: url.to_string(),
             },
             Self::Transport(error) => SourceError::Request {
                 url: url.to_string(),

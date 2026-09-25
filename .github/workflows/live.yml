@@ -18,12 +18,13 @@ on:
       family:
         description: Source family to check
         type: choice
-        options: [all, ashby, greenhouse, lever, yc]
+        options: [all, ashby, greenhouse, lever, yc, verification]
         default: all
       instances:
         description: >-
           Optional boards/sites/companies to check instead of the defaults,
-          comma-separated (Ashby: one board). Requires a single family.
+          comma-separated (Ashby: one board). Requires a single source family
+          (not all or verification).
         type: string
         required: false
   schedule:
@@ -52,7 +53,9 @@ jobs:
   live:
     name: live (${{ matrix.family }})
     # Scheduled runs only in the upstream repository, not in forks.
-    if: github.event_name == 'workflow_dispatch' || github.repository == 'bernacle/jobhunt'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.family != 'verification')
+      || (github.event_name != 'workflow_dispatch' && github.repository == 'bernacle/jobhunt')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -98,3 +101,33 @@ jobs:
             esac
           fi
           cargo test --locked -p jobhunt-sources --test "${FAMILY}_live" -- --ignored --nocapture
+
+  # First-party verification of a few real jobs per family (single-job
+  # endpoints, application paths, a job that does not exist), with the
+  # location, restriction and compensation facts read from each.
+  verification:
+    name: live (verification)
+    if: >-
+      (github.event_name == 'workflow_dispatch'
+        && (inputs.family == 'all' || inputs.family == 'verification'))
+      || (github.event_name != 'workflow_dispatch' && github.repository == 'bernacle/jobhunt')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Rust (stable)
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: live
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build the verification live test
+        run: cargo test --locked -p jobhunt-eligibility --test verification_live --no-run
+      - name: Verify real listings
+        timeout-minutes: 10
+        # One family at a time, so the output reads per family.
+        run: cargo test --locked -p jobhunt-eligibility --test verification_live -- --ignored --nocapture --test-threads 1

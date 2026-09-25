@@ -25,6 +25,17 @@ max_retries = 2
 # skipped when not; after this many hours they are re-read in full anyway.
 revalidate_after_hours = 24
 
+[verification]
+# `jobhunt verify` reuses an attempt this recent instead of asking the
+# source again (`--force` always asks).
+reuse_minutes = 15
+# A successful verification is fresh for this long, and stale (the job is
+# not recommended until verified again) after this long.
+fresh_hours = 24
+stale_hours = 72
+# Source records of one job verified at the same time.
+concurrency = 4
+
 # Sources to search. Listing any source here replaces all built-in defaults,
 # so this file fully controls what is searched. Each source can set `company`
 # to control the displayed company name.

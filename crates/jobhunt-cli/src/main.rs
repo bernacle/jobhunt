@@ -13,6 +13,7 @@ mod profile_args;
 mod profile_render;
 mod render;
 mod show;
+mod verify;
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -53,9 +54,13 @@ enum Command {
     Find(find::FindArgs),
     /// Show everything stored about one job: every source listing it and its history.
     Show(show::ShowArgs),
-    /// Check one job against your profile: where you can work from, work
-    /// authorization, work mode, time zone and pay, with the posting's words
-    /// behind each answer, and whether the listing is first-party and fresh.
+    /// Verify one job at its authoritative sources (is it still open, can
+    /// you apply, who publishes it, what does it say now), save the result,
+    /// and check it against your profile.
+    Verify(verify::VerifyArgs),
+    /// The full verification and eligibility report of one job, with the
+    /// evidence behind every reason, from what is stored (`--refresh`
+    /// verifies first).
     Check(check::CheckArgs),
     /// Import your resume (PDF, .txt or .md) into your career profile. Run it
     /// again after updating the resume; your edits and decisions are kept.
@@ -109,6 +114,7 @@ async fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     match cli.command {
         Command::Find(args) => find::run(args, &loaded, cli.verbose).await,
         Command::Show(args) => show::run(args, &loaded).await,
+        Command::Verify(args) => verify::run(args, &loaded).await,
         Command::Check(args) => check::run(args, &loaded).await,
         Command::Init(args) => init::run(args, &loaded).await,
         Command::Profile(args) => profile::run(args, &loaded).await,
@@ -251,6 +257,22 @@ mod tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn parses_verify() {
+        let cli = Cli::try_parse_from([
+            "jobhunt",
+            "verify",
+            "opp_02e51190085f8a9a0772e845ddd9f329",
+            "--force",
+            "-d",
+        ])
+        .unwrap();
+        let Command::Verify(args) = cli.command else {
+            panic!("expected verify");
+        };
+        assert!(args.force && args.details);
     }
 
     #[test]

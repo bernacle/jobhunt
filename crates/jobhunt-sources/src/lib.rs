@@ -12,7 +12,8 @@
 //! | `lever`      | site name       | `api.lever.co/v0/postings/<site>`                  |
 //! | `yc`         | company slug    | `www.ycombinator.com/companies/<slug>/jobs`        |
 //!
-//! [`careers`] maps company careers pages onto these boards.
+//! [`careers`] maps company careers pages onto these boards, and
+//! [`verify`] checks single jobs against the same sources.
 //!
 //! Adding a source family means:
 //! 1. a module with the adapter, its raw payload types and conversion;
@@ -30,6 +31,7 @@ mod common;
 pub mod greenhouse;
 pub mod http;
 pub mod lever;
+pub mod verify;
 pub mod yc;
 
 use std::collections::HashSet;
@@ -41,8 +43,9 @@ use serde::{Deserialize, Deserializer, Serialize};
 pub use ashby::{AshbyBoard, AshbySource};
 pub use careers::{BoardRef, CareersPage};
 pub use greenhouse::{GreenhouseBoard, GreenhouseSource};
-pub use http::{HttpClient, HttpClientError, HttpSettings};
+pub use http::{HttpClient, HttpClientError, HttpSettings, Probe};
 pub use lever::{LeverRegion, LeverSite, LeverSource};
+pub use verify::{HttpVerifier, VerifierHosts};
 pub use yc::{YcCompany, YcSource};
 
 /// Which sources discovery reads by default.

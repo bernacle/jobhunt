@@ -1358,11 +1358,15 @@ dependencies = [
 name = "jobhunt-eligibility"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "jobhunt-core",
  "jobhunt-jobs",
  "jobhunt-profile",
  "jobhunt-sources",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -1439,6 +1443,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "jobhunt-core",
+ "jobhunt-eligibility",
  "jobhunt-jobs",
  "jobhunt-profile",
  "serde",
