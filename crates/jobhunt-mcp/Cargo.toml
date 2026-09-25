@@ -1,0 +1,13 @@
+[package]
+name = "jobhunt-mcp"
+description = "Model Context Protocol server for JobHunt (not implemented yet; see crate docs)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

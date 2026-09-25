@@ -1,0 +1,32 @@
+# JobHunt configuration. Every setting is optional; `jobhunt find` works with
+# no config file at all. Copy this file to the path shown by `jobhunt config`
+# (for example ~/Library/Application Support/jobhunt/config.toml on macOS or
+# ~/.config/jobhunt/config.toml on Linux), or pass it with --config.
+
+[storage]
+# SQLite database file. Relative paths are resolved against this file's
+# directory. Default: <platform data dir>/jobhunt/jobhunt.db
+# database = "jobhunt.db"
+
+[logging]
+# A tracing filter directive. Overridden by -v flags and JOBHUNT_LOG/RUST_LOG.
+level = "error"
+# "text" or "json" (logs always go to stderr).
+format = "text"
+
+[discovery]
+# Sources fetched at the same time.
+concurrency = 4
+# Per-request timeout in seconds, and retries for transient HTTP failures.
+request_timeout_secs = 30
+max_retries = 2
+
+# Ashby job boards to search: the <board> in https://jobs.ashbyhq.com/<board>.
+# Listing any board here replaces the built-in defaults.
+[[sources.ashby]]
+board = "linear"
+company = "Linear"
+
+[[sources.ashby]]
+board = "posthog"
+company = "PostHog"
