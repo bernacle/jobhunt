@@ -1,4 +1,4 @@
-# Required quality gates for every pull request and every push to main.
+# Required quality gates for pull requests that are ready for review.
 #
 # Everything here is offline: no job talks to Ashby, Greenhouse, Lever or
 # YC. Live source checks run separately in live.yml and never block merges.
@@ -7,14 +7,26 @@
 # check names used by branch protection. Renaming a job means updating the
 # protection rule (see CONTRIBUTING.md and .github/rulesets/main.json).
 #
-# `scripts/check.sh` runs the same commands locally; keep the two in sync.
+# `scripts/check.sh` runs the same commands locally (and the pre-push hook in
+# .githooks runs it); keep the two in sync.
+#
+# Saving Actions minutes (the repository is on a limited plan):
+#
+# - Draft pull requests skip every job. GitHub counts a skipped required
+#   check as passing, which is acceptable here: a draft cannot be merged,
+#   and marking it "Ready for review" (the ready_for_review event) runs the
+#   whole suite for real, replacing the skips. Open PRs as drafts, iterate
+#   with the local gate, and mark them ready when done.
+# - Pushes to main don't run CI. The ruleset requires a PR branch to be up
+#   to date with main (strict status checks), so what lands on main is
+#   exactly what was verified on the PR. workflow_dispatch still allows a
+#   manual run on any branch, main included.
 
 name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 permissions:
@@ -22,8 +34,8 @@ permissions:
 
 concurrency:
   # One group per pull request, so a new push cancels the run for the
-  # commit it replaces. Pushes to main get one group per commit: every
-  # commit that lands on main is verified, none is cancelled.
+  # commit it replaces. Manual runs get one group per ref and commit and
+  # are never cancelled.
   group: >-
     ${{ github.workflow }}-${{ github.event_name == 'pull_request'
     && format('pr-{0}', github.event.pull_request.number)
@@ -43,6 +55,7 @@ defaults:
 jobs:
   fmt:
     name: fmt
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -58,6 +71,7 @@ jobs:
 
   clippy:
     name: clippy
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -77,6 +91,7 @@ jobs:
   test:
     # Build and test share one job so the workspace is compiled once.
     name: test
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -127,6 +142,7 @@ jobs:
     # a database; their Postgres tests skip. Here a missing database is a
     # failure (JOBHUNT_REQUIRE_POSTGRES).
     name: cloud
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -195,6 +211,7 @@ jobs:
 
   docs:
     name: docs
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -220,6 +237,7 @@ jobs:
     # its rust-version above ours. Tests run on stable in `test`; running
     # them twice would double CI time for no extra protection.
     name: msrv
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -249,8 +267,10 @@ jobs:
   ci-passed:
     # A single check that is green only when every job above succeeded.
     # Require this one (or all of the above) in branch protection.
+    # always() so a failed or cancelled job still reports here; skipped on
+    # drafts like the rest (otherwise the skipped jobs would fail it).
     name: ci-passed
-    if: always()
+    if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     needs: [fmt, clippy, test, cloud, docs, msrv]
     runs-on: ubuntu-latest
     timeout-minutes: 5

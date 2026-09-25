@@ -11,11 +11,14 @@
 # Stops at the first failing check and exits non-zero, naming the check.
 # Needs only rustup/cargo (plus rustfmt and clippy components). Live source
 # tests are never run here; see CONTRIBUTING.md.
+#
+# The pre-push hook (.githooks/pre-push) runs this before every push; enable
+# it once per clone with: git config core.hooksPath .githooks
 
 set -euo pipefail
 
 usage() {
-    sed -n '2,13s/^# \{0,1\}//p' "$0"
+    sed -n '2,16s/^# \{0,1\}//p' "$0"
 }
 
 msrv=false
