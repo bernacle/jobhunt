@@ -96,9 +96,9 @@ impl Found {
 
 impl LocalApp {
     /// The shortlist (see the module docs). Fails with
-    /// [`AppError::NoProfile`] without a profile and [`AppError::NoJobs`]
-    /// when nothing was ever discovered; a refresh, when due, happens
-    /// first either way.
+    /// [`AppError::NoProfile`] (before touching the network) without a
+    /// profile, and with [`AppError::NoJobs`] when nothing was ever
+    /// discovered.
     pub async fn find(
         &self,
         request: &FindRequest,
@@ -109,6 +109,11 @@ impl LocalApp {
             return Err(AppError::InvalidArguments(format!(
                 "limit must be between 1 and {MAX_LIMIT}"
             )));
+        }
+        // Without a profile there is nothing to rank against: say so before
+        // spending a refresh on it.
+        if self.profile_facts().await?.is_none() {
+            return Err(AppError::NoProfile);
         }
         let refresh = match self.refresh(request.refresh, &[], progress, now).await {
             // A refresh nobody asked for must not stand between the person
@@ -127,9 +132,6 @@ impl LocalApp {
             }
             other => other?,
         };
-        if self.profile_facts().await?.is_none() {
-            return Err(AppError::NoProfile);
-        }
         let ranking = self.ranking();
         let query = RankQuery {
             text: request.text.clone(),
