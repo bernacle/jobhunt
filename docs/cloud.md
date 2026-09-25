@@ -555,6 +555,12 @@ jobhunt token revoke <tok_…>
 - The OS keychain is used on macOS and Windows; on Linux the session is an
   owner-only file (Secret Service support would need D-Bus).
 - MCP clients that cannot do OAuth need a personal access token.
+- There is no per-account rate limiting yet (request bodies are capped at
+  16 MB and requests time out after 120 s); a search's verification is
+  bounded (at most 12 candidates) and verifications are shared.
+- "Log out everywhere" takes effect within 30 seconds on other replicas
+  (identities are cached that long); personal access tokens record their
+  last use on every request.
 - Usage events are basic counts for operating the beta, not an analytics
   product; there is no dashboard.
 - Not built here (BRU-295/296): web UI, hosted feed, notifications,

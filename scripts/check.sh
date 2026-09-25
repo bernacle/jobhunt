@@ -5,6 +5,8 @@
 #
 #   ./scripts/check.sh          fmt, clippy, build, offline tests, rustdoc
 #   ./scripts/check.sh --msrv   also type-check on the declared minimum Rust
+#   ./scripts/check.sh --cloud  require the Postgres tests (needs
+#                               JOBHUNT_TEST_DATABASE_URL; see CONTRIBUTING.md)
 #
 # Stops at the first failing check and exits non-zero, naming the check.
 # Needs only rustup/cargo (plus rustfmt and clippy components). Live source
@@ -13,13 +15,20 @@
 set -euo pipefail
 
 usage() {
-    sed -n '2,11s/^# \{0,1\}//p' "$0"
+    sed -n '2,13s/^# \{0,1\}//p' "$0"
 }
 
 msrv=false
 for arg in "$@"; do
     case "$arg" in
         --msrv) msrv=true ;;
+        --cloud)
+            if [[ -z "${JOBHUNT_TEST_DATABASE_URL:-}" ]]; then
+                echo "--cloud needs JOBHUNT_TEST_DATABASE_URL (a Postgres server)" >&2
+                exit 2
+            fi
+            export JOBHUNT_REQUIRE_POSTGRES=1
+            ;;
         -h | --help) usage; exit 0 ;;
         *) echo "unknown argument: $arg" >&2; usage >&2; exit 2 ;;
     esac

@@ -58,6 +58,30 @@ async fn cloud_lines(app: &jobhunt_app::App) -> Vec<(bool, String)> {
         }
         Err(e) => lines.push((false, format!("Cloud: {e}"))),
     }
+    // In a cloud environment (the service's variables are set), what the
+    // cloud processes would find: present, missing or invalid, never values.
+    if [
+        "DATABASE_URL",
+        "JOBHUNT_OIDC_ISSUER",
+        "JOBHUNT_ENCRYPTION_KEYS",
+    ]
+    .iter()
+    .any(|v| std::env::var_os(v).is_some())
+    {
+        let cloud = crate::serve::cloud_config();
+        for setting in cloud.report() {
+            let good = !setting.required
+                || !(setting.status.starts_with("missing")
+                    || setting.status.starts_with("invalid"));
+            lines.push((
+                good,
+                format!("Cloud config {}: {}", setting.name, setting.status),
+            ));
+        }
+        for problem in cloud.problems(jobhunt_cloud::Role::Server) {
+            lines.push((false, format!("Cloud config: {problem}")));
+        }
+    }
     if let Ok(status) = app.sync_status().await
         && let Some(account) = &status.account
     {

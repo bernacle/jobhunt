@@ -13,14 +13,11 @@ COPY . .
 RUN cargo build --release --locked -p jobhunt-cli \
     && strip target/release/jobhunt
 
-FROM debian:bookworm-slim
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 --home-dir /app --create-home jobhunt
+# glibc, libgcc and CA certificates, no shell or package manager, runs as
+# an unprivileged user.
+FROM gcr.io/distroless/cc-debian12:nonroot
 COPY --from=build /src/target/release/jobhunt /usr/local/bin/jobhunt
 COPY deploy/cloud.toml /app/cloud.toml
-USER jobhunt
 WORKDIR /app
 ENV JOBHUNT_CONFIG=/app/cloud.toml \
     RUST_BACKTRACE=1

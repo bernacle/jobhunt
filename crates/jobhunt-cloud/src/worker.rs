@@ -25,6 +25,7 @@ use jobhunt_storage::postgres::{
     PgStore, ScheduledSource, SourceOutcome, VerificationPick, WorkerKind,
 };
 use serde::Serialize;
+use tracing::Instrument;
 
 use crate::config::CloudConfig;
 
@@ -69,7 +70,10 @@ pub async fn discover(
     let run = store
         .start_worker_run(WorkerKind::Discovery, &owner, ABANDON_AFTER, now)
         .await?;
-    let result = discover_inner(store, config, &owner, started, budget).await;
+    let span = tracing::info_span!("worker", kind = "discovery", run = run.id, worker = %owner);
+    let result = discover_inner(store, config, &owner, started, budget)
+        .instrument(span)
+        .await;
     let (summary_json, error) = match &result {
         Ok(summary) => (serde_json::to_value(summary).unwrap_or_default(), None),
         Err(e) => (serde_json::json!({}), Some(e.public_message())),
@@ -219,7 +223,8 @@ pub async fn verify(
     let run = store
         .start_worker_run(WorkerKind::Verification, &owner, ABANDON_AFTER, now)
         .await?;
-    let result = verify_inner(store, config, &owner).await;
+    let span = tracing::info_span!("worker", kind = "verification", run = run.id, worker = %owner);
+    let result = verify_inner(store, config, &owner).instrument(span).await;
     let (summary_json, error) = match &result {
         Ok(summary) => (serde_json::to_value(summary).unwrap_or_default(), None),
         Err(e) => (serde_json::json!({}), Some(e.public_message())),
