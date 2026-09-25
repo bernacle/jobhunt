@@ -21,6 +21,16 @@ const JOB_ID_NAMESPACE: &str = "jobhunt.job.v1";
 /// fingerprinted fields changes.
 const FINGERPRINT_SCHEMA: &str = "jobhunt.job.content.v1";
 
+/// Schema tag for [`JobSnapshot::fingerprint`] (material content).
+const MATERIAL_SCHEMA: &str = "jobhunt.job.material.v1";
+
+/// Revision of the canonical conversion as a whole: the model plus every
+/// adapter's mapping into it. Stored with each scan; a listing validator
+/// (ETag) recorded under another revision is not reused, so a conversion
+/// change always re-reads sources instead of trusting "not modified".
+/// Bump it whenever an adapter or the model changes what a posting contains.
+pub const CANONICAL_REVISION: &str = "2";
+
 /// Stable internal identifier of a job, rendered as `job_<32 hex chars>`.
 ///
 /// Derived from the source instance plus the source's own identifier for the
@@ -33,17 +43,27 @@ impl JobId {
     const PREFIX: &'static str = "job_";
 
     pub fn derive(source: &SourceKey, source_record_id: Option<&str>, url: &CanonicalUrl) -> Self {
-        let id = match source_record_id {
-            Some(native) => StableId::derive(
-                JOB_ID_NAMESPACE,
-                &[source.kind(), source.instance(), "id", native],
-            ),
-            None => StableId::derive(
+        match source_record_id {
+            Some(native) => Self::derive_from_record_id(source, native),
+            None => Self(StableId::derive(
                 JOB_ID_NAMESPACE,
                 &[source.kind(), source.instance(), "url", url.as_str()],
-            ),
-        };
-        Self(id)
+            )),
+        }
+    }
+
+    /// The id of the job a source identifies as `record_id`.
+    pub fn derive_from_record_id(source: &SourceKey, record_id: &str) -> Self {
+        Self(StableId::derive(
+            JOB_ID_NAMESPACE,
+            &[source.kind(), source.instance(), "id", record_id],
+        ))
+    }
+}
+
+impl JobId {
+    fn stable(&self) -> StableId {
+        self.0
     }
 }
 
@@ -69,6 +89,75 @@ impl FromStr for JobId {
         hex.parse()
             .map(Self)
             .map_err(|_| ParseIdError(s.to_owned()))
+    }
+}
+
+/// Identifier of a logical opportunity: one real job that may be listed by
+/// several sources. Rendered as `opp_<32 hex chars>`.
+///
+/// A group of equivalent source records takes the id of its founding record
+/// (the one JobHunt saw first), so a job listed by a single source has the
+/// opportunity id `opp_<same hex as its job id>`, and the id stays put as
+/// other sources join the group.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct OpportunityId(StableId);
+
+impl OpportunityId {
+    const PREFIX: &'static str = "opp_";
+
+    pub fn founded_by(job: JobId) -> Self {
+        Self(job.stable())
+    }
+}
+
+impl fmt::Display for OpportunityId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}", Self::PREFIX, self.0)
+    }
+}
+
+impl fmt::Debug for OpportunityId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "OpportunityId({self})")
+    }
+}
+
+impl FromStr for OpportunityId {
+    type Err = ParseIdError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let hex = s
+            .strip_prefix(Self::PREFIX)
+            .ok_or_else(|| ParseIdError(s.to_owned()))?;
+        hex.parse()
+            .map(Self)
+            .map_err(|_| ParseIdError(s.to_owned()))
+    }
+}
+
+/// Whether a source still lists the job.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum JobStatus {
+    /// Listed at the last successful scan of its source.
+    Open,
+    /// Missing from a complete listing of its source.
+    Closed,
+}
+
+impl JobStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::Closed => "closed",
+        }
+    }
+
+    pub fn from_canonical(value: &str) -> Option<Self> {
+        match value {
+            "open" => Some(Self::Open),
+            "closed" => Some(Self::Closed),
+            _ => None,
+        }
     }
 }
 
@@ -176,6 +265,11 @@ pub struct Compensation {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CompensationComponent {
     pub kind: CompensationKind,
+    /// The source's own name for this component, when it has one (for
+    /// example Greenhouse's `Canada Annual Pay Range`, which says where the
+    /// range applies).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
     /// ISO 4217 currency code, when the component is monetary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub currency: Option<String>,
@@ -254,8 +348,12 @@ impl JobPosting {
         )
     }
 
-    /// Digest of the posting's content (everything except provenance), used
-    /// to tell whether a re-discovered job actually changed.
+    /// Digest of everything the posting stores except provenance. When it
+    /// matches the stored value, nothing needs to be rewritten.
+    ///
+    /// This is deliberately broader than [`JobPosting::content_fingerprint`]:
+    /// a changed HTML markup or source update timestamp rewrites the stored
+    /// row but does not count as a material update.
     pub fn fingerprint(&self) -> Fingerprint {
         let mut fp = FingerprintBuilder::new(FINGERPRINT_SCHEMA)
             .field("url", self.url.as_str())
@@ -295,6 +393,7 @@ impl JobPosting {
                 for c in &comp.components {
                     fp = fp
                         .field("component.kind", &format!("{:?}", c.kind))
+                        .optional("component.label", c.label.as_deref())
                         .optional("component.currency", c.currency.as_deref())
                         .optional("component.min", c.min.map(|v| v.to_string()).as_deref())
                         .optional("component.max", c.max.map(|v| v.to_string()).as_deref())
@@ -313,6 +412,32 @@ impl JobPosting {
                 self.source_updated_at.map(timestamp).as_deref(),
             )
             .finish()
+    }
+
+    /// Digest of the posting's material content (see [`JobSnapshot`]). A
+    /// different value means the job was UPDATED.
+    pub fn content_fingerprint(&self) -> Fingerprint {
+        self.snapshot().fingerprint()
+    }
+
+    /// The material content of the posting.
+    pub fn snapshot(&self) -> JobSnapshot {
+        JobSnapshot {
+            url: self.url.clone(),
+            apply_url: self.apply_url.clone(),
+            company: self.company.clone(),
+            title: self.title.clone(),
+            department: self.department.clone(),
+            team: self.team.clone(),
+            location: self.location.clone(),
+            locations: self.locations.clone(),
+            employment_type: self.employment_type.as_ref().map(|t| t.as_str().to_owned()),
+            workplace_type: self.workplace_type.as_ref().map(|t| t.as_str().to_owned()),
+            is_remote: self.is_remote,
+            compensation: self.compensation.clone(),
+            description_text: self.description_text.clone(),
+            posted_at: self.posted_at,
+        }
     }
 
     /// Normalized text that search terms are matched against: title, company,
@@ -383,6 +508,90 @@ fn timestamp(value: DateTime<Utc>) -> String {
     value.to_rfc3339_opts(SecondsFormat::Micros, true)
 }
 
+/// The material content of a posting: what a person reading it would
+/// consider a change. Excludes provenance, the description's markup (the
+/// plain text is compared instead) and the source's own update timestamp,
+/// which sources bump for edits nobody can see.
+///
+/// Snapshots are what job history stores: the version a change replaced.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobSnapshot {
+    pub url: CanonicalUrl,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub apply_url: Option<CanonicalUrl>,
+    pub company: String,
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub department: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub team: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locations: Vec<SourceLocation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub employment_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workplace_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_remote: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compensation: Option<Compensation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description_text: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub posted_at: Option<DateTime<Utc>>,
+}
+
+impl JobSnapshot {
+    pub fn fingerprint(&self) -> Fingerprint {
+        // serde_json writes fields in declaration order and numbers
+        // deterministically, so the encoding is canonical. Serializing plain
+        // data cannot fail; the fallback only keeps this function total.
+        let encoded = serde_json::to_string(self).unwrap_or_default();
+        FingerprintBuilder::new(MATERIAL_SCHEMA)
+            .field("snapshot", &encoded)
+            .finish()
+    }
+
+    /// Names of the material fields that differ between two snapshots, in a
+    /// fixed order: `title`, `company`, `url`, `apply_url`, `department`,
+    /// `team`, `location`, `employment_type`, `workplace`, `compensation`,
+    /// `description`, `posted_at`.
+    pub fn changed_fields(&self, other: &JobSnapshot) -> Vec<&'static str> {
+        let checks = [
+            ("title", self.title != other.title),
+            ("company", self.company != other.company),
+            ("url", self.url != other.url),
+            ("apply_url", self.apply_url != other.apply_url),
+            ("department", self.department != other.department),
+            ("team", self.team != other.team),
+            (
+                "location",
+                self.location != other.location || self.locations != other.locations,
+            ),
+            (
+                "employment_type",
+                self.employment_type != other.employment_type,
+            ),
+            (
+                "workplace",
+                self.workplace_type != other.workplace_type || self.is_remote != other.is_remote,
+            ),
+            ("compensation", self.compensation != other.compensation),
+            (
+                "description",
+                self.description_text != other.description_text,
+            ),
+            ("posted_at", self.posted_at != other.posted_at),
+        ];
+        checks
+            .into_iter()
+            .filter_map(|(name, changed)| changed.then_some(name))
+            .collect()
+    }
+}
+
 /// A job as stored by JobHunt: the canonical posting plus bookkeeping.
 #[derive(Debug, Clone, PartialEq)]
 pub struct JobRecord {
@@ -390,10 +599,16 @@ pub struct JobRecord {
     pub posting: JobPosting,
     /// When JobHunt first discovered the job.
     pub first_seen_at: DateTime<Utc>,
-    /// When JobHunt most recently saw the job at its source.
+    /// When JobHunt most recently saw the job listed at its source.
     pub last_seen_at: DateTime<Utc>,
-    /// When the job's content last changed (equals `first_seen_at` until then).
+    /// When the job's material content last changed (equals `first_seen_at`
+    /// until then).
     pub content_updated_at: DateTime<Utc>,
+    pub status: JobStatus,
+    /// When the job was found missing from its source; `None` while open.
+    pub closed_at: Option<DateTime<Utc>>,
+    /// The logical opportunity this source record belongs to.
+    pub opportunity_id: OpportunityId,
 }
 
 #[cfg(test)]
@@ -491,6 +706,58 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn material_fingerprint_ignores_markup_and_source_timestamps() {
+        let a = posting("ashby:acme", Some("123"), "Engineer");
+        let mut cosmetic = a.clone();
+        cosmetic.description_html = Some("<p style=\"x\">Hi</p>".into());
+        cosmetic.source_updated_at = Some(Utc::now());
+        cosmetic.provenance.fetched_from =
+            Some(CanonicalUrl::parse("https://api.example.com/board").unwrap());
+        assert_ne!(a.fingerprint(), cosmetic.fingerprint());
+        assert_eq!(a.content_fingerprint(), cosmetic.content_fingerprint());
+
+        let mut edited = a.clone();
+        edited.description_text = Some("New text".into());
+        assert_ne!(a.content_fingerprint(), edited.content_fingerprint());
+    }
+
+    #[test]
+    fn snapshots_report_changed_fields() {
+        let a = posting("ashby:acme", Some("123"), "Engineer");
+        let mut b = a.clone();
+        b.title = "Senior Engineer".into();
+        b.compensation = Some(Compensation {
+            summary: Some("$1".into()),
+            components: vec![],
+        });
+        b.is_remote = Some(false);
+        assert_eq!(
+            a.snapshot().changed_fields(&b.snapshot()),
+            vec!["title", "workplace", "compensation"]
+        );
+        assert!(a.snapshot().changed_fields(&a.snapshot()).is_empty());
+
+        let json = serde_json::to_string(&b.snapshot()).unwrap();
+        let back: JobSnapshot = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, b.snapshot());
+        assert_eq!(back.fingerprint(), b.content_fingerprint());
+    }
+
+    #[test]
+    fn opportunity_ids_follow_their_founding_job() {
+        let job = posting("ashby:acme", Some("123"), "Engineer").id();
+        let opp = OpportunityId::founded_by(job);
+        assert_eq!(
+            opp.to_string().trim_start_matches("opp_"),
+            job.to_string().trim_start_matches("job_")
+        );
+        assert_eq!(opp.to_string().parse::<OpportunityId>().unwrap(), opp);
+        assert!(job.to_string().parse::<OpportunityId>().is_err());
+        assert_eq!(JobStatus::from_canonical("closed"), Some(JobStatus::Closed));
+        assert_eq!(JobStatus::from_canonical("x"), None);
+    }
+
+    #[test]
     fn search_document_covers_searchable_fields() {
         let mut p = posting("ashby:acme", Some("1"), "Staff Engineer (Rust/Go)");
         p.department = Some("Trust & Safety".into());
@@ -532,6 +799,7 @@ pub(crate) mod tests {
             summary: None,
             components: vec![CompensationComponent {
                 kind: CompensationKind::Salary,
+                label: None,
                 currency: Some("USD".into()),
                 min: Some(200.0),
                 max: Some(100.0),

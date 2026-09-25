@@ -57,8 +57,9 @@ const TRACKING_PARAMS: &[&str] = &[
 ];
 
 /// Parameter prefixes that only carry tracking information (`utm_source`,
-/// Lever's `lever-source[]`, ...). Compared case-insensitively.
-const TRACKING_PREFIXES: &[&str] = &["utm_", "lever-source", "lever-origin"];
+/// Lever's `lever-source[]`, `lever-origin` and `lever-via`, ...). Compared
+/// case-insensitively.
+const TRACKING_PREFIXES: &[&str] = &["utm_", "lever-source", "lever-origin", "lever-via"];
 
 /// Returns true when a query parameter only carries tracking/attribution data.
 pub fn is_tracking_param(name: &str) -> bool {
@@ -320,6 +321,91 @@ mod tests {
         ];
         let canonical: Vec<String> = variants.iter().map(|v| canon(v)).collect();
         assert!(canonical.windows(2).all(|pair| pair[0] == pair[1]));
+    }
+
+    /// Spellings of the same posting seen in the wild for each ATS: shared
+    /// links carry tracking parameters, anchors and trailing slashes.
+    #[test]
+    fn real_ats_url_variants_collapse() {
+        let groups: &[&[&str]] = &[
+            &[
+                "https://job-boards.greenhouse.io/anthropic/jobs/4461450008",
+                "https://job-boards.greenhouse.io/anthropic/jobs/4461450008/",
+                "https://job-boards.greenhouse.io/anthropic/jobs/4461450008?gh_src=abc123#app",
+                "https://JOB-BOARDS.greenhouse.io/anthropic/jobs/4461450008?utm_source=linkedin",
+            ],
+            &[
+                "https://stripe.com/jobs/search?gh_jid=8172510",
+                "https://stripe.com/jobs/search?gh_src=x&gh_jid=8172510&utm_medium=social",
+            ],
+            &[
+                "https://jobs.lever.co/spotify/2193db3f-77c5-43b8-b030-8f92c9882bf1",
+                "https://jobs.lever.co/spotify/2193db3f-77c5-43b8-b030-8f92c9882bf1/?lever-via=abc",
+                "https://jobs.lever.co/spotify/2193db3f-77c5-43b8-b030-8f92c9882bf1?lever-origin=applied&lever-source%5B%5D=LinkedIn",
+            ],
+            &[
+                "https://jobs.ashbyhq.com/linear/d3bc1ced-3ce4-4086-a050-555055dbb1ff",
+                "https://jobs.ashbyhq.com/linear/d3bc1ced-3ce4-4086-a050-555055dbb1ff?utm_source=hn#overview",
+            ],
+            &[
+                "https://www.ycombinator.com/companies/posthog/jobs/abc123-security-engineer",
+                "https://www.ycombinator.com/companies/posthog/jobs/abc123-security-engineer/?ref=hn",
+            ],
+        ];
+        for group in groups {
+            let canonical: Vec<String> = group.iter().map(|u| canon(u)).collect();
+            assert!(
+                canonical.windows(2).all(|pair| pair[0] == pair[1]),
+                "{canonical:#?}"
+            );
+        }
+    }
+
+    /// Distinct postings (or pages) must never normalize to one value; ATS
+    /// equivalence beyond exact URLs is decided by `jobhunt_jobs::identity`.
+    #[test]
+    fn distinct_urls_stay_distinct() {
+        let distinct: &[(&str, &str)] = &[
+            // Different job ids in the parameter that identifies the job.
+            (
+                "https://stripe.com/jobs/search?gh_jid=8172510",
+                "https://stripe.com/jobs/search?gh_jid=8172511",
+            ),
+            // A listing and its application form.
+            (
+                "https://jobs.lever.co/spotify/2193db3f-77c5-43b8-b030-8f92c9882bf1",
+                "https://jobs.lever.co/spotify/2193db3f-77c5-43b8-b030-8f92c9882bf1/apply",
+            ),
+            (
+                "https://jobs.ashbyhq.com/linear/d3bc1ced-3ce4-4086-a050-555055dbb1ff",
+                "https://jobs.ashbyhq.com/linear/d3bc1ced-3ce4-4086-a050-555055dbb1ff/application",
+            ),
+            // The same id on another board, host, scheme or path spelling
+            // is left to the identity layer, not folded here.
+            (
+                "https://boards.greenhouse.io/figma/jobs/5426468004",
+                "https://job-boards.greenhouse.io/figma/jobs/5426468004",
+            ),
+            ("http://acme.com/jobs/1", "https://acme.com/jobs/1"),
+            ("https://www.acme.com/jobs/1", "https://acme.com/jobs/1"),
+            (
+                "https://jobs.ashbyhq.com/Linear/d3bc1ced-3ce4-4086-a050-555055dbb1ff",
+                "https://jobs.ashbyhq.com/linear/d3bc1ced-3ce4-4086-a050-555055dbb1ff",
+            ),
+            // Hash routes address postings in single-page career sites.
+            (
+                "https://acme.com/careers#/jobs/1",
+                "https://acme.com/careers#/jobs/2",
+            ),
+            // A query parameter that is not tracking.
+            (
+                "https://www.workatastartup.com/application?signup_job_id=93346",
+                "https://www.workatastartup.com/application?signup_job_id=93347",
+            ),
+        ];
+        for (a, b) in distinct {
+            assert_ne!(canon(a), canon(b), "{a} and {b} must stay distinct");
+        }
     }
 
     #[test]

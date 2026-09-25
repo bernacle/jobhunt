@@ -116,6 +116,17 @@ pub struct SourceBatch<T> {
     pub rejected: Vec<RecordError>,
     /// Records the source returned that were intentionally ignored.
     pub skipped: usize,
+    /// True only when the batch is the source's *entire* current listing:
+    /// every record the source publishes was received (converted, rejected
+    /// or skipped). Consumers may then treat records missing from the batch
+    /// as gone. Adapters must leave this `false` whenever they cannot vouch
+    /// for completeness (pagination cut short, a sub-request failed, a
+    /// count mismatch). Defaults to `false`.
+    pub complete: bool,
+    /// Opaque validator (an HTTP `ETag`) identifying this exact listing.
+    /// Passed back in [`FetchRequest::validator`] on the next fetch so the
+    /// adapter can ask the source whether anything changed.
+    pub validator: Option<String>,
 }
 
 impl<T> SourceBatch<T> {
@@ -130,8 +141,30 @@ impl<T> Default for SourceBatch<T> {
             records: Vec::new(),
             rejected: Vec::new(),
             skipped: 0,
+            complete: false,
+            validator: None,
         }
     }
+}
+
+/// What the caller already knows about a source before fetching it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FetchRequest {
+    /// The validator of the last complete listing that was fully processed.
+    /// Adapters that support conditional requests send it (for HTTP, as
+    /// `If-None-Match`) and answer [`Fetched::NotModified`] when the source
+    /// confirms nothing changed. Adapters without support ignore it.
+    pub validator: Option<String>,
+}
+
+/// Result of a successful [`Source::fetch`].
+#[derive(Debug)]
+pub enum Fetched<T> {
+    /// The source's current records.
+    Batch(SourceBatch<T>),
+    /// The source confirmed that its listing is identical to the one
+    /// identified by [`FetchRequest::validator`].
+    NotModified,
 }
 
 /// A source adapter: fetches external data and converts it into the domain
@@ -147,7 +180,7 @@ pub trait Source: Send + Sync {
 
     fn key(&self) -> &SourceKey;
 
-    async fn fetch(&self) -> Result<SourceBatch<Self::Record>, SourceError>;
+    async fn fetch(&self, request: &FetchRequest) -> Result<Fetched<Self::Record>, SourceError>;
 }
 
 /// The whole fetch from a source failed.
@@ -201,6 +234,11 @@ pub enum RecordErrorReason {
     },
     #[error("invalid value in `{field}`: {detail}")]
     InvalidValue { field: &'static str, detail: String },
+    /// The record is listed by the source but part of it (for example a
+    /// detail page) could not be fetched. The record still exists, so it must
+    /// not be treated as removed.
+    #[error("record details unavailable: {0}")]
+    Unavailable(String),
 }
 
 #[cfg(test)]
@@ -244,8 +282,10 @@ mod tests {
                 RecordErrorReason::MissingField("title"),
             )],
             skipped: 1,
+            ..Default::default()
         };
         assert_eq!(batch.received(), 4);
+        assert!(!batch.complete, "completeness must be claimed explicitly");
     }
 
     #[test]

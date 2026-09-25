@@ -3,52 +3,169 @@
 //! Each adapter implements [`jobhunt_core::Source`] with
 //! `Record = JobPosting` and owns everything specific to its source: the
 //! endpoint, the payload format, and the mapping into the canonical model.
+//! Supported families:
 //!
-//! Adding a source (Greenhouse, Lever, ...) means:
+//! | kind         | instance        | reads                                              |
+//! |--------------|-----------------|----------------------------------------------------|
+//! | `ashby`      | board name      | `api.ashbyhq.com/posting-api/job-board/<board>`    |
+//! | `greenhouse` | board token     | `boards-api.greenhouse.io/v1/boards/<board>/jobs`  |
+//! | `lever`      | site name       | `api.lever.co/v0/postings/<site>`                  |
+//! | `yc`         | company slug    | `www.ycombinator.com/companies/<slug>/jobs`        |
+//!
+//! [`careers`] maps company careers pages onto these boards.
+//!
+//! Adding a source family means:
 //! 1. a module with the adapter, its raw payload types and conversion;
-//! 2. a variant on [`SourceSpec`] plus its arm in [`SourceSpec::from_key`] and
-//!    [`SourceSpec::build`];
+//! 2. a variant on [`SourceSpec`] plus its arms in [`SourceSpec::from_key`],
+//!    [`SourceSpec::key`] and [`SourceSpec::build`];
 //! 3. a config list on [`SourcesConfig`];
-//! 4. fixture tests under `tests/fixtures/<source>/`.
+//! 4. fixture tests under `tests/fixtures/<source>/`, HTTP tests against a
+//!    local mock, and an `#[ignore]` live test.
+//!
+//! Nothing outside this crate (pipeline, storage, CLI output) changes.
 
 pub mod ashby;
+pub mod careers;
+mod common;
+pub mod greenhouse;
 pub mod http;
+pub mod lever;
+pub mod yc;
+
+use std::collections::HashSet;
 
 use jobhunt_core::{SourceError, SourceKey, SourceKeyError};
 use jobhunt_jobs::JobSource;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 pub use ashby::{AshbyBoard, AshbySource};
+pub use careers::{BoardRef, CareersPage};
+pub use greenhouse::{GreenhouseBoard, GreenhouseSource};
 pub use http::{HttpClient, HttpClientError, HttpSettings};
+pub use lever::{LeverRegion, LeverSite, LeverSource};
+pub use yc::{YcCompany, YcSource};
 
 /// Which sources discovery reads by default.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+///
+/// With no `[sources]` configuration at all, a built-in selection from every
+/// family is used. As soon as any family is configured, only the configured
+/// sources are read (families left out are empty), so a config file fully
+/// controls what is searched.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SourcesConfig {
-    /// Ashby job boards. Defaults to a small set of software companies.
-    #[serde(default = "ashby::default_boards")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub ashby: Vec<AshbyBoard>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub greenhouse: Vec<GreenhouseBoard>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub lever: Vec<LeverSite>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub yc: Vec<YcCompany>,
+    /// Company careers pages; each is resolved to the board it embeds.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub careers: Vec<CareersPage>,
 }
 
 impl Default for SourcesConfig {
     fn default() -> Self {
         Self {
             ashby: ashby::default_boards(),
+            greenhouse: greenhouse::default_boards(),
+            lever: lever::default_sites(),
+            yc: yc::default_companies(),
+            careers: Vec::new(),
         }
     }
 }
 
-impl SourcesConfig {
-    /// Every configured source, validated.
-    pub fn specs(&self) -> Result<Vec<SourceSpec>, SourceKeyError> {
-        self.ashby.iter().cloned().map(SourceSpec::ashby).collect()
+impl<'de> Deserialize<'de> for SourcesConfig {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Raw {
+            ashby: Option<Vec<AshbyBoard>>,
+            greenhouse: Option<Vec<GreenhouseBoard>>,
+            lever: Option<Vec<LeverSite>>,
+            yc: Option<Vec<YcCompany>>,
+            careers: Option<Vec<CareersPage>>,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        let nothing_configured = raw.ashby.is_none()
+            && raw.greenhouse.is_none()
+            && raw.lever.is_none()
+            && raw.yc.is_none()
+            && raw.careers.is_none();
+        if nothing_configured {
+            return Ok(Self::default());
+        }
+        Ok(Self {
+            ashby: raw.ashby.unwrap_or_default(),
+            greenhouse: raw.greenhouse.unwrap_or_default(),
+            lever: raw.lever.unwrap_or_default(),
+            yc: raw.yc.unwrap_or_default(),
+            careers: raw.careers.unwrap_or_default(),
+        })
     }
+}
+
+impl SourcesConfig {
+    /// Every configured board-backed source, validated. Careers pages are
+    /// resolved separately (that needs the network), see [`careers::detect`].
+    pub fn specs(&self) -> Result<Vec<SourceSpec>, SourcesConfigError> {
+        let specs = self
+            .ashby
+            .iter()
+            .cloned()
+            .map(SourceSpec::ashby)
+            .chain(self.greenhouse.iter().cloned().map(SourceSpec::greenhouse))
+            .chain(self.lever.iter().cloned().map(SourceSpec::lever))
+            .chain(self.yc.iter().cloned().map(SourceSpec::yc))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut seen = HashSet::new();
+        for spec in &specs {
+            if !seen.insert(spec.key().clone()) {
+                return Err(SourcesConfigError::Duplicate(spec.key().clone()));
+            }
+        }
+        for page in &self.careers {
+            url::Url::parse(&page.url)
+                .ok()
+                .filter(|u| matches!(u.scheme(), "http" | "https"))
+                .ok_or_else(|| SourcesConfigError::InvalidUrl(page.url.clone()))?;
+        }
+        Ok(specs)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum SourcesConfigError {
+    #[error(transparent)]
+    InvalidName(#[from] SourceKeyError),
+    #[error("source {0} is configured more than once")]
+    Duplicate(SourceKey),
+    #[error("careers page {0:?} is not an http(s) URL")]
+    InvalidUrl(String),
 }
 
 /// A fully described source instance that can be turned into an adapter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SourceSpec {
-    Ashby { key: SourceKey, board: AshbyBoard },
+    Ashby {
+        key: SourceKey,
+        board: AshbyBoard,
+    },
+    Greenhouse {
+        key: SourceKey,
+        board: GreenhouseBoard,
+    },
+    Lever {
+        key: SourceKey,
+        site: LeverSite,
+    },
+    Yc {
+        key: SourceKey,
+        company: YcCompany,
+    },
 }
 
 impl SourceSpec {
@@ -57,14 +174,53 @@ impl SourceSpec {
         Ok(Self::Ashby { key, board })
     }
 
+    pub fn greenhouse(board: GreenhouseBoard) -> Result<Self, SourceKeyError> {
+        let key = SourceKey::new(greenhouse::KIND, &board.board)?;
+        Ok(Self::Greenhouse { key, board })
+    }
+
+    pub fn lever(site: LeverSite) -> Result<Self, SourceKeyError> {
+        let key = SourceKey::new(lever::KIND, &site.site)?;
+        Ok(Self::Lever { key, site })
+    }
+
+    pub fn yc(company: YcCompany) -> Result<Self, SourceKeyError> {
+        let key = SourceKey::new(yc::KIND, &company.slug)?;
+        Ok(Self::Yc { key, company })
+    }
+
     /// Describes an unconfigured source from its key alone (for example
-    /// `ashby:posthog` given on the command line).
+    /// `greenhouse:stripe` given on the command line).
     pub fn from_key(key: &SourceKey) -> Result<Self, UnknownSourceKind> {
+        let name = key.instance().to_owned();
+        let key = key.clone();
         match key.kind() {
             ashby::KIND => Ok(Self::Ashby {
-                key: key.clone(),
+                key,
                 board: AshbyBoard {
-                    board: key.instance().to_owned(),
+                    board: name,
+                    company: None,
+                },
+            }),
+            greenhouse::KIND => Ok(Self::Greenhouse {
+                key,
+                board: GreenhouseBoard {
+                    board: name,
+                    company: None,
+                },
+            }),
+            lever::KIND => Ok(Self::Lever {
+                key,
+                site: LeverSite {
+                    site: name,
+                    company: None,
+                    region: LeverRegion::Global,
+                },
+            }),
+            yc::KIND => Ok(Self::Yc {
+                key,
+                company: YcCompany {
+                    slug: name,
                     company: None,
                 },
             }),
@@ -72,20 +228,55 @@ impl SourceSpec {
         }
     }
 
+    /// Describes the source for a board found by [`careers`], with an
+    /// optional company display name.
+    pub fn from_board(board: &BoardRef, company: Option<String>) -> Result<Self, SourceKeyError> {
+        match board.kind {
+            greenhouse::KIND => Self::greenhouse(GreenhouseBoard {
+                board: board.name.clone(),
+                company,
+            }),
+            lever::KIND => Self::lever(LeverSite {
+                site: board.name.clone(),
+                company,
+                region: board.lever_region,
+            }),
+            yc::KIND => Self::yc(YcCompany {
+                slug: board.name.clone(),
+                company,
+            }),
+            _ => Self::ashby(AshbyBoard {
+                board: board.name.clone(),
+                company,
+            }),
+        }
+    }
+
     pub fn key(&self) -> &SourceKey {
         match self {
-            Self::Ashby { key, .. } => key,
+            Self::Ashby { key, .. }
+            | Self::Greenhouse { key, .. }
+            | Self::Lever { key, .. }
+            | Self::Yc { key, .. } => key,
         }
     }
 
     pub fn build(&self, http: &HttpClient) -> Result<Box<JobSource>, SourceError> {
-        match self {
-            Self::Ashby { key, board } => Ok(Box::new(AshbySource::new(
-                key.clone(),
-                board.clone(),
-                http.clone(),
-            )?)),
-        }
+        let http = http.clone();
+        Ok(match self {
+            Self::Ashby { key, board } => {
+                Box::new(AshbySource::new(key.clone(), board.clone(), http)?)
+            }
+            Self::Greenhouse { key, board } => {
+                Box::new(GreenhouseSource::new(key.clone(), board.clone(), http)?)
+            }
+            Self::Lever { key, site } => {
+                Box::new(LeverSource::new(key.clone(), site.clone(), http)?)
+            }
+            Self::Yc { key, company } => {
+                Box::new(YcSource::new(key.clone(), company.clone(), http)?)
+            }
+        })
     }
 }
 
@@ -94,41 +285,102 @@ impl SourceSpec {
 pub struct UnknownSourceKind(pub String);
 
 /// Source kinds this build can read.
-pub const SUPPORTED_KINDS: &[&str] = &[ashby::KIND];
+pub const SUPPORTED_KINDS: &[&str] = &[ashby::KIND, greenhouse::KIND, lever::KIND, yc::KIND];
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn default_config_yields_valid_specs() {
+    fn default_config_covers_every_family() {
         let specs = SourcesConfig::default().specs().unwrap();
-        assert!(!specs.is_empty());
-        assert!(specs.iter().all(|s| s.key().kind() == "ashby"));
+        let kinds: HashSet<&str> = specs.iter().map(|s| s.key().kind()).collect();
+        assert_eq!(kinds, SUPPORTED_KINDS.iter().copied().collect());
+    }
+
+    #[test]
+    fn configuring_one_family_replaces_all_defaults() {
+        let config: SourcesConfig = toml::from_str(
+            r#"
+                [[lever]]
+                site = "spotify"
+                region = "eu"
+            "#,
+        )
+        .unwrap();
+        let specs = config.specs().unwrap();
+        assert_eq!(specs.len(), 1);
+        let SourceSpec::Lever { site, .. } = &specs[0] else {
+            panic!("expected lever");
+        };
+        assert_eq!(site.region, LeverRegion::Eu);
+
+        let empty: SourcesConfig = toml::from_str("").unwrap();
+        assert_eq!(empty, SourcesConfig::default());
     }
 
     #[test]
     fn specs_from_keys() {
-        let key: SourceKey = "ashby:posthog".parse().unwrap();
-        let spec = SourceSpec::from_key(&key).unwrap();
-        assert_eq!(spec.key(), &key);
-
+        for kind in SUPPORTED_KINDS {
+            let key: SourceKey = format!("{kind}:acme").parse().unwrap();
+            assert_eq!(SourceSpec::from_key(&key).unwrap().key(), &key);
+        }
         let unknown: SourceKey = "workday:acme".parse().unwrap();
         let err = SourceSpec::from_key(&unknown).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "unknown source kind \"workday\" (supported: ashby)"
+            "unknown source kind \"workday\" (supported: ashby, greenhouse, lever, yc)"
         );
     }
 
     #[test]
-    fn config_rejects_invalid_board_names() {
+    fn config_rejects_invalid_and_duplicate_sources() {
         let config = SourcesConfig {
             ashby: vec![AshbyBoard {
                 board: "has space".into(),
                 company: None,
             }],
+            ..SourcesConfig::default()
         };
-        assert!(config.specs().is_err());
+        assert!(matches!(
+            config.specs(),
+            Err(SourcesConfigError::InvalidName(_))
+        ));
+
+        let twice = SourcesConfig {
+            greenhouse: vec![
+                GreenhouseBoard {
+                    board: "Stripe".into(),
+                    company: None,
+                },
+                GreenhouseBoard {
+                    board: "stripe".into(),
+                    company: Some("Stripe".into()),
+                },
+            ],
+            ..SourcesConfig::default()
+        };
+        assert_eq!(
+            twice.specs().unwrap_err().to_string(),
+            "source greenhouse:stripe is configured more than once"
+        );
+
+        let bad_page = SourcesConfig {
+            careers: vec![CareersPage {
+                url: "ftp://example.com".into(),
+                company: None,
+            }],
+            ..SourcesConfig::default()
+        };
+        assert!(matches!(
+            bad_page.specs(),
+            Err(SourcesConfigError::InvalidUrl(_))
+        ));
+    }
+
+    #[test]
+    fn unknown_fields_are_rejected() {
+        assert!(toml::from_str::<SourcesConfig>("[[workday]]\nboard = \"x\"").is_err());
+        assert!(toml::from_str::<SourcesConfig>("[[lever]]\nsite = \"x\"\nsiet = \"y\"").is_err());
     }
 }
