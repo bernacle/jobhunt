@@ -17,7 +17,7 @@ use chrono::Duration;
 use common::*;
 use jobhunt_core::{IngestCounts, SourceKey, UpsertOutcome};
 use jobhunt_eligibility::profile::ProfileFacts;
-use jobhunt_eligibility::{CacheKey, cached_assess};
+use jobhunt_eligibility::{CacheKey, cached_assess, cached_assess_many};
 use jobhunt_jobs::verification::{
     FreshnessPolicy, ListingStatus, VerificationService, VerifyMode, cached,
 };
@@ -523,6 +523,38 @@ async fn feedback_rankings_and_eligibility_cache(store: &dyn Store) {
         store.cached_decision(&key).await.unwrap(),
         Some(first.decision)
     );
+
+    // Many at once (what a search does): stored decisions are reused, new
+    // ones computed and written together, and the answers are the ones the
+    // one-at-a-time path gives.
+    let both = vec![
+        verified.clone(),
+        cached(store, &records[1..]).await.unwrap(),
+    ];
+    let many = cached_assess_many(store, &both, &facts, &policy, at(4))
+        .await
+        .unwrap();
+    assert_eq!(many.len(), 2);
+    assert_eq!(many[0].decision, second.decision);
+    let keys: Vec<CacheKey> = both
+        .iter()
+        .map(|v| CacheKey::of(v, &facts).unwrap())
+        .collect();
+    let stored = store.cached_decisions(&keys).await.unwrap();
+    assert_eq!(stored.len(), 2);
+    assert_eq!(stored.get(&keys[1].key), Some(&many[1].decision));
+    let (single, reused) = cached_assess(store, &both[1], &facts, &policy, at(4))
+        .await
+        .unwrap();
+    assert!(reused, "the batch stored what it computed");
+    assert_eq!(single.decision, many[1].decision);
+    // Writing the same key twice in one batch is an upsert, not an error.
+    let twice = [
+        (keys[1].clone(), many[1].decision.clone()),
+        (keys[1].clone(), many[1].decision.clone()),
+    ];
+    store.store_decisions(&twice, at(5)).await.unwrap();
+    assert!(store.cached_decisions(&[]).await.unwrap().is_empty());
 
     // Feedback: stored verbatim, found by record, folded into state.
     let ranking = RankingService::new(store, &RuleReader).with_policy(policy);

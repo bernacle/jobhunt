@@ -9,7 +9,9 @@
 use std::collections::{BTreeMap, HashMap};
 
 use chrono::{DateTime, Utc};
-use jobhunt_eligibility::{Assessment, EligibilityRepository, ProfileFacts, cached_assess};
+use jobhunt_eligibility::{
+    Assessment, EligibilityRepository, ProfileFacts, cached_assess, cached_assess_many,
+};
 use jobhunt_jobs::verification::{FreshnessPolicy, VerificationRepository, cached};
 use jobhunt_jobs::{JobId, JobQuery, JobRecord, JobRepository, JobStatus, OpportunityId};
 use jobhunt_profile::{ProfileData, ProfileError, ProfileRepository, ProfileService};
@@ -394,6 +396,11 @@ where
         let mut rankings: Vec<(usize, Ranking)> = Vec::new();
         let listed = self.repo.search(&search).await?;
         let considered = listed.len();
+        // Gather every candidate first, then assess them together: one
+        // eligibility lookup (and one write) for the whole search, not one
+        // per opportunity.
+        let mut gathered: Vec<(Vec<JobRecord>, OpportunityState)> = Vec::new();
+        let mut verified = Vec::new();
         for record in listed {
             let records = self.repo.opportunity_records(record.opportunity_id).await?;
             let state = OpportunityState::of(
@@ -401,7 +408,12 @@ where
                     .iter()
                     .flat_map(|r| by_job.get(&r.id).cloned().unwrap_or_default()),
             );
-            let assessment = self.assess(&records, &facts, now).await?;
+            verified.push(cached(self.repo, &records).await?);
+            gathered.push((records, state));
+        }
+        let assessments =
+            cached_assess_many(self.repo, &verified, &facts, &self.policy, now).await?;
+        for ((records, state), assessment) in gathered.into_iter().zip(assessments) {
             let candidate = Candidate {
                 records: &records,
                 assessment: &assessment,

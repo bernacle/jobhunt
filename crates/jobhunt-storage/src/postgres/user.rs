@@ -401,6 +401,102 @@ impl EligibilityRepository for PgUserStore {
         .map_err(query_error("storing an eligibility decision"))?;
         Ok(())
     }
+
+    /// One query for a whole search (a lookup per opportunity is a network
+    /// round trip each).
+    async fn cached_decisions(
+        &self,
+        keys: &[CacheKey],
+    ) -> Result<HashMap<String, EligibilityDecision>, StorageError> {
+        let by_key: HashMap<&str, &CacheKey> = keys.iter().map(|k| (k.key.as_str(), k)).collect();
+        let opportunities: Vec<String> = keys.iter().map(|k| k.opportunity.to_string()).collect();
+        let profiles: Vec<&str> = keys.iter().map(|k| k.profile_id.as_str()).collect();
+        let digests: Vec<&str> = keys.iter().map(|k| k.key.as_str()).collect();
+        let rows: Vec<(String, Vec<u8>)> = sqlx::query_as(
+            "SELECT d.cache_key, d.decision FROM eligibility_decisions d \
+             JOIN unnest($2::text[], $3::text[], $4::text[]) AS k(opportunity_id, profile_id, cache_key) \
+             ON d.opportunity_id = k.opportunity_id AND d.profile_id = k.profile_id \
+             AND d.cache_key = k.cache_key \
+             WHERE d.user_id = $1",
+        )
+        .bind(self.user.as_str())
+        .bind(&opportunities)
+        .bind(&profiles)
+        .bind(&digests)
+        .fetch_all(self.shared.pool())
+        .await
+        .map_err(query_error("loading eligibility decisions"))?;
+        let mut out = HashMap::with_capacity(rows.len());
+        for (digest, sealed) in rows {
+            let Some(key) = by_key.get(digest.as_str()) else {
+                continue;
+            };
+            let json = self.open(&eligibility_context(&self.user, key), &sealed)?;
+            let decision = serde_json::from_slice(&json)
+                .map_err(|e| corrupt(&digest, format!("eligibility decision: {e}")))?;
+            out.insert(digest, decision);
+        }
+        Ok(out)
+    }
+
+    /// One statement for every new decision of a search.
+    async fn store_decisions(
+        &self,
+        decisions: &[(CacheKey, EligibilityDecision)],
+        at: DateTime<Utc>,
+    ) -> Result<(), StorageError> {
+        let mut opportunities = Vec::with_capacity(decisions.len());
+        let mut profiles = Vec::with_capacity(decisions.len());
+        let mut digests = Vec::with_capacity(decisions.len());
+        let mut revisions = Vec::with_capacity(decisions.len());
+        let mut rules = Vec::with_capacity(decisions.len());
+        let mut statuses = Vec::with_capacity(decisions.len());
+        let mut sealed = Vec::with_capacity(decisions.len());
+        let mut seen = std::collections::HashSet::new();
+        for (key, decision) in decisions {
+            // One row per key: a statement cannot upsert the same row twice.
+            if !seen.insert((key.opportunity, key.profile_id.as_str(), key.key.as_str())) {
+                continue;
+            }
+            let json = serde_json::to_vec(decision).map_err(|e| StorageError::Query {
+                operation: "encoding an eligibility decision",
+                source: Box::new(e),
+            })?;
+            sealed.push(self.seal(&eligibility_context(&self.user, key), &json)?);
+            opportunities.push(key.opportunity.to_string());
+            profiles.push(key.profile_id.clone());
+            digests.push(key.key.clone());
+            revisions.push(i64::try_from(key.profile_revision).unwrap_or(i64::MAX));
+            rules.push(decision.rules_version.clone());
+            statuses.push(decision.status.as_str().to_owned());
+        }
+        if sealed.is_empty() {
+            return Ok(());
+        }
+        sqlx::query(
+            "INSERT INTO eligibility_decisions (user_id, opportunity_id, profile_id, cache_key, \
+             profile_revision, rules_version, status, decided_at, decision) \
+             SELECT $1, o, p, k, r, v, s, $8, d \
+             FROM unnest($2::text[], $3::text[], $4::text[], $5::bigint[], $6::text[], \
+             $7::text[], $9::bytea[]) AS t(o, p, k, r, v, s, d) \
+             ON CONFLICT (user_id, opportunity_id, profile_id, cache_key) DO UPDATE SET \
+             status = excluded.status, decided_at = excluded.decided_at, \
+             decision = excluded.decision",
+        )
+        .bind(self.user.as_str())
+        .bind(&opportunities)
+        .bind(&profiles)
+        .bind(&digests)
+        .bind(&revisions)
+        .bind(&rules)
+        .bind(&statuses)
+        .bind(at)
+        .bind(&sealed)
+        .execute(self.shared.pool())
+        .await
+        .map_err(query_error("storing eligibility decisions"))?;
+        Ok(())
+    }
 }
 
 fn eligibility_context(user: &UserId, key: &CacheKey) -> String {
