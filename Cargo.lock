@@ -1354,6 +1354,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "jobhunt-eligibility"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "jobhunt-core",
+ "jobhunt-jobs",
+ "jobhunt-profile",
+ "jobhunt-sources",
+]
+
+[[package]]
 name = "jobhunt-jobs"
 version = "0.1.0"
 dependencies = [

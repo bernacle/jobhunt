@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/jobhunt-core",
+    "crates/jobhunt-eligibility",
     "crates/jobhunt-jobs",
     "crates/jobhunt-profile",
     "crates/jobhunt-resume",
@@ -21,6 +22,7 @@ publish = false
 [workspace.dependencies]
 # Internal crates
 jobhunt-core = { path = "crates/jobhunt-core" }
+jobhunt-eligibility = { path = "crates/jobhunt-eligibility" }
 jobhunt-jobs = { path = "crates/jobhunt-jobs" }
 jobhunt-profile = { path = "crates/jobhunt-profile" }
 jobhunt-resume = { path = "crates/jobhunt-resume" }
