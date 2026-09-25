@@ -1,0 +1,35 @@
+[package]
+name = "jobhunt-app"
+description = "The local JobHunt application: configuration, storage and the use cases the CLI and the MCP server share."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+directories.workspace = true
+futures.workspace = true
+jobhunt-core.workspace = true
+jobhunt-eligibility.workspace = true
+jobhunt-jobs.workspace = true
+jobhunt-profile.workspace = true
+jobhunt-ranking.workspace = true
+jobhunt-sources.workspace = true
+jobhunt-storage.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+jobhunt-resume.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

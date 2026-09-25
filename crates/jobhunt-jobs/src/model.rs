@@ -257,6 +257,45 @@ impl WorkplaceType {
     }
 }
 
+/// Serializes a canonical-string enum as its `as_str` form, and reads it
+/// back with `from_canonical` (unknown strings are errors for closed
+/// enums, and kept as `Other` for open ones).
+macro_rules! canonical_serde {
+    ($name:ident, closed) => {
+        impl Serialize for $name {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.serialize_str(self.as_str())
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let text = String::deserialize(deserializer)?;
+                Self::from_canonical(&text).ok_or_else(|| {
+                    serde::de::Error::custom(format!("unknown {} {text:?}", stringify!($name)))
+                })
+            }
+        }
+    };
+    ($name:ident, open) => {
+        impl Serialize for $name {
+            fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                serializer.serialize_str(self.as_str())
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                Ok(Self::from_canonical(&String::deserialize(deserializer)?))
+            }
+        }
+    };
+}
+
+canonical_serde!(JobStatus, closed);
+canonical_serde!(EmploymentType, open);
+canonical_serde!(WorkplaceType, open);
+
 /// A location as reported by the source. Values are the source's raw text
 /// (cleaned of stray whitespace); they are not geocoded or normalized.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -338,7 +377,7 @@ pub enum PayInterval {
 /// This is the unit of discovery: it carries everything the source said about
 /// the job plus where it came from, but none of JobHunt's own bookkeeping
 /// (that lives on [`JobRecord`]).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobPosting {
     pub provenance: Provenance,
     /// Canonical URL of the job posting page.
@@ -633,7 +672,7 @@ impl JobSnapshot {
 }
 
 /// A job as stored by JobHunt: the canonical posting plus bookkeeping.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct JobRecord {
     pub id: JobId,
     pub posting: JobPosting,

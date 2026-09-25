@@ -134,9 +134,9 @@ async fn checks_jobs_against_the_profile() {
     let env = Env::new().await;
 
     // Without a profile there is nothing to check against.
-    let out = env.ok(&["find", "--offline", "-n", "50"]);
+    let out = env.ok(&["find", "--raw", "--offline", "-n", "50"]);
     assert!(!out.contains("ELIGIBLE"), "{out}");
-    let output = env.run(&["find", "--offline", "--eligible"]);
+    let output = env.run(&["find", "--raw", "--offline", "--eligible"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("need a career profile"));
 
@@ -150,7 +150,7 @@ async fn checks_jobs_against_the_profile() {
         "require",
     ]);
 
-    let out = env.ok(&["find", "--offline", "-n", "50"]);
+    let out = env.ok(&["find", "--raw", "--offline", "-n", "50"]);
     for expected in [
         "✓ ELIGIBLE: Germany is within the listed Europe region",
         "✗ INELIGIBLE: The listing limits remote work to Canada or the United States; you live in Germany",
@@ -158,14 +158,14 @@ async fn checks_jobs_against_the_profile() {
     ] {
         assert!(out.contains(expected), "missing {expected:?} in:\n{out}");
     }
-    let eligible = env.ok(&["find", "--offline", "--eligible", "-n", "50"]);
+    let eligible = env.ok(&["find", "--raw", "--offline", "--eligible", "-n", "50"]);
     assert!(eligible.contains("Germany is within"), "{eligible}");
     assert!(!eligible.contains("✗"), "{eligible}");
     assert!(!eligible.contains("UNCLEAR"), "{eligible}");
 
     // One job in full: every answer with the posting's words, from what is
     // stored (not verified yet, so not recommended).
-    let listed = env.ok(&["find", "--offline", "Fullstack"]);
+    let listed = env.ok(&["find", "--raw", "--offline", "Fullstack"]);
     let id = job_id(&listed);
     let out = env.ok(&["check", &id]);
     for expected in [

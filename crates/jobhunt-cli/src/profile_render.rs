@@ -835,11 +835,19 @@ fn statement_line(out: &mut impl Write, s: &PreferenceStatement) -> io::Result<(
 
 /// What `jobhunt preferences add` understood.
 pub fn statement_outcome(out: &mut impl Write, outcome: &StatementOutcome) -> io::Result<()> {
-    writeln!(
-        out,
-        "Saved your statement ({}).",
-        short(outcome.statement.id)
-    )?;
+    if outcome.repeated {
+        writeln!(
+            out,
+            "Already saved ({}), and still in effect: nothing changed.",
+            short(outcome.statement.id)
+        )?;
+    } else {
+        writeln!(
+            out,
+            "Saved your statement ({}).",
+            short(outcome.statement.id)
+        )?;
+    }
     if outcome.preferences.is_empty() {
         writeln!(
             out,

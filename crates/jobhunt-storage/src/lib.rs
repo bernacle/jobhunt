@@ -15,6 +15,8 @@
 mod profile;
 mod ranking;
 mod sqlite;
+mod state;
 mod verification;
 
-pub use sqlite::SqliteJobStore;
+pub use sqlite::{SqliteJobStore, StoreStats};
+pub use state::{ProfileWrite, StateImport, StateImported};

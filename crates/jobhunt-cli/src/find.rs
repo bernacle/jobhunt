@@ -1,59 +1,105 @@
-//! `jobhunt find`: discover jobs from the configured sources, store them, and
-//! show the matching ones.
+//! `jobhunt find`: the few opportunities worth your time.
+//!
+//! With a profile, `find` is the personalized shortlist
+//! ([`jobhunt_app::LocalApp::find`]): it refreshes job boards only when the
+//! stored jobs are stale, ranks every open opportunity, verifies the best
+//! candidates, and prints a handful with why. `--raw` (or `--source`,
+//! `--eligible`, `--possible`) lists the matching stored jobs instead, the
+//! inventory `find` printed before it was personalized. Without a profile
+//! the inventory is shown, with how to start one.
+//!
+//! `jobhunt rank` is the shortlist from stored jobs only (`find --offline`).
 
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::process::ExitCode;
-use std::str::FromStr;
 
-use anyhow::{Context, bail};
-use chrono::Utc;
-use jobhunt_core::{ErrorChain, SourceKey};
+use anyhow::bail;
+use chrono::{DateTime, Utc};
+use jobhunt_app::discover::SourceArg;
+use jobhunt_app::shortlist::{MAX_LIMIT, SearchResults, ShortlistItem};
+use jobhunt_app::views::{EligibilityStatus, VerificationState};
+use jobhunt_app::{AppError, FindRequest, LocalApp, RefreshMode, RefreshReason};
+use jobhunt_core::ErrorChain;
 use jobhunt_eligibility::{Eligibility, EligibilityDecision, evaluate_record};
 use jobhunt_jobs::{
-    Discovery, DiscoveryReport, JobId, JobQuery, JobRecord, JobRepository, JobStatus,
-    OpportunityId, ScanKind,
+    DiscoveryReport, JobId, JobQuery, JobRecord, JobRepository, JobStatus, OpportunityId, ScanKind,
 };
-use jobhunt_sources::{CareersPage, HttpClient, SourceSpec, careers};
 use jobhunt_storage::SqliteJobStore;
-use url::Url;
 
-use crate::config::{AppConfig, LoadedConfig};
-use crate::eligibility;
-use crate::render::{self, plural};
+use crate::config::LoadedConfig;
+use crate::local::{StderrProgress, finish, print_json, with_app};
+use crate::rank_render::{GOOD, HEADING, OPEN, tier_style};
+use crate::render::{self, DIM, TITLE, plural};
 
 #[derive(Debug, clap::Args)]
 pub struct FindArgs {
-    /// Only show jobs whose title, company, location, department or team
-    /// contain every one of these words.
+    /// Only consider jobs whose title, company, location, department or
+    /// team contain every one of these words.
     #[arg(value_name = "WORDS")]
     pub query: Vec<String>,
 
-    /// Maximum number of jobs to show.
-    #[arg(short = 'n', long, default_value_t = 20, value_name = "N")]
-    pub limit: usize,
+    /// How many to show (default 5; 20 with --raw).
+    #[arg(short = 'n', long, value_name = "N")]
+    pub limit: Option<usize>,
 
-    /// Search only this source instead of the configured ones: KIND:NAME
-    /// (ashby:linear, greenhouse:stripe, lever:spotify, yc:posthog), a job
-    /// board URL, or a company careers page URL. Repeatable.
-    #[arg(long = "source", value_name = "SOURCE")]
-    pub sources: Vec<SourceArg>,
+    /// Also show opportunities that rank as maybe or low priority.
+    #[arg(long)]
+    pub all: bool,
 
-    /// Don't fetch anything; search the jobs already stored locally.
+    /// Read every configured job board first, even if the stored jobs are
+    /// fresh.
+    #[arg(long, conflicts_with = "offline")]
+    pub refresh: bool,
+
+    /// Don't touch the network: no refresh, no verification. Work from
+    /// what is stored.
     #[arg(long)]
     pub offline: bool,
 
-    /// Only show jobs your profile says you can take (eligible, or
-    /// conditionally eligible: relocating, or sponsorship the posting offers).
+    /// List every matching stored job (unranked, with source details)
+    /// instead of the personalized shortlist.
+    #[arg(long)]
+    pub raw: bool,
+
+    /// Read only this source (implies --raw): KIND:NAME (ashby:linear,
+    /// greenhouse:stripe, lever:spotify, yc:posthog), a job board URL, or a
+    /// company careers page URL. Repeatable.
+    #[arg(long = "source", value_name = "SOURCE")]
+    pub sources: Vec<SourceArg>,
+
+    /// Only jobs your profile says you can take (implies --raw): eligible,
+    /// or conditionally eligible (relocating, or sponsorship the posting
+    /// offers).
     #[arg(long, conflicts_with = "possible")]
     pub eligible: bool,
 
-    /// Hide jobs your profile rules out; keep the uncertain ones.
+    /// Hide jobs your profile rules out; keep the uncertain ones (implies
+    /// --raw).
     #[arg(long)]
     pub possible: bool,
+
+    /// Print the shortlist as JSON (the structure the MCP search_jobs tool
+    /// returns).
+    #[arg(long, conflicts_with = "raw")]
+    pub json: bool,
 }
 
 impl FindArgs {
+    fn raw_mode(&self) -> bool {
+        self.raw || !self.sources.is_empty() || self.eligible || self.possible
+    }
+
+    fn refresh_mode(&self) -> RefreshMode {
+        if self.offline {
+            RefreshMode::Never
+        } else if self.refresh {
+            RefreshMode::Always
+        } else {
+            RefreshMode::Auto
+        }
+    }
+
     /// The lowest decision to show, when filtering by eligibility.
     fn min_status(&self) -> Option<Eligibility> {
         if self.eligible {
@@ -66,88 +112,370 @@ impl FindArgs {
     }
 }
 
-/// A `--source` value.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SourceArg {
-    Key(SourceKey),
-    Url(Url),
+/// `jobhunt rank`: the shortlist from stored jobs.
+#[derive(Debug, clap::Args)]
+pub struct RankArgs {
+    #[arg(value_name = "WORDS")]
+    pub query: Vec<String>,
+    #[arg(short = 'n', long, default_value_t = 10, value_name = "N")]
+    pub limit: usize,
+    #[arg(long)]
+    pub all: bool,
 }
 
-impl FromStr for SourceArg {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.contains("://") {
-            let url = Url::parse(s).map_err(|e| format!("invalid URL {s:?}: {e}"))?;
-            if !matches!(url.scheme(), "http" | "https") {
-                return Err(format!("{s:?} is not an http(s) URL"));
-            }
-            return Ok(Self::Url(url));
-        }
-        s.parse().map(Self::Key).map_err(|e| e.to_string())
-    }
+pub async fn rank(args: RankArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
+    execute(
+        FindArgs {
+            query: args.query,
+            limit: Some(args.limit),
+            all: args.all,
+            refresh: false,
+            offline: true,
+            raw: false,
+            sources: Vec::new(),
+            eligible: false,
+            possible: false,
+            json: false,
+        },
+        loaded,
+        0,
+        true,
+    )
+    .await
 }
 
 pub async fn run(args: FindArgs, loaded: &LoadedConfig, verbosity: u8) -> anyhow::Result<ExitCode> {
-    let config = &loaded.config;
-    let http = HttpClient::new(config.discovery.http_settings())?;
-    let specs = select_sources(&args.sources, config, &http, args.offline).await?;
-    let store = SqliteJobStore::open(&loaded.database)
-        .await
-        .context("could not open the local job database")?;
+    execute(args, loaded, verbosity, false).await
+}
 
-    let mut query = JobQuery {
-        // Offline without --source searches everything stored.
-        sources: if args.offline && args.sources.is_empty() {
-            Vec::new()
+async fn execute(
+    args: FindArgs,
+    loaded: &LoadedConfig,
+    verbosity: u8,
+    personal_only: bool,
+) -> anyhow::Result<ExitCode> {
+    with_app!(loaded, |app| {
+        let has_profile = app.profile_facts().await?.is_some();
+        if !has_profile && (personal_only || args.json) {
+            return Err(AppError::NoProfile.into());
+        }
+        if args.raw_mode() || !has_profile {
+            return raw(&app, &args, verbosity, has_profile).await;
+        }
+        shortlist(&app, &args, verbosity).await
+    })
+}
+
+async fn shortlist(app: &LocalApp, args: &FindArgs, verbosity: u8) -> anyhow::Result<ExitCode> {
+    let limit = args.limit.unwrap_or(5);
+    if limit == 0 || limit > MAX_LIMIT {
+        bail!("--limit must be between 1 and {MAX_LIMIT}");
+    }
+    let request = FindRequest {
+        text: args.query.join(" "),
+        limit,
+        all_tiers: args.all,
+        refresh: args.refresh_mode(),
+        verify: !args.offline,
+    };
+    let now = jobhunt_app::now();
+    let found = app.find(&request, &StderrProgress::search(), now).await?;
+    match &found.refresh.report {
+        Some(report) => {
+            report_problems(report, &found.refresh.warnings);
+            if verbosity > 0 {
+                let _ = render::scan_table(&mut anstream::stderr().lock(), report);
+            }
+        }
+        None => {
+            for warning in &found.refresh.warnings {
+                eprintln!("warning: {warning}");
+            }
+        }
+    }
+    let results = SearchResults::of(&found, now);
+    if args.json {
+        return print_json(&results);
+    }
+    finish(
+        write_shortlist(
+            &mut anstream::stdout().lock(),
+            &results,
+            &found.refresh.reason,
+            found.refresh.report.as_ref(),
+            now,
+        ),
+        "the shortlist",
+    )
+}
+
+fn verification_line(item: &ShortlistItem, now: DateTime<Utc>) -> String {
+    let v = &item.verification;
+    let when = v
+        .verified_at
+        .as_deref()
+        .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
+        .map(|t| jobhunt_jobs::verification::ago(now - t.with_timezone(&Utc)));
+    let (mark, style, text) = match (v.state, v.trusted) {
+        (VerificationState::VerifiedActive, true) => (
+            "✓",
+            GOOD,
+            format!("Verified open {}", when.unwrap_or_default()),
+        ),
+        (VerificationState::VerifiedActive, false) => (
+            "~",
+            OPEN,
+            format!(
+                "Verified open {} ({})",
+                when.unwrap_or_default(),
+                v.not_trusted_because.clone().unwrap_or_default()
+            ),
+        ),
+        (VerificationState::CouldNotVerify, _) => ("?", OPEN, "Could not verify yet".to_owned()),
+        (VerificationState::NotVerified, _) => ("?", OPEN, "Not verified yet".to_owned()),
+        (VerificationState::VerifiedClosed | VerificationState::ClosedByDiscovery, _) => {
+            ("✗", crate::rank_render::BAD, "Closed".to_owned())
+        }
+    };
+    let (emark, estyle, elabel) = match item.eligibility.status {
+        EligibilityStatus::Eligible => ("✓", GOOD, "Eligible"),
+        EligibilityStatus::Conditional => ("~", OPEN, "Eligible if"),
+        EligibilityStatus::Uncertain => ("?", OPEN, "Eligibility unclear"),
+        EligibilityStatus::Ineligible => ("✗", crate::rank_render::BAD, "Not eligible"),
+        EligibilityStatus::NotChecked => ("?", OPEN, "Eligibility not checked"),
+    };
+    format!(
+        "{style}{mark} {text}{style:#} · {estyle}{emark} {elabel}{estyle:#}{DIM}: {}{DIM:#}",
+        item.eligibility.headline
+    )
+}
+
+fn write_shortlist(
+    out: &mut impl Write,
+    r: &SearchResults,
+    reason: &RefreshReason,
+    report: Option<&DiscoveryReport>,
+    now: DateTime<Utc>,
+) -> io::Result<()> {
+    let f = &r.funnel;
+    writeln!(
+        out,
+        "Checked {}",
+        plural(f.checked as u64, "open job", "open jobs")
+    )?;
+    writeln!(
+        out,
+        "{} passed basic eligibility",
+        group(f.passed_eligibility)
+    )?;
+    writeln!(out, "{} looked plausible", group(f.plausible))?;
+    writeln!(
+        out,
+        "{} worth reviewing",
+        match f.worth_reviewing {
+            1 => "1 is".to_owned(),
+            n => format!("{} are", group(n)),
+        }
+    )?;
+    writeln!(out)?;
+    if r.results.is_empty() {
+        if f.checked == 0 {
+            writeln!(
+                out,
+                "No stored job matches{}.",
+                r.query
+                    .as_deref()
+                    .map(|q| format!(" “{q}”"))
+                    .unwrap_or_default()
+            )?;
+        } else if f.passed_eligibility == 0 {
+            writeln!(
+                out,
+                "Nothing to recommend: every match is ruled out (see below)."
+            )?;
         } else {
-            specs.iter().map(|s| s.key().clone()).collect()
+            writeln!(
+                out,
+                "No opportunity stands out yet: {} rank as maybe or low priority (--all shows them).",
+                plural(
+                    (f.passed_eligibility - f.worth_reviewing) as u64,
+                    "job",
+                    "jobs"
+                )
+            )?;
+        }
+        writeln!(out)?;
+    }
+    for (i, item) in r.results.iter().enumerate() {
+        let tier = match item.tier {
+            jobhunt_app::views::FitTier::StrongFit => jobhunt_ranking::Tier::StrongFit,
+            jobhunt_app::views::FitTier::WorthReviewing => jobhunt_ranking::Tier::WorthReviewing,
+            jobhunt_app::views::FitTier::Maybe => jobhunt_ranking::Tier::Maybe,
+            jobhunt_app::views::FitTier::LowPriority => jobhunt_ranking::Tier::LowPriority,
+        };
+        let s = tier_style(tier);
+        writeln!(
+            out,
+            " {DIM}{:>2}.{DIM:#} {TITLE}{}{TITLE:#} — {}   {s}{}{s:#}",
+            i + 1,
+            item.title,
+            item.company,
+            tier.label()
+        )?;
+        writeln!(out, "     {DIM}{}{DIM:#}", item.summary)?;
+        writeln!(out, "     {}", verification_line(item, now))?;
+        if !item.why.is_empty() {
+            writeln!(
+                out,
+                "     {HEADING}Why this may be worth your time{HEADING:#}"
+            )?;
+            for line in item.why.iter().take(3) {
+                writeln!(out, "       {GOOD}+{GOOD:#} {line}")?;
+            }
+        }
+        if !item.consider.is_empty() {
+            writeln!(out, "     {HEADING}Things to consider{HEADING:#}")?;
+            for line in &item.consider {
+                writeln!(out, "       {OPEN}-{OPEN:#} {line}")?;
+            }
+        }
+        writeln!(
+            out,
+            "     {DIM}{} · {}{DIM:#}",
+            item.short_id, item.next_step
+        )?;
+        writeln!(out)?;
+    }
+    let n = &r.not_shown;
+    let mut not_shown: Vec<String> = Vec::new();
+    let mut add = |count: usize, one: &str, many: &str| {
+        if count > 0 {
+            not_shown.push(plural(count as u64, one, many));
+        }
+    };
+    add(n.ineligible, "job you can't take", "jobs you can't take");
+    add(
+        n.below_pay_minimum,
+        "job below your pay minimum",
+        "jobs below your pay minimum",
+    );
+    add(n.rejected, "you rejected", "you rejected");
+    add(n.in_pipeline, "in your pipeline", "in your pipeline");
+    add(n.closed, "closed", "closed");
+    add(
+        n.lower_tiers,
+        "maybe or low priority (--all)",
+        "maybe or low priority (--all)",
+    );
+    add(n.beyond_limit, "more beyond --limit", "more beyond --limit");
+    if !not_shown.is_empty() {
+        writeln!(out, "{DIM}Not shown: {}.{DIM:#}", not_shown.join(" · "))?;
+    }
+    let l = &r.learning;
+    let freshness = match report {
+        Some(report) => render::run_summary(report),
+        None => match reason {
+            RefreshReason::Disabled => {
+                "Offline: used stored jobs without refreshing or verifying them.".to_owned()
+            }
+            other => format!(
+                "Used stored jobs ({}; --refresh reads the job boards now).",
+                other.describe(now)
+            ),
         },
+    };
+    writeln!(out, "{DIM}{freshness}{DIM:#}")?;
+    if r.verified_now > 0 {
+        writeln!(
+            out,
+            "{DIM}Verified {} at {} now.{DIM:#}",
+            plural(r.verified_now as u64, "listing", "listings"),
+            if r.verified_now == 1 {
+                "its source"
+            } else {
+                "their sources"
+            }
+        )?;
+    }
+    writeln!(
+        out,
+        "{DIM}Ranked against your profile{}. Tiers are coarse on purpose; \
+         `jobhunt why <id>` shows every reason.{DIM:#}",
+        if l.feedback > 0 {
+            format!(
+                ", {} and {} learned from it",
+                plural(l.feedback as u64, "piece of feedback", "pieces of feedback"),
+                plural(l.active_patterns as u64, "pattern", "patterns")
+            )
+        } else {
+            String::new()
+        }
+    )?;
+    if !l.has_preferences {
+        writeln!(
+            out,
+            "{DIM}Ranking improves with preferences and feedback: jobhunt preferences add \"…\", \
+             then jobhunt save|reject <id> --reason \"…\".{DIM:#}"
+        )?;
+    }
+    out.flush()
+}
+
+fn group(n: usize) -> String {
+    jobhunt_profile::preferences::group_thousands(n as u64)
+}
+
+/// The inventory: every matching stored job, unranked.
+async fn raw(
+    app: &LocalApp,
+    args: &FindArgs,
+    verbosity: u8,
+    has_profile: bool,
+) -> anyhow::Result<ExitCode> {
+    let now = jobhunt_app::now();
+    let mode = if args.offline {
+        RefreshMode::Never
+    } else if args.refresh {
+        RefreshMode::Always
+    } else {
+        RefreshMode::Auto
+    };
+    let refresh = app
+        .refresh(mode, &args.sources, &StderrProgress::search(), now)
+        .await?;
+    if let Some(report) = &refresh.report {
+        report_problems(report, &refresh.warnings);
+        if verbosity > 0 {
+            let _ = render::scan_table(&mut anstream::stderr().lock(), report);
+        }
+    }
+    let store = app.store();
+    let limit = args.limit.unwrap_or(20);
+    let requested = if args.sources.is_empty() {
+        Vec::new()
+    } else {
+        app.selected_sources(&args.sources)
+            .await?
+            .iter()
+            .map(|s| s.key().clone())
+            .collect()
+    };
+    let mut query = JobQuery {
+        sources: requested,
         status: Some(JobStatus::Open),
         distinct_opportunities: true,
-        limit: Some(args.limit),
+        limit: Some(limit),
         ..JobQuery::default()
     }
     .with_text(&args.query.join(" "));
-
-    let report = if args.offline {
-        None
-    } else {
-        let sources = specs
-            .iter()
-            .map(|spec| spec.build(&http))
-            .collect::<Result<Vec<_>, _>>()?;
-        eprintln!(
-            "Searching {}…",
-            plural(sources.len() as u64, "source", "sources")
-        );
-        let report = Discovery::new(&store)
-            .with_concurrency(config.discovery.concurrency)
-            .with_validator_max_age(config.discovery.validator_max_age())
-            .run(&sources)
-            .await
-            .context("discovery failed while saving jobs")?;
-        report_problems(&report);
-        if verbosity > 0 {
-            // Diagnostics go to stderr, next to the logs.
-            let _ = render::scan_table(&mut anstream::stderr().lock(), &report);
-        }
-        if report.succeeded() == 0 && !report.sources.is_empty() {
-            store.close().await;
-            bail!(
-                "could not reach any source ({} failed)",
-                report.sources.len()
-            );
-        }
-        // Only show jobs listed at their source during this run.
+    if let Some(report) = &refresh.report {
+        // Only jobs listed at their source during this run.
         query.seen_since = Some(report.started_at);
-        Some(report)
-    };
+    }
 
-    let user = eligibility::profile_facts(&store).await?;
+    let user = app.profile_facts().await?;
     let (records, total, verdicts) = match (args.min_status(), &user) {
         (Some(_), None) => {
-            store.close().await;
             bail!(
                 "--eligible and --possible need a career profile: run `jobhunt init <resume>` \
                  or `jobhunt preferences set location <place>`"
@@ -161,13 +489,13 @@ pub async fn run(args: FindArgs, loaded: &LoadedConfig, verbosity: u8) -> anyhow
             for record in store.search(&query).await? {
                 let a = evaluate_record(&record, user);
                 // A job its source says is gone is never offered as a match.
-                if a.status >= min && verified_closed(&store, &record).await?.is_none() {
+                if a.status >= min && verified_closed(store, &record).await?.is_none() {
                     verdicts.insert(record.id, a);
                     kept.push(record);
                 }
             }
             let total = kept.len() as u64;
-            kept.truncate(args.limit);
+            kept.truncate(limit);
             (kept, total, verdicts)
         }
         (None, user) => {
@@ -180,30 +508,26 @@ pub async fn run(args: FindArgs, loaded: &LoadedConfig, verbosity: u8) -> anyhow
             (records, total, verdicts)
         }
     };
-    let also_listed = other_listings(&store, &records).await?;
+    let also_listed = other_listings(store, &records).await?;
     let mut closed = HashMap::new();
     for record in &records {
-        if let Some(at) = verified_closed(&store, record).await? {
+        if let Some(at) = verified_closed(store, record).await? {
             closed.insert(record.id, at);
         }
     }
-    store.close().await;
-
-    match print_results(
-        &records,
-        &also_listed,
-        &verdicts,
-        &closed,
-        total,
-        report.as_ref(),
-        &args,
-    ) {
-        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(ExitCode::SUCCESS),
-        other => {
-            other.context("could not write results")?;
-            Ok(ExitCode::SUCCESS)
-        }
-    }
+    finish(
+        print_results(
+            &records,
+            &also_listed,
+            &verdicts,
+            &closed,
+            total,
+            refresh.report.as_ref(),
+            args,
+            has_profile,
+        ),
+        "results",
+    )
 }
 
 /// When the job's latest verification found it closed, if that is newer
@@ -211,7 +535,7 @@ pub async fn run(args: FindArgs, loaded: &LoadedConfig, verbosity: u8) -> anyhow
 async fn verified_closed(
     store: &SqliteJobStore,
     record: &JobRecord,
-) -> anyhow::Result<Option<chrono::DateTime<Utc>>> {
+) -> anyhow::Result<Option<DateTime<Utc>>> {
     use jobhunt_jobs::verification::{ListingStatus, VerificationRepository};
     Ok(store
         .latest_verification(record.id)
@@ -239,105 +563,10 @@ async fn other_listings(
     Ok(others)
 }
 
-/// The sources to read: the ones named with `--source` (using configured
-/// details such as the company name when available), else all configured
-/// ones, including boards found on configured careers pages.
-async fn select_sources(
-    requested: &[SourceArg],
-    config: &AppConfig,
-    http: &HttpClient,
-    offline: bool,
-) -> anyhow::Result<Vec<SourceSpec>> {
-    let configured = config
-        .sources
-        .specs()
-        .context("invalid source in configuration")?;
-    let mut selected: Vec<SourceSpec> = Vec::new();
-    let add = |spec: SourceSpec, selected: &mut Vec<SourceSpec>| {
-        if !selected.iter().any(|s| s.key() == spec.key()) {
-            let spec = configured
-                .iter()
-                .find(|c| c.key() == spec.key())
-                .cloned()
-                .unwrap_or(spec);
-            selected.push(spec);
-        }
-    };
-
-    if requested.is_empty() {
-        for spec in configured.iter().cloned() {
-            add(spec, &mut selected);
-        }
-        if !offline {
-            let resolved = futures::future::join_all(
-                config
-                    .sources
-                    .careers
-                    .iter()
-                    .map(|page| async move { (page, resolve_page(http, page).await) }),
-            )
-            .await;
-            for (page, result) in resolved {
-                match result {
-                    Ok(specs) => specs.into_iter().for_each(|s| add(s, &mut selected)),
-                    Err(error) => {
-                        eprintln!("warning: skipped careers page {}: {error:#}", page.url)
-                    }
-                }
-            }
-        }
-        return Ok(selected);
+pub(crate) fn report_problems(report: &DiscoveryReport, warnings: &[String]) {
+    for warning in warnings {
+        eprintln!("warning: {warning}");
     }
-
-    for arg in requested {
-        match arg {
-            SourceArg::Key(key) => add(SourceSpec::from_key(key)?, &mut selected),
-            SourceArg::Url(url) => {
-                let specs = match careers::board_for_url(url) {
-                    Some(board) => vec![SourceSpec::from_board(&board, None)?],
-                    None if offline => {
-                        bail!("can't find the job board behind {url} while offline")
-                    }
-                    None => {
-                        let page = CareersPage {
-                            url: url.to_string(),
-                            company: None,
-                        };
-                        resolve_page(http, &page).await?
-                    }
-                };
-                specs.into_iter().for_each(|s| add(s, &mut selected));
-            }
-        }
-    }
-    Ok(selected)
-}
-
-/// The supported boards a careers page uses.
-async fn resolve_page(http: &HttpClient, page: &CareersPage) -> anyhow::Result<Vec<SourceSpec>> {
-    let url = Url::parse(&page.url).with_context(|| format!("invalid URL {:?}", page.url))?;
-    let boards = careers::detect(http, &url)
-        .await
-        .with_context(|| format!("could not read {url}"))?;
-    if boards.is_empty() {
-        bail!(
-            "found no Ashby, Greenhouse, Lever or YC job board on {url} \
-             (pages that load jobs with JavaScript can't be read; configure the board instead)"
-        );
-    }
-    let specs = boards
-        .iter()
-        .map(|board| SourceSpec::from_board(board, page.company.clone()))
-        .collect::<Result<Vec<_>, _>>()?;
-    tracing::info!(
-        page = %url,
-        boards = ?specs.iter().map(|s| s.key().to_string()).collect::<Vec<_>>(),
-        "careers page resolved"
-    );
-    Ok(specs)
-}
-
-pub(crate) fn report_problems(report: &DiscoveryReport) {
     for (source, error) in report.failures() {
         eprintln!("warning: skipped {source}: {}", ErrorChain(error));
     }
@@ -361,18 +590,26 @@ pub(crate) fn report_problems(report: &DiscoveryReport) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn print_results(
     records: &[JobRecord],
     also_listed: &HashMap<OpportunityId, Vec<JobRecord>>,
     verdicts: &HashMap<JobId, EligibilityDecision>,
-    closed: &HashMap<JobId, chrono::DateTime<Utc>>,
+    closed: &HashMap<JobId, DateTime<Utc>>,
     total: u64,
     report: Option<&DiscoveryReport>,
     args: &FindArgs,
+    has_profile: bool,
 ) -> io::Result<()> {
     let mut out = anstream::stdout().lock();
     let now = Utc::now();
 
+    if !has_profile {
+        writeln!(
+            out,
+            "No profile found, so these are not personalized. Start with:\n  jobhunt init resume.pdf\n"
+        )?;
+    }
     if records.is_empty() && total > 0 {
         // `--limit 0`: nothing to list, but say how many matched.
         writeln!(
@@ -386,7 +623,10 @@ fn print_results(
                 "No matching jobs fit your profile. Try --possible to include the uncertain ones."
             }
             _ if args.possible => "Your profile rules out every matching job.",
-            (None, _) => "No stored jobs match. Run without --offline to fetch fresh jobs.",
+            (None, true) if args.offline => {
+                "No discovered opportunities yet. Run:\n  jobhunt find --refresh"
+            }
+            (None, _) => "No stored jobs match. Run with --refresh to read the job boards now.",
             (Some(_), false) => "No jobs match those words. Try fewer or different words.",
             (Some(_), true) => "The sources returned no open jobs.",
         };
@@ -411,7 +651,13 @@ fn print_results(
 
     match report {
         Some(report) => writeln!(out, "{}", render::run_summary(report))?,
-        None => writeln!(out, "Offline: showing stored jobs without refreshing them.")?,
+        None if args.offline => {
+            writeln!(out, "Offline: showing stored jobs without refreshing them.")?
+        }
+        None => writeln!(
+            out,
+            "Showing stored jobs (read recently; --refresh reads the job boards now)."
+        )?,
     }
     out.flush()
 }
@@ -420,91 +666,27 @@ fn print_results(
 mod tests {
     use super::*;
 
-    fn http() -> HttpClient {
-        HttpClient::new(jobhunt_sources::HttpSettings::default()).unwrap()
-    }
-
-    fn keys(specs: &[SourceSpec]) -> Vec<String> {
-        specs.iter().map(|s| s.key().to_string()).collect()
-    }
-
-    #[tokio::test]
-    async fn selects_configured_sources_by_default() {
-        let config = AppConfig::default();
-        let selected = select_sources(&[], &config, &http(), true).await.unwrap();
-        assert_eq!(selected.len(), config.sources.specs().unwrap().len());
-    }
-
-    #[tokio::test]
-    async fn requested_sources_reuse_configured_details() {
-        let config = AppConfig::default();
-        let requested: Vec<SourceArg> = [
-            "ashby:linear",
-            "ashby:posthog",
-            "ashby:linear",
-            "greenhouse:somethingelse",
-            "https://jobs.lever.co/spotify/2193db3f-77c5-43b8-b030-8f92c9882bf1",
-            "https://www.ycombinator.com/companies/posthog/jobs",
-        ]
-        .iter()
-        .map(|s| s.parse().unwrap())
-        .collect();
-        let selected = select_sources(&requested, &config, &http(), true)
-            .await
-            .unwrap();
-        assert_eq!(
-            keys(&selected),
-            [
-                "ashby:linear",
-                "ashby:posthog",
-                "greenhouse:somethingelse",
-                "lever:spotify",
-                "yc:posthog"
-            ]
-        );
-        let SourceSpec::Ashby { board, .. } = &selected[0] else {
-            panic!("expected ashby");
-        };
-        assert_eq!(board.company.as_deref(), Some("Linear"));
-        let SourceSpec::Lever { site, .. } = &selected[3] else {
-            panic!("expected lever");
-        };
-        assert_eq!(
-            site.company.as_deref(),
-            Some("Spotify"),
-            "configured name reused"
-        );
-    }
-
-    #[tokio::test]
-    async fn unknown_kinds_and_unrecognized_urls_offline_are_rejected() {
-        let config = AppConfig::default();
-        let unknown = vec!["workday:acme".parse().unwrap()];
-        assert!(
-            select_sources(&unknown, &config, &http(), true)
-                .await
-                .is_err()
-        );
-        let page = vec!["https://example.com/careers".parse().unwrap()];
-        let error = select_sources(&page, &config, &http(), true)
-            .await
-            .unwrap_err();
-        assert!(error.to_string().contains("offline"));
-    }
-
     #[test]
-    fn parses_source_arguments() {
-        assert_eq!(
-            "lever:spotify".parse::<SourceArg>().unwrap(),
-            SourceArg::Key("lever:spotify".parse().unwrap())
-        );
-        assert!(matches!(
-            "https://jobs.lever.co/spotify"
-                .parse::<SourceArg>()
-                .unwrap(),
-            SourceArg::Url(_)
-        ));
-        assert!("ftp://example.com".parse::<SourceArg>().is_err());
-        assert!("spotify".parse::<SourceArg>().is_err());
+    fn raw_mode_flags() {
+        let args = |raw, source: bool, eligible| FindArgs {
+            query: Vec::new(),
+            limit: None,
+            all: false,
+            refresh: false,
+            offline: false,
+            raw,
+            sources: if source {
+                vec!["ashby:linear".parse().unwrap()]
+            } else {
+                Vec::new()
+            },
+            eligible,
+            possible: false,
+            json: false,
+        };
+        assert!(!args(false, false, false).raw_mode());
+        assert!(args(true, false, false).raw_mode());
+        assert!(args(false, true, false).raw_mode());
+        assert!(args(false, false, true).raw_mode());
     }
 }

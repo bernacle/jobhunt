@@ -16,10 +16,40 @@ Nothing else: no Docker, no database server, no network access for tests.
 
 ```bash
 cargo build --workspace                  # build everything
-cargo test --workspace                   # the full offline suite (~280 tests, seconds once built)
+cargo test --workspace                   # the full offline suite (~400 tests, seconds once built)
 cargo test -p jobhunt-storage            # one crate
 cargo test -p jobhunt-cli --test multi_source_e2e   # one integration test file
 ```
+
+## Where code goes
+
+The CLI and the MCP server are interfaces to one local application:
+
+- domain rules live in the domain crates (`jobhunt-jobs`, `-profile`,
+  `-eligibility`, `-ranking`), storage in `jobhunt-storage`;
+- use cases that both front-ends need (find, resolve an id, inspect,
+  verify, record feedback, update preferences, application context,
+  export/import) live in `jobhunt-app`, on `LocalApp`, together with the
+  serializable views they return;
+- `jobhunt-cli` and `jobhunt-mcp` only parse arguments, call one
+  `LocalApp` use case and present the answer. A rule written in a command
+  or a tool handler is a bug: the other interface would disagree.
+
+`jobhunt-app` and everything below it must never print: `jobhunt mcp`'s
+stdout belongs to the protocol. Report progress through `Progress`, logs
+through `tracing` (stderr). `mcp_protocol` runs the server at `-vvv` and
+fails on any stdout line that isn't a JSON-RPC message.
+
+Transactions that read and then write must start with
+`SqliteJobStore::begin_write` (`BEGIN IMMEDIATE`), so a concurrent writer
+is waited for instead of failing with `SQLITE_BUSY_SNAPSHOT`.
+
+To try the MCP server by hand, `jobhunt doctor` prints the command, and
+any MCP client (or the test harness in
+`crates/jobhunt-cli/tests/common/mod.rs`) can drive it. For offline manual
+runs, `JOBHUNT_DISCOVERY_ENDPOINT` and `JOBHUNT_VERIFY_ENDPOINT` send every
+discovery and verification request to one base URL (a local mock serving
+the fixtures); they are test hooks, not user settings.
 
 ## The quality gate: `./scripts/check.sh`
 

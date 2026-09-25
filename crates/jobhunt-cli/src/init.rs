@@ -4,11 +4,10 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use chrono::Utc;
-use jobhunt_profile::ProfileService;
 use jobhunt_resume::{DeterministicParser, ResumeFile, ResumeParser};
 
 use crate::config::LoadedConfig;
-use crate::profile_args::{finish, open_store};
+use crate::profile_args::finish;
 use crate::profile_render;
 
 #[derive(Debug, clap::Args)]
@@ -24,12 +23,12 @@ pub async fn run(args: InitArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCo
     let parser = DeterministicParser;
     let parsed = parser.parse(&file.text);
     let now = Utc::now();
-    let store = open_store(loaded).await?;
-    let service = ProfileService::new(&store);
-    let result = service
+    let app = crate::local::open(loaded).await?;
+    let result = app
+        .profiles()
         .import_resume(file.source_document(parser.name(), now), &parsed, now)
         .await;
-    store.close().await;
+    app.close().await;
     let (report, data) = result?;
     let mut out = anstream::stdout().lock();
     finish(profile_render::import_summary(

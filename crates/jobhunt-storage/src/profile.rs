@@ -915,6 +915,45 @@ async fn write_profile(
     Ok(())
 }
 
+/// Writes a profile and its history inside the caller's transaction, if
+/// the stored revision is still `expected_revision`.
+pub(crate) async fn save_profile_in(
+    tx: &mut SqliteConnection,
+    data: &ProfileData,
+    expected_revision: u64,
+    events: &[ProfileEvent],
+) -> Result<(), StorageError> {
+    let pid = data.id().to_string();
+    let stored: Option<i64> = sqlx::query_scalar("SELECT revision FROM profiles WHERE id = ?")
+        .bind(&pid)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(query_error("checking the profile revision"))?;
+    let found = stored.map_or(0, |r| u64::try_from(r).unwrap_or(0));
+    if found != expected_revision {
+        return Err(StorageError::Conflict {
+            expected: expected_revision,
+            found,
+        });
+    }
+    write_profile(&mut *tx, data).await?;
+    for event in events {
+        sqlx::query(
+            "INSERT INTO profile_events (profile_id, at, kind, record, detail) \
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(&pid)
+        .bind(encode_timestamp(event.at))
+        .bind(event.kind.as_str())
+        .bind(&event.record)
+        .bind(&event.detail)
+        .execute(&mut *tx)
+        .await
+        .map_err(query_error("recording profile history"))?;
+    }
+    Ok(())
+}
+
 #[async_trait]
 impl ProfileRepository for SqliteJobStore {
     async fn load_profile(&self, id: ProfileId) -> Result<Option<ProfileData>, StorageError> {
@@ -936,38 +975,10 @@ impl ProfileRepository for SqliteJobStore {
         events: &[ProfileEvent],
     ) -> Result<(), StorageError> {
         let mut tx = self
-            .pool
-            .begin()
+            .begin_write()
             .await
             .map_err(query_error("starting a transaction"))?;
-        let pid = data.id().to_string();
-        let stored: Option<i64> = sqlx::query_scalar("SELECT revision FROM profiles WHERE id = ?")
-            .bind(&pid)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(query_error("checking the profile revision"))?;
-        let found = stored.map_or(0, |r| u64::try_from(r).unwrap_or(0));
-        if found != expected_revision {
-            return Err(StorageError::Conflict {
-                expected: expected_revision,
-                found,
-            });
-        }
-        write_profile(&mut tx, data).await?;
-        for event in events {
-            sqlx::query(
-                "INSERT INTO profile_events (profile_id, at, kind, record, detail) \
-                 VALUES (?, ?, ?, ?, ?)",
-            )
-            .bind(&pid)
-            .bind(encode_timestamp(event.at))
-            .bind(event.kind.as_str())
-            .bind(&event.record)
-            .bind(&event.detail)
-            .execute(&mut *tx)
-            .await
-            .map_err(query_error("recording profile history"))?;
-        }
+        save_profile_in(&mut tx, data, expected_revision, events).await?;
         tx.commit()
             .await
             .map_err(query_error("committing a profile"))?;

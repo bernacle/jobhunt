@@ -1,108 +1,173 @@
 # JobHunt
 
-High-signal job discovery. JobHunt reads jobs from company job boards,
-normalizes them into one canonical model, tracks how each one changes over
-time, stores them locally, and shows you the ones that match. It also keeps
-a durable, inspectable model of *you*: your experience, the evidence behind
-every professional claim, and what you want next.
+High-signal job discovery, as a local product. JobHunt reads a large
+universe of jobs from company job boards, verifies them at the employers'
+own sources, checks whether you can take them, learns what you want from
+what you say and do, and shows you the few worth your time, with why.
 
-## What it does today
-
-`jobhunt find` reads every configured source (Ashby, Greenhouse and Lever
-job boards, Y Combinator companies, and company careers pages that embed one
-of those boards), converts the postings into canonical jobs, records what is
-new, updated or gone, saves everything to a local SQLite database, and prints
-the matches:
+Everything lives on your machine, in one SQLite database. You use it from
+the terminal (`jobhunt`), or from an AI assistant that speaks the Model
+Context Protocol (`jobhunt mcp`): both are interfaces to the same
+application, the same profile, jobs, rankings and feedback.
 
 ```text
-$ jobhunt find engineer remote -n 2
-Searching 17 sources…
- 1. Senior Machine Learning Engineer, Trust
-    Airbnb · San Francisco, CA · Remote
-    https://careers.airbnb.com/positions/8232153?gh_jid=8232153
-    greenhouse:airbnb · posted today · job_1e8575ded15556ca9b5ccf5485f05e4b
+$ jobhunt find
+Checked 11 open jobs
+11 passed basic eligibility
+6 looked plausible
+3 are worth reviewing
 
- 2. Security Engineer - Detection and Response
-    Spotify · New York, NY · Remote · Permanent
-    https://jobs.lever.co/spotify/cb29d857-395b-401d-9749-367e666ff870
-    lever:spotify · posted today · job_55f15065d06d5994d13e2433d877856f
+  1. Member of Technical Staff - Systems — Modal   Strong fit
+     backend, infrastructure · Linux · infrastructure, ai · USD 220,000 – 300,000 per year · on-site
+     ✓ Verified open just now · ✓ Eligible: The on-site office is in New York, where you live
+     Why this may be worth your time
+       + Infrastructure roles: a role you want
+       + Backend roles: a role you want
+       + Infrastructure: a domain you want
+     opp_c22d474a · jobhunt why opp_c22d474a
 
-Showing 2 of 209 matching jobs. Use --limit to see more or add words to narrow the search.
-Checked 17 sources in 3.0s: 2867 open jobs (0 new, 0 updated).
+  2. Security Engineer, Cloud — Ramp   Strong fit
+     …
+
+  3. Forward Deployed Engineer - ML — Modal   Worth reviewing
+     solutions / forward-deployed engineering, machine learning · ai, infrastructure · USD 180,000 – 250,000 per year
+     ✓ Verified open just now · ✓ Eligible: The office is in New York, where you live
+     Why this may be worth your time
+       + Infrastructure: a domain you want
+       + Meets your minimum of USD 180,000 per year across the range
+       + You've worked in infrastructure (Banco Horizonte)
+     Things to consider
+       - Not one of the roles you listed (infrastructure roles, backend roles)
+       - Customer-facing engineering (solutions / forward-deployed), not product engineering
+     opp_011ee5ec · jobhunt why opp_011ee5ec
+
+Not shown: 8 maybe or low priority (--all).
+Used stored jobs (every source read 2 hours ago; --refresh reads the job boards now).
+Ranked against your profile. Tiers are coarse on purpose; `jobhunt why <id>` shows every reason.
 ```
 
-Running it again is cheap and idempotent: boards that support it answer
-"not modified" and nothing is re-read, nothing is duplicated, and only real
-changes are reported (`… (3 new, 1 updated, 2 closed)`). A job listed by two
-sources is shown once, with `also listed on <source>` under it.
+Tiers are deliberately coarse (strong fit, worth reviewing, maybe, low
+priority); there is no match percentage. Verification and eligibility are
+on every line, and every reason can be traced to its evidence
+(`jobhunt why <id> --details`).
 
-`jobhunt show <job_…|opp_…>` prints everything stored about one job: every
-source that lists it, when each first appeared and was last verified, and
-its history (new, updated with the changed fields, closed, reopened).
-
-`jobhunt verify <job_…|opp_…>` asks the job's authoritative sources
-whether it is still open and can be applied to, records what they say,
-and checks it against your profile: eligible, conditional, uncertain or
-ineligible, with the posting's own words behind every reason (see
-[Verification and eligibility](#verification-and-eligibility)). `jobhunt
-check` prints the same report from what is stored; `show` includes the
-last verification. With a profile, `find` adds a one-line verdict to every
-result, and `--eligible` / `--possible` filter on it.
-
-`jobhunt rank` turns all of that into a short list: the few stored jobs
-most worth your time, each with a decision brief (why it may be worth
-attention, caveats, unknowns), built on eligibility and verification and
-sharpened by what you tell it and what you do. `jobhunt reject <id>
---reason "too corporate"`, `save`, `like`, `applied` and friends record
-feedback on the job (once per opportunity, whichever source lists it),
-keep your words verbatim, and teach it your taste; `jobhunt taste` shows
-what it learned and from which feedback (see
-[Ranking, feedback and taste](#ranking-feedback-and-taste)).
-
-`jobhunt init resume.pdf` builds your career profile from your resume
-(see [Career profile](#career-profile)): experiences, projects, education,
-skills, domains, role signals, and an evidence graph where every claim keeps
-the resume text it came from and your decision about it. `jobhunt
-preferences add "…"` records what you want in your own words.
-
-Not built yet: application assistance, resume tailoring, an AI-assisted
-reason reader (the seam exists), and the MCP server.
-
-## Quick start
+## Install
 
 You need a stable Rust toolchain (1.88 or newer, the declared minimum
 supported version) and a C compiler (for the bundled SQLite and TLS
-libraries). No database server or other setup is required.
+libraries). No database server, account or API key is needed.
 
 ```bash
-cargo build
-cargo test
-cargo run -- find
+cargo install --path crates/jobhunt-cli   # installs `jobhunt`
+# or, from a checkout:
+cargo build --release && ./target/release/jobhunt --help
 ```
 
-Useful variations:
+## First run
 
 ```bash
-cargo run -- find rust backend                       # every word must match
-cargo run -- find -n 50                              # show more results (default 20)
-cargo run -- find --source greenhouse:stripe         # one source, by KIND:NAME
-cargo run -- find --source https://jobs.lever.co/spotify           # or by board URL
-cargo run -- find --source https://www.notion.com/careers          # or by careers page
-cargo run -- find --offline designer                 # search stored jobs, no network
-cargo run -- find -v                                 # per-source statistics on stderr
-cargo run -- show job_1e8575ded15556ca9b5ccf5485f05e4b             # one job, its sources and history
-cargo run -- verify job_1e8575ded15556ca9b5ccf5485f05e4b           # still open? can you take it?
-cargo run -- verify --details job_1e8575ded15556ca9b5ccf5485f05e4b # with provenance and evidence
-cargo run -- check job_1e8575ded15556ca9b5ccf5485f05e4b            # the same report, from what is stored
-cargo run -- find --offline --eligible               # only jobs your profile says you can take
-cargo run -- rank                                    # the few jobs most worth your time, with briefs
-cargo run -- why opp_1e8575ded15556ca9b5ccf5485f05e4b              # one job's decision brief
-cargo run -- reject opp_1e8575ded15556ca9b5ccf5485f05e4b --reason "pure SRE"
-cargo run -- taste                                   # what JobHunt learned from your feedback
-cargo run -- config                                  # show file locations and settings
+jobhunt init resume.pdf
+jobhunt preferences add "I want small product teams, backend/platform work, remote from Brazil, at least USD 120k."
+jobhunt find
 ```
 
-To install the binary: `cargo install --path crates/jobhunt-cli`.
+1. `init` builds your career profile from your resume (PDF, `.txt` or
+   `.md`): experiences, projects, skills, domains, and an evidence graph in
+   which every claim keeps the resume text it came from (see
+   [Career profile](#career-profile)).
+2. `preferences add` records what you want, in your own words; what
+   JobHunt understood is printed, and whatever it didn't understand is kept
+   and shown, never dropped (see [Preferences](#preferences)).
+3. `find` reads the configured job boards (the first time, or when the
+   stored jobs are stale), ranks every open opportunity against your
+   profile, verifies the best candidates at their sources, and shows the
+   few worth reviewing.
+
+Without a profile, `find` lists what it found and says how to start;
+without preferences it still works (on eligibility, experience and
+freshness) and says that preferences and feedback sharpen it.
+
+## The loop
+
+```bash
+jobhunt find                     # the shortlist (fast: works from stored jobs while they are fresh)
+jobhunt show <id>                # everything about one opportunity, every source, its history
+jobhunt why <id>                 # the decision brief: why, caveats, unknowns (--details: every signal)
+jobhunt verify <id>              # still open? can you apply? can you take it? (asks the source now)
+jobhunt save <id>
+jobhunt reject <id> --reason "too corporate"
+jobhunt like <id> --reason "tiny team and strong ownership"
+jobhunt applied <id>
+jobhunt pipeline                 # what you saved, applied to, interview for
+jobhunt find                     # reflects all of it
+```
+
+Ids are opportunity ids (`opp_…`): one job, however many boards list it.
+Feedback, pipeline state, rankings and decision briefs belong to the
+opportunity; provenance and verification stay per source record (`show`
+and `verify --details` list every one). Commands take the short form `find`
+prints (`opp_c22d474a`), any unique prefix, a full `opp_…` id, or a
+source record's `job_…` id.
+
+Doing something twice is safe: saving a saved job, applying twice, or the
+same rejection with the same reason changes nothing (`Already saved …:
+nothing changed.`); a rejection with a new reason is new information and is
+recorded.
+
+### `find`: the shortlist, and when it reads the network
+
+`find` is the one command for finding opportunities worth your time.
+
+| Situation | What `find` does |
+| --- | --- |
+| every configured source read within `discovery.refresh_after_hours` (default 12) | works from stored jobs: no discovery requests |
+| a source never read, or read longer ago | refreshes first (`Refreshing 17 sources (sources last read 2 days ago)…`) |
+| `--refresh` | always refreshes |
+| `--offline` | no network at all: no refresh, no verification |
+| a refresh nobody asked for can't reach any source | warns, and answers from stored jobs |
+| the best candidates aren't verified recently | verifies them (a few requests; attempts from the last 15 minutes are reused) |
+
+So a second `find` right after the first makes no request at all. Other
+options: `WORDS` (every word must match), `-n N` (default 5, at most 25),
+`--all` (also maybe and low-priority opportunities), `--json` (the same
+structure the MCP `search_jobs` tool returns).
+
+`find --raw` is the inventory instead: every matching stored job, unranked,
+one per opportunity, with its source, URL and (with a profile) a one-line
+eligibility verdict. `--source KIND:NAME|URL` (read only that source),
+`--eligible` and `--possible` imply it:
+
+```bash
+jobhunt find --raw rust backend -n 50
+jobhunt find --source greenhouse:stripe
+jobhunt find --source https://www.notion.com/careers
+jobhunt find --raw --offline --eligible
+```
+
+`jobhunt rank` (the shortlist from stored jobs only, like `find
+--offline`) still works for scripts written before `find` was
+personalized; it is no longer listed in `--help`.
+
+### Everything else
+
+```bash
+jobhunt check <id>               # the full verification and eligibility report, from what is stored
+jobhunt taste                    # what JobHunt learned from your feedback, with evidence
+jobhunt feedback [<id>]          # your feedback, verbatim
+jobhunt profile                  # your profile (edit, add, remove, export, import, history)
+jobhunt claims review            # evidence waiting for your decision
+jobhunt context <id>             # the evidence an assistant may use for an application (JSON)
+jobhunt export -o jobhunt.json   # everything that is yours, one file
+jobhunt import jobhunt.json      # …restored, atomically
+jobhunt mcp                      # serve all of this to an MCP client
+jobhunt doctor                   # check the setup; prints the MCP command for your client
+jobhunt config                   # file locations and the effective configuration
+```
+
+`show`, `verify`, `pipeline` and `find` take `--json` and print the same
+structures the MCP tools return. Global options: `--config PATH`,
+`--database PATH` (or `JOBHUNT_CONFIG`, `JOBHUNT_DATABASE`), `-v`,
+`--log-format json`.
 
 ### How search works
 
@@ -111,10 +176,12 @@ department, team, locations or workplace type, ignoring case and punctuation.
 `rust` matches "Backend Engineer (Rust)" but not "Trust & Safety", and
 `node.js` matches "Node.js".
 
-After a fetch, `find` shows open jobs that were listed during that fetch, one
-per opportunity. Jobs of a source that failed are not shown for that run (a
-warning names the source); they stay open in the database. `--offline` shows
-every open stored job.
+The shortlist considers every open stored opportunity matching the words.
+`find --raw`, after a refresh, shows open jobs that were listed during that
+refresh, one per opportunity; jobs of a source that failed are not shown for
+that run (a warning names the source) and stay open in the database.
+Without a refresh (`--offline`, or stored jobs still fresh) it shows every
+open stored job.
 
 ## Sources
 
@@ -202,8 +269,14 @@ what is searched. Invalid names, unknown fields, duplicated sources and
 non-http careers URLs are rejected with a message naming the problem.
 
 `[discovery]` controls fetch concurrency (`concurrency`, default 8 sources;
-`max_requests_per_host`, default 4), timeouts and retries, and
-`revalidate_after_hours` (default 24, see below).
+`max_requests_per_host`, default 4), timeouts and retries,
+`revalidate_after_hours` (default 24, see below), and
+`refresh_after_hours` (default 12): how long stored jobs count as fresh, so
+`find` and the MCP `search_jobs` tool answer from them without reading the
+boards (see [`find`](#find-the-shortlist-and-when-it-reads-the-network)).
+
+`jobhunt mcp` reads exactly the same file and database as every other
+command; there is no MCP-specific configuration.
 
 ## Where data lives
 
@@ -582,7 +655,10 @@ decisions and edits it kept, and anything you need to confirm again.
 
 ### Export format
 
-`jobhunt profile export` writes one JSON document:
+`jobhunt profile export` writes the profile alone (for everything that is
+yours, feedback and pipeline included, use `jobhunt export`; see
+[Your data: export and import](#your-data-export-and-import)). It is one
+JSON document:
 
 ```json
 {
@@ -695,7 +771,7 @@ work authorization.
 | `jobhunt verify --details <id>` | Plus provenance: every record, the method and URLs checked, the authority chain, what changed, and the posting's words and your profile facts under every reason |
 | `jobhunt check <id>` | The detailed report from what is stored, without fetching (`--refresh` verifies first) |
 | `jobhunt show <id>` | Everything stored, with the last verification and the eligibility verdict (no fetch) |
-| `jobhunt find --eligible` / `--possible` | Only eligible or conditional jobs / everything not ruled out |
+| `jobhunt find --eligible` / `--possible` | The inventory (`--raw`) filtered to eligible or conditional jobs / everything not ruled out. The shortlist (`find`) never recommends ineligible jobs |
 | `jobhunt preferences set authorized-in <country>` | A country (or "the EU") you may already work in |
 | `jobhunt preferences set engagement contractor\|employee --stance require\|want\|accept\|avoid` | How you can be hired |
 
@@ -1035,38 +1111,30 @@ from three things, kept separate and always inspectable:
 - **what it inferred**: patterns across that feedback, each with the
   evidence behind it.
 
+`jobhunt find` (see [The loop](#the-loop)) is where this shows: the
+rejected and applied opportunities have left the list, learned patterns
+appear, attributed, among the reasons, and what you said always outranks
+them:
+
 ```text
-$ jobhunt rank
-Worth your attention
-  1. Security Engineer, Cloud — Ramp   Strong fit
-     infrastructure, security · AWS, Terraform · security, infrastructure · USD 211,400 – 290,600 per year · hybrid
-     + Infrastructure roles: a role you want
-     + Meets your minimum of USD 180,000 per year across the range
-     + Reaches your target of USD 250,000 per year at the top of the range
-     opp_55a62bd94e54404eb2af36d7bc9d2071 · jobhunt why opp_55a62bd94e54404eb2af36d7bc9d2071
-
-Promising, but verify before spending time
-  2. Forward Deployed Engineer - ML — Modal   Worth reviewing
-     solutions / forward-deployed engineering, machine learning · ai, infrastructure · USD 180,000 – 250,000 per year
-     + Meets your minimum of USD 180,000 per year across the range
-     + Reaches your target of USD 250,000 per year at the top of the range
-     + Domain: infrastructure: you've favored jobs like this (1 reason in your words and 1 action without a reason; tentative)
-     - Not one of the roles you listed (backend roles, infrastructure roles)
-     - Customer-facing engineering (solutions / forward-deployed), not product engineering
-     ? Not verified yet: it may be closed or changed
-     opp_011ee5ec62edd51f11dc0fd4b3edd532 · jobhunt verify opp_011ee5ec62edd51f11dc0fd4b3edd532
-
-Not shown: 2 you rejected · 1 in your pipeline · 5 maybe or low priority (--all).
-Ranked 11 stored open jobs against your profile, 5 pieces of feedback and 4 patterns learned from it. Tiers are coarse on purpose; `jobhunt why <id>` shows every reason.
+$ jobhunt reject opp_011ee5ec --reason "customer-facing, too corporate"
+Rejected Forward Deployed Engineer - ML — Modal
+opp_011ee5ec62edd51f11dc0fd4b3edd532 · fb_a2b6d47142c401ba85154fade545fd65
+Reason: “customer-facing, too corporate”
+Read as: avoid role: solutions / forward-deployed engineering; avoid company: large companies
+Status: rejected (was unseen)
+Learned: avoid company: large companies (tentative)
+Learned: avoid role: solutions / forward-deployed engineering (tentative)
+It won't be recommended again. Changed your mind: jobhunt save opp_011ee5ec62edd51f11dc0fd4b3edd532
 ```
 
 ### Commands
 
 | Command | Does |
 | --- | --- |
-| `jobhunt rank [WORDS] [-n N] [--all]` | The few stored open jobs most worth your time (default 10, strong fit and worth reviewing only), grouped by gate, each with its short brief. Reads what is stored; `find` refreshes, `verify` verifies |
-| `jobhunt why <id> [--details]` | One job's decision brief; `--details` lists every signal with its group, basis, weight and evidence |
-| `jobhunt save\|unsave\|reject\|like\|dislike\|applied\|interview\|offer <id> [--reason "…"]` | Feedback on a job (`job_…` or `opp_…`), with how the reason was read |
+| `jobhunt find [WORDS] [-n N] [--all]` | The few open opportunities most worth your time (default 5, strong fit and worth reviewing only), best first, each with its verification, eligibility and short brief (`--all`: maybe and low priority too). Refreshes and verifies as described in [`find`](#find-the-shortlist-and-when-it-reads-the-network); `--offline` (or the hidden `rank`) reads only what is stored |
+| `jobhunt why <id> [--details]` | One opportunity's decision brief; `--details` lists every signal with its group, basis, weight and evidence |
+| `jobhunt save\|unsave\|reject\|like\|dislike\|applied\|interview\|offer <id> [--reason "…"]` | Feedback on an opportunity (`opp_…`, a short id, or a `job_…` id), with how the reason was read and what was learned; a repeat already in effect changes nothing |
 | `jobhunt pipeline [--all]` | Jobs you saved, applied to, are interviewing for or got an offer from (`--all`: and rejected ones) |
 | `jobhunt taste [--all]` | What you told JobHunt, what it learned from your feedback (with evidence), what contradicts itself, and reasons it couldn't read |
 | `jobhunt feedback [<id>]` | Your feedback, verbatim |
@@ -1224,7 +1292,7 @@ stays visible next to it ("your feedback leans the other way").
 ### Caching and revisions
 
 Rankings are recomputed from their inputs, and the ones shown to you
-(`rank`'s list, `why`) are stored in `opportunity_rankings` under a digest
+(`find`'s list, `why`) are stored in `opportunity_rankings` under a digest
 of everything they depend on: the ranking rules (`RANKING_VERSION`), the
 taste digest (every feedback event, the reader's revision and
 `TASTE_VERSION`), the profile and its revision, every record's content and
@@ -1250,6 +1318,206 @@ eligibility and the profile only through their domain types and
 repository traits: no SQL, HTTP, CLI formatting or AI vendor code. The CLI
 is thin.
 
+## Using JobHunt from an AI assistant (MCP)
+
+`jobhunt mcp` serves JobHunt over the [Model Context
+Protocol](https://modelcontextprotocol.io) on stdio, so an MCP client
+(Claude Code, Claude Desktop, Codex, or any other client that starts local
+stdio servers) can search, inspect, verify and record feedback for you.
+
+It is the same product, not a second one:
+
+- **same configuration**: the normal config file, `--config` /
+  `JOBHUNT_CONFIG`, `--database` / `JOBHUNT_DATABASE`; no MCP settings;
+- **same database and profile**: the server opens the SQLite file the CLI
+  uses. A job you reject in the terminal is gone from the assistant's next
+  search, and the other way round, even while the server is running;
+- **same behavior**: every tool calls the same use case as the matching
+  command (`search_jobs` is `find`, `reject_job` is `reject`, …), so both
+  interfaces reach the same decisions. `find --json`, `show --json`,
+  `verify --json` and `pipeline --json` print exactly what the tools
+  return;
+- **no account and no API key**: the assistant provides the intelligence
+  on its side; JobHunt's core stays deterministic and local.
+
+The server speaks newline-delimited JSON-RPC 2.0 on stdin/stdout using the
+official Rust SDK ([`rmcp`](https://github.com/modelcontextprotocol/rust-sdk)),
+negotiating protocol versions from 2024-11-05 to 2025-11-25. Stdout carries
+protocol messages only; logs go to stderr (`-v`, `--log-format json`,
+`JOBHUNT_LOG` work as for every command, quiet by default). The server
+exits when the client disconnects (stdin closes).
+
+### Tools
+
+| Tool | Kind | Does |
+| --- | --- | --- |
+| `search_jobs` | refreshes caches, network | The shortlist (`find`): `query`, `limit` (1–25, default 5), `refresh` (`auto` \| `always` \| `never`), `verify` (default true), `include_lower_tiers`. Returns the funnel, and per opportunity: `id`, `title`, `company`, `tier`, `recommendation`, `verification` (state, trusted, verified_at, authority), `eligibility` (status, headline), `why`, `consider`, `next_step`; plus what was not shown and why |
+| `get_job` | read | One opportunity: locations, workplace, compensation facts, description summary (`full_description` for all of it), verification, eligibility with reasons, the decision brief, pipeline state; `include_sources` adds every source record with its provenance and latest attempt. Does not mark it seen |
+| `verify_job` | network | Asks the authoritative sources now (`force`, or reuse an attempt from the last few minutes): listing and application state, authority, last attempt and success, compensation facts, eligibility, what remains uncertain, per source |
+| `get_profile` | read | Professional profile: headline, location, experiences, technologies with evidence strength, domains, role and ownership signals, preferences and statements, claims awaiting review, gaps. Never names or contact details |
+| `update_preferences` | **writes** | `statement` (your words, kept verbatim), `set` (typed values: `role`, `compensation`, `work_mode`, `location`, `region`, `timezone`, `relocation`, `sponsorship`, `authorized_in`, `engagement`, `company`, `domain`, `work_style`), `remove` (`pref_…`/`stmt_…`). Returns what was understood, what is uncertain, what was not understood (verbatim), what was replaced, and every preference in effect |
+| `save_job` | **writes** | Save (a rejected opportunity comes back) |
+| `reject_job` | **writes** | Not interested, with the person's `reason` verbatim; returns how it was read and whether learned taste changed |
+| `mark_applied` | **writes** | The person applied; nothing else about the application is stored |
+| `record_feedback` | **writes** | `like`, `dislike`, `unsave`, `interview`, `offer` |
+| `get_pipeline` | read | Saved, applied, interviewing, offers (`include_rejected`) |
+| `prepare_application_context` | read | Evidence for helping with an application (below); `include_contact_details` adds name and contacts |
+
+Tools declare this in their annotations (`readOnlyHint`,
+`destructiveHint: false`, `idempotentHint`, `openWorldHint` for the two
+that reach job boards). Every tool has an input schema (unknown arguments
+are rejected) and an output schema; results come as structured content,
+with the same JSON as text for clients that read only text.
+
+**Retries are safe.** A mutation that repeats one already in effect
+(saving a saved job, marking applied twice, the same rejection with the
+same reason, the same preference statement or value) changes nothing and
+says so (`"recorded": false`, `"unchanged": true`), so a client retrying a
+request can't pile up duplicate feedback. Concurrent identical requests
+are serialized in the server, so they record once too.
+
+**Errors are actionable.** A tool failure is a result with `isError: true`
+and a JSON body `{"error": {"code", "message", "hint"}}`. Codes:
+`unknown_opportunity`, `ambiguous_id`, `no_profile`, `no_jobs`,
+`invalid_preference`, `invalid_arguments`, `source_unavailable`,
+`verification_unavailable`, `conflict`, `storage`, `config`,
+`cancelled`. Arguments that don't match a tool's schema are rejected the
+same way before anything runs. Storage and configuration failures are
+reported without local paths or internals (the details go to the server's
+stderr; `jobhunt doctor` shows them). A cancelled `search_jobs` or
+`verify_job` stops; what it already stored stays consistent (each source
+scan and verification attempt is its own transaction).
+
+### Application context
+
+`prepare_application_context` (and `jobhunt context <id>`) prepares
+evidence; it writes nothing (no cover letter, no answers, no tailored
+resume). It returns the job and its decision brief, what the job asks for
+(roles, level, technologies with their requirement, domains), your
+relevant experience and projects with their facts, technologies matched to
+the job, what the job asks for that no usable evidence covers, and
+caveats.
+
+Only claims the evidence policy marks usable are included
+([`Claim::standing`](crates/jobhunt-profile/src/evidence.rs) is usable:
+you confirmed or entered them, or they are quoted directly from your
+current resume with high confidence), each with its resume snippet and
+why it may be used. Inferences, uncertain readings, claims that left your
+resume, and rejected claims are withheld (not even their text is sent) and
+only counted, with how to review them (`jobhunt claims review`). An
+experience appears only if the claim that you held it is itself usable.
+The answer tells the client to use the facts as written, without adding
+metrics, responsibilities or accomplishments.
+
+### Connecting a client
+
+Run `jobhunt doctor` for the exact command and arguments on your machine
+(it prints the absolute path of the binary and your database). Use the
+absolute path when the client does not share your shell's `PATH`.
+
+**Claude Code** (tested: `claude mcp list` reports it connected):
+
+```bash
+claude mcp add --transport stdio jobhunt -- jobhunt mcp
+# a specific database or config:
+claude mcp add --transport stdio jobhunt -- /usr/local/bin/jobhunt --database ~/jobhunt/jobhunt.db mcp
+```
+
+or, for a project, `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "jobhunt": {
+      "type": "stdio",
+      "command": "/usr/local/bin/jobhunt",
+      "args": ["mcp"],
+      "env": {}
+    }
+  }
+}
+```
+
+**Claude Desktop**: the same entry under `mcpServers` in
+`claude_desktop_config.json` (Settings → Developer → Edit Config), with the
+binary's absolute path.
+
+**Codex CLI**:
+
+```bash
+codex mcp add jobhunt -- jobhunt mcp
+```
+
+or in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.jobhunt]
+command = "/usr/local/bin/jobhunt"
+args = ["mcp"]
+# search_jobs may read many job boards the first time
+tool_timeout_sec = 120
+```
+
+**Any stdio MCP client**: start `jobhunt mcp` (plus `--config` /
+`--database` if you don't use the defaults) and speak MCP on its
+stdin/stdout. The official Python and TypeScript SDK clients were used to
+run the whole loop against it.
+
+**ChatGPT** connects to remote MCP servers over HTTPS only (developer
+mode); it cannot start a local stdio server. JobHunt does not ship an HTTP
+transport (it would expose your local profile on the network), so ChatGPT
+is not supported directly today.
+
+## Your data: export and import
+
+`jobhunt export` writes everything that is yours and can't be rebuilt, as
+one versioned JSON document (`"format": "jobhunt.state"`, `"version": 1`):
+
+| Included | Why |
+| --- | --- |
+| your profile, as the profile export format (`jobhunt.profile`): experiences, projects, education, skills, every claim with its evidence **and your decision about it**, preferences and statements in your words | it is you |
+| every piece of feedback, verbatim (save, reject, applied, interview, offer, like, dislike, unsave, with reasons) | your pipeline stage and learned taste are folded from it, so both come back exactly; neither is stored separately |
+| the source records that feedback is about (postings and lifecycle dates) | so your pipeline survives on a machine that hasn't discovered those jobs; job ids are stable, so the next discovery updates them in place |
+
+Left out, because they are rebuilt: the rest of the discovered jobs,
+discovery runs and HTTP validators, verification history, eligibility
+decisions, stored rankings, and "looked at" marks.
+
+```bash
+jobhunt export -o jobhunt.json      # or: jobhunt export > jobhunt.json
+jobhunt import jobhunt.json         # --replace to replace an existing profile
+```
+
+`import` checks the format and version first, parses strictly, validates
+every reference (the embedded profile, every feedback event naming a job
+in the file), then writes everything in one transaction: an invalid file,
+or a failure halfway, changes nothing. Feedback and jobs already present
+are left alone, so importing the same file twice changes nothing; an
+existing profile is replaced only with `--replace`. `jobhunt profile
+export` / `import` remain for the profile alone.
+
+## Privacy
+
+Your profile, resume text, preferences, feedback and every job stay in the
+local SQLite database; JobHunt itself sends nothing anywhere except
+requests to the job boards and employer pages it reads.
+
+When you connect an MCP client, what a tool returns is sent to that client,
+and through it to whichever model provider the client uses, only when a
+tool is called:
+
+- `get_profile` never includes your name or contact details, nor your
+  resume's raw text;
+- `prepare_application_context` includes only usable evidence (with its
+  resume snippets), and your name and contacts only when
+  `include_contact_details` is set;
+- search results, job details and verification describe jobs, not you
+  (eligibility headlines can mention where you live, e.g. "in New York,
+  where you live").
+
+Errors sent to clients never include local file paths. Nothing is sent to
+a model provider by JobHunt itself; no AI API key is used or needed.
+
 ## Logging
 
 Logs are structured (`tracing`) and go to stderr, so they never mix with
@@ -1269,6 +1537,11 @@ withheld. The logs carry the same as events: `discovery run started`,
 `source started`, `fetch completed`, `source not modified`,
 `source completed`, `not closing missing jobs`, retries,
 `duplicate detected`, `discovery run completed`.
+
+The same applies to `jobhunt mcp`, where it is a protocol requirement:
+stdout carries MCP messages only, and everything else (logs at any
+verbosity, progress, errors) goes to stderr, which MCP clients capture in
+their log files. Colors are used only when stderr is a terminal.
 
 ## Workspace layout
 
@@ -1299,15 +1572,22 @@ crates/
                     detection, the HTTP verifiers, and the shared HTTP client.
   jobhunt-storage   Storage backends. SQLite today (jobs, profiles,
                     verifications, eligibility decisions, feedback, rankings).
-  jobhunt-cli       The `jobhunt` binary: config, logging, find, show, verify,
-                    check, rank, why, feedback commands, taste, pipeline,
-                    init, profile, claims, preferences, output.
-  jobhunt-mcp       Placeholder for the MCP server; intentionally empty for now.
+  jobhunt-app       The local application every front-end shares: config
+                    loading, opening the database, and the use cases (find:
+                    refresh + rank + verify; resolve ids; inspect; verify;
+                    feedback; preferences; profile view; application
+                    context; export/import; doctor) with their typed,
+                    serializable answers. No printing, no protocol code.
+  jobhunt-mcp       The MCP server (rmcp, stdio): each tool is a thin
+                    adapter over one jobhunt-app use case.
+  jobhunt-cli       The `jobhunt` binary: arguments, logging, human output,
+                    and `jobhunt mcp`; every command calls jobhunt-app.
 ```
 
-Dependencies only point downward: `cli → sources, storage → jobs → core`,
-`cli → resume, storage → profile → core`, `cli → eligibility → jobs,
-profile`, and `cli, storage → ranking → eligibility`. `jobhunt-jobs` and `jobhunt-profile` do not depend on any HTTP,
+Dependencies only point downward: `cli → mcp → app`, `app → sources,
+storage → jobs → core`, `app, storage → profile → core`, `app →
+eligibility → jobs, profile`, and `app, storage → ranking → eligibility`
+(the CLI also uses `resume` to read resume files). `jobhunt-jobs` and `jobhunt-profile` do not depend on any HTTP,
 SQL or PDF crate, nor on each other; `jobhunt-eligibility` is the only
 place where they meet.
 
@@ -1416,10 +1696,44 @@ rejected, or any converted posting is invalid.
   endpoints (`JOBHUNT_VERIFY_ENDPOINT`), `show` and `check` without
   fetching, reuse within the window, `--force`, `--details`, a profile
   change, 503s keeping the last success, jobs taken down, and `find`
-  filtering; and ranking through the binary (`rank` with and without
-  `--all`, `why --details`, every feedback command with reasons read or
+  filtering; and ranking through the binary (`rank` / `find --offline`
+  with and without `--all`, `why --details`, every feedback command with reasons read or
   kept as written, `taste`, `pipeline`, `feedback`, `show`'s fit) over
   real Ashby and Greenhouse responses, a resume and verified jobs.
+
+- `jobhunt-app`: id resolution and short ids, source selection, the
+  structured preference inputs, description summaries.
+- The local product, through the binary (`crates/jobhunt-cli/tests`, all
+  offline, against mock job boards serving saved real responses for both
+  discovery, `JOBHUNT_DISCOVERY_ENDPOINT`, and verification,
+  `JOBHUNT_VERIFY_ENDPOINT`):
+  - `product_e2e`: first run without a profile, the first-use flow, the
+    fast path (a repeated `find` makes no request), `--refresh`,
+    `--offline`, `--raw`, `--json`, short ids, falling back to stored jobs
+    when an automatic refresh fails, "no jobs yet", `export` / `import`
+    into a fresh database (pipeline and taste identical, re-import changes
+    nothing, `--replace`, wrong format and version), `doctor`;
+  - `mcp_protocol`: `jobhunt mcp` as a child process spoken to over
+    stdin/stdout: handshake, version negotiation, `ping`, every tool's
+    schemas and annotations, every error code, schema violations, a server
+    that can't start writing nothing to stdout, ambiguous and unique short
+    ids, clean exit when the client disconnects, and, at `-vvv` with JSON
+    logs, every stdout line a JSON-RPC message;
+  - `mcp_workflow`: the whole loop through MCP (profile, preferences,
+    refresh and verify through `search_jobs`, `get_job`, `verify_job`,
+    save, reject, applied, the next search reflecting it, application
+    context checked claim by claim against the evidence policy in the
+    database), confirmed / rejected / stale evidence, and the ranking rules
+    (ineligible and rejected jobs stay out, applied ones join the
+    pipeline, what you said beats learned taste, unpublished pay is unknown
+    not low, no percentages);
+  - `shared_state`: the CLI and a running MCP server on one database (a
+    save through MCP in the CLI's pipeline, a CLI rejection in the next
+    MCP search), identical answers from `find --json` / `search_jobs`,
+    `show --json` / `get_job`, `pipeline --json` / `get_pipeline`,
+    equivalent state from `reject` and `reject_job`, retries of every
+    mutation through both interfaces, concurrent MCP requests next to CLI
+    processes, and processes creating one new database at once.
 
 Only the offline suite runs in required CI. The live tests run separately,
 three times a week and on demand, in the "Live sources" workflow, so a
@@ -1454,6 +1768,25 @@ Nothing in the pipeline, lifecycle, storage or CLI output changes.
 
 ## Known limitations
 
+Local product and MCP:
+
+- Not built yet: application assistance (writing answers, cover letters,
+  tailored resumes; `prepare_application_context` only prepares evidence),
+  scheduled discovery, notifications, and any hosted or multi-user
+  version.
+- `jobhunt mcp` speaks stdio only. Clients that need a remote HTTPS server
+  (ChatGPT) can't use it directly.
+- The MCP server has no resources or prompts; the tools cover the product.
+  It reports progress on stderr, not as MCP progress notifications.
+- Discovery and verification run with a process-wide lock only around
+  read-modify-write use cases (feedback, preferences, imports); across
+  processes, SQLite serializes writes (`BEGIN IMMEDIATE`, 5 s busy
+  timeout) and profile changes retry on a lost optimistic-revision race.
+  A very long discovery run in one process can make another process's
+  write wait for up to the busy timeout.
+- The statement parser reads English with fixed vocabularies; parts it
+  can't read are kept and reported, never used.
+
 Profile:
 
 - Resume parsing is rule-based. Unusual layouts (two-column designs whose
@@ -1484,7 +1817,7 @@ Eligibility:
   citizenship rules, and the answer is a compatibility signal, not legal
   advice.
 - No currency conversion, and pay is not part of eligibility (a pay
-  minimum is a ranking question, answered by `jobhunt rank`).
+  minimum is a ranking question, answered by `jobhunt find`).
 - Verification is plain HTTP. Employer careers pages are not checked
   (so no listing reaches `employer_first_party` yet); Ashby application
   pages render in a browser and are known from the API, not requested; a
@@ -1505,8 +1838,10 @@ Ranking:
   (the domain is contradictory; sales is avoided), not as a combination.
 - Learned taste doesn't decay with time; `taste` shows when each pattern
   was last reinforced.
-- `rank` reads every open stored opportunity and its verification and
-  eligibility from the database each time (seconds for thousands of jobs).
+- `find` (and `search_jobs`) reads every open stored opportunity and its
+  verification and eligibility from the database each time (seconds for
+  thousands of jobs); only the network is skipped while stored jobs are
+  fresh.
 
 Jobs:
 

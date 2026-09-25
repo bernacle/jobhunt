@@ -29,6 +29,10 @@ pub(crate) static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migratio
 /// Ids bound per statement in batched updates (well under SQLite's limit).
 const BATCH: usize = 500;
 
+/// How many times opening a database retries migrations that raced
+/// another process.
+const MIGRATION_ATTEMPTS: u32 = 5;
+
 /// Content columns written on insert and on content rewrite, in bind order.
 /// Must match [`ContentValues::bind`].
 const CONTENT_COLUMNS: [&str; 24] = [
@@ -142,10 +146,24 @@ impl SqliteJobStore {
     }
 
     async fn initialize(pool: SqlitePool, location: String) -> Result<Self, StorageError> {
-        MIGRATOR
-            .run(&pool)
-            .await
-            .map_err(|e| StorageError::Migration(Box::new(e)))?;
+        // Two processes opening a new database at the same moment (the CLI
+        // and an MCP server, say) can both see a migration as pending; the
+        // second one's attempt then fails because the first applied it.
+        // Running the migrator again is safe: it re-reads what is applied
+        // (and verifies checksums), so it either finishes or reports a real
+        // problem.
+        let mut attempt = 0;
+        loop {
+            match MIGRATOR.run(&pool).await {
+                Ok(()) => break,
+                Err(error) if attempt < MIGRATION_ATTEMPTS => {
+                    attempt += 1;
+                    debug!(%error, attempt, "migration raced another process; retrying");
+                    tokio::time::sleep(Duration::from_millis(50 * u64::from(attempt))).await;
+                }
+                Err(error) => return Err(StorageError::Migration(Box::new(error))),
+            }
+        }
         info!(database = %location, "job store ready");
         Ok(Self { pool, location })
     }
@@ -155,10 +173,205 @@ impl SqliteJobStore {
         &self.location
     }
 
+    /// Starts a transaction that writes. It takes SQLite's write lock at
+    /// `BEGIN IMMEDIATE`, where a busy database is waited for (the busy
+    /// timeout), instead of upgrading a read transaction later, which fails
+    /// at once (`SQLITE_BUSY_SNAPSHOT`) if another connection wrote in
+    /// between. Every read-then-write transaction must start here.
+    pub(crate) async fn begin_write(
+        &self,
+    ) -> Result<sqlx::Transaction<'static, Sqlite>, sqlx::Error> {
+        self.pool.begin_with("BEGIN IMMEDIATE").await
+    }
+
     /// Closes all connections, flushing the write-ahead log.
     pub async fn close(self) {
         self.pool.close().await;
     }
+
+    /// Opportunity ids that start with `prefix` (`opp_1a2b…`), at most
+    /// `limit`, so short ids typed by people can be resolved.
+    pub async fn opportunities_with_prefix(
+        &self,
+        prefix: &str,
+        limit: usize,
+    ) -> Result<Vec<OpportunityId>, StorageError> {
+        let rows: Vec<String> = sqlx::query_scalar(
+            "SELECT DISTINCT opportunity_id FROM jobs WHERE opportunity_id LIKE ? ESCAPE '\\' \
+             ORDER BY opportunity_id LIMIT ?",
+        )
+        .bind(like_prefix(prefix))
+        .bind(i64::try_from(limit).unwrap_or(i64::MAX))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(query_error("resolving an opportunity id"))?;
+        rows.iter()
+            .map(|id| {
+                id.parse()
+                    .map_err(|e| corrupt(id, format!("opportunity_id: {e}")))
+            })
+            .collect()
+    }
+
+    /// Job ids that start with `prefix` (`job_1a2b…`), at most `limit`.
+    pub async fn jobs_with_prefix(
+        &self,
+        prefix: &str,
+        limit: usize,
+    ) -> Result<Vec<JobId>, StorageError> {
+        let rows: Vec<String> = sqlx::query_scalar(
+            "SELECT id FROM jobs WHERE id LIKE ? ESCAPE '\\' ORDER BY id LIMIT ?",
+        )
+        .bind(like_prefix(prefix))
+        .bind(i64::try_from(limit).unwrap_or(i64::MAX))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(query_error("resolving a job id"))?;
+        rows.iter()
+            .map(|id| id.parse().map_err(|e| corrupt(id, format!("id: {e}"))))
+            .collect()
+    }
+
+    /// When each source was last read successfully (a full listing or a
+    /// "not modified" answer). Sources never read are absent.
+    pub async fn last_checked(&self) -> Result<HashMap<SourceKey, DateTime<Utc>>, StorageError> {
+        let rows = sqlx::query(
+            "SELECT source_kind, source_instance, MAX(finished_at) AS at FROM source_scans \
+             WHERE status IN ('listing', 'not_modified') GROUP BY source_kind, source_instance",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(query_error("loading when sources were last read"))?;
+        let mut out = HashMap::with_capacity(rows.len());
+        for row in rows {
+            let kind: String = row
+                .try_get("source_kind")
+                .map_err(column_error("source_scans"))?;
+            let instance: String = row
+                .try_get("source_instance")
+                .map_err(column_error("source_scans"))?;
+            let at: String = row.try_get("at").map_err(column_error("source_scans"))?;
+            let Ok(key) = SourceKey::new(&kind, &instance) else {
+                continue;
+            };
+            let at = decode_timestamp(&at)
+                .map_err(|e| corrupt(&format!("scan of {key}"), e.to_string()))?;
+            out.insert(key, at);
+        }
+        Ok(out)
+    }
+
+    /// Counts for diagnostics (`jobhunt doctor`).
+    pub async fn stats(&self) -> Result<StoreStats, StorageError> {
+        let count = |sql: &'static str| {
+            let pool = self.pool.clone();
+            async move {
+                sqlx::query_scalar::<_, i64>(sql)
+                    .fetch_one(&pool)
+                    .await
+                    .map(|n| u64::try_from(n).unwrap_or(0))
+                    .map_err(query_error("counting stored records"))
+            }
+        };
+        let latest_migration: Option<i64> =
+            sqlx::query_scalar("SELECT MAX(version) FROM _sqlx_migrations WHERE success = 1")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(query_error("reading the schema version"))?;
+        Ok(StoreStats {
+            jobs: count("SELECT COUNT(*) FROM jobs").await?,
+            open_jobs: count("SELECT COUNT(*) FROM jobs WHERE status = 'open'").await?,
+            open_opportunities: count(
+                "SELECT COUNT(DISTINCT opportunity_id) FROM jobs WHERE status = 'open'",
+            )
+            .await?,
+            verifications: count("SELECT COUNT(*) FROM job_verifications").await?,
+            feedback: count("SELECT COUNT(*) FROM opportunity_feedback WHERE action != 'seen'")
+                .await?,
+            migrations_applied: count("SELECT COUNT(*) FROM _sqlx_migrations WHERE success = 1")
+                .await?,
+            migrations_known: MIGRATOR.iter().count() as u64,
+            latest_migration,
+        })
+    }
+}
+
+/// What a store holds, for diagnostics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoreStats {
+    pub jobs: u64,
+    pub open_jobs: u64,
+    pub open_opportunities: u64,
+    pub verifications: u64,
+    /// Feedback events other than "looked at".
+    pub feedback: u64,
+    pub migrations_applied: u64,
+    /// Migrations this build knows about.
+    pub migrations_known: u64,
+    pub latest_migration: Option<i64>,
+}
+
+/// A `LIKE` pattern matching values that start with `prefix` literally.
+fn like_prefix(prefix: &str) -> String {
+    let mut pattern = String::with_capacity(prefix.len() + 1);
+    for c in prefix.chars() {
+        if matches!(c, '%' | '_' | '\\') {
+            pattern.push('\\');
+        }
+        pattern.push(c);
+    }
+    pattern.push('%');
+    pattern
+}
+
+/// Inserts a job exactly as it was stored elsewhere (an imported state
+/// file), unless a job with its id already exists. Returns whether it was
+/// inserted. The record keeps its own timestamps and status; the next scan
+/// of its source reconciles it through the normal lifecycle.
+pub(crate) async fn import_job(
+    tx: &mut SqliteConnection,
+    record: &JobRecord,
+) -> Result<bool, StorageError> {
+    let id = record.id.to_string();
+    if record.posting.id() != record.id {
+        return Err(corrupt(
+            &id,
+            "the id does not match the posting's source and source id".into(),
+        ));
+    }
+    let exists: Option<i64> = sqlx::query_scalar("SELECT 1 FROM jobs WHERE id = ?")
+        .bind(&id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(query_error("checking for an imported job"))?;
+    if exists.is_some() {
+        return Ok(false);
+    }
+    let values = ContentValues::from_posting(
+        &record.posting,
+        &record.posting.fingerprint().to_hex(),
+        &record.posting.content_fingerprint().to_hex(),
+    )?;
+    values
+        .bind(sqlx::query(&INSERT_SQL).bind(&id))
+        .bind(encode_timestamp(record.first_seen_at))
+        .bind(encode_timestamp(record.last_seen_at))
+        .bind(encode_timestamp(record.content_updated_at))
+        .bind(record.status.as_str())
+        .bind(record.opportunity_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(query_error("inserting an imported job"))?;
+    if let Some(closed_at) = record.closed_at {
+        sqlx::query("UPDATE jobs SET closed_at = ? WHERE id = ?")
+            .bind(encode_timestamp(closed_at))
+            .bind(&id)
+            .execute(&mut *tx)
+            .await
+            .map_err(query_error("inserting an imported job"))?;
+    }
+    replace_evidence(&mut *tx, &id, &record.posting).await?;
+    Ok(true)
 }
 
 #[async_trait]
@@ -236,8 +449,7 @@ impl JobRepository for SqliteJobStore {
 
     async fn apply_scan(&self, scan: &ScanWrite<'_>) -> Result<ScanResult, StorageError> {
         let mut tx = self
-            .pool
-            .begin()
+            .begin_write()
             .await
             .map_err(query_error("starting a transaction"))?;
         let observed = encode_timestamp(scan.observed_at);
@@ -372,8 +584,7 @@ impl JobRepository for SqliteJobStore {
             return Ok(());
         }
         let mut tx = self
-            .pool
-            .begin()
+            .begin_write()
             .await
             .map_err(query_error("starting a transaction"))?;
         for (job, opportunity) in assignments {

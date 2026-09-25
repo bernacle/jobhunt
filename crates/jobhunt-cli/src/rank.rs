@@ -1,25 +1,24 @@
-//! `jobhunt rank`, `why`, `taste`, `pipeline`, `feedback`, and the
-//! feedback commands (`save`, `unsave`, `reject`, `like`, `dislike`,
-//! `applied`, `interview`, `offer`).
+//! `jobhunt why`, `taste`, `pipeline`, `feedback`, and the feedback
+//! commands (`save`, `unsave`, `reject`, `like`, `dislike`, `applied`,
+//! `interview`, `offer`).
 //!
-//! Thin: arguments in, [`RankingService`] use cases, [`rank_render`] out.
+//! Thin: arguments in, [`jobhunt_app::LocalApp`] use cases, [`rank_render`]
+//! out.
 
-use std::io;
 use std::process::ExitCode;
 
-use anyhow::Context;
-use chrono::Utc;
-use jobhunt_ranking::{FeedbackAction, RankQuery, RankingService, RuleReader};
-use jobhunt_storage::SqliteJobStore;
+use jobhunt_app::feedback::PipelineView;
+use jobhunt_ranking::FeedbackAction;
 
 use crate::config::LoadedConfig;
+use crate::local::{finish, print_json, with_app};
 use crate::rank_render;
-use crate::show::load_records;
 
-/// Feedback on one job.
+/// Feedback on one opportunity.
 #[derive(Debug, clap::Args)]
 pub struct FeedbackArgs {
-    /// A job id (job_…) or an opportunity id (opp_…).
+    /// An opportunity id (opp_…, as `find` prints it) or a job id (job_…);
+    /// a unique prefix works too.
     #[arg(value_name = "ID")]
     pub id: String,
 
@@ -31,24 +30,9 @@ pub struct FeedbackArgs {
 }
 
 #[derive(Debug, clap::Args)]
-pub struct RankArgs {
-    /// Only rank jobs whose title, company, location, department or team
-    /// contain every one of these words.
-    #[arg(value_name = "WORDS")]
-    pub query: Vec<String>,
-
-    /// Maximum number of jobs to show.
-    #[arg(short = 'n', long, default_value_t = 10, value_name = "N")]
-    pub limit: usize,
-
-    /// Also show jobs that rank as maybe or low priority.
-    #[arg(long)]
-    pub all: bool,
-}
-
-#[derive(Debug, clap::Args)]
 pub struct WhyArgs {
-    /// A job id (job_…) or an opportunity id (opp_…).
+    /// An opportunity id (opp_…) or a job id (job_…); a unique prefix
+    /// works too.
     #[arg(value_name = "ID")]
     pub id: String,
 
@@ -66,49 +50,21 @@ pub struct TasteArgs {
 
 #[derive(Debug, clap::Args)]
 pub struct PipelineArgs {
-    /// Also list the jobs you rejected.
+    /// Also list the opportunities you rejected.
     #[arg(long)]
     pub all: bool,
+
+    /// Print the pipeline as JSON (the structure the MCP get_pipeline tool
+    /// returns).
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Debug, clap::Args)]
 pub struct LogArgs {
-    /// Only the feedback on this job (job_… or opp_…).
+    /// Only the feedback on this opportunity (opp_… or job_…).
     #[arg(value_name = "ID")]
     pub id: Option<String>,
-}
-
-async fn open(loaded: &LoadedConfig) -> anyhow::Result<SqliteJobStore> {
-    SqliteJobStore::open(&loaded.database)
-        .await
-        .context("could not open the local job database")
-}
-
-fn service<'a>(
-    store: &'a SqliteJobStore,
-    loaded: &LoadedConfig,
-) -> RankingService<'a, SqliteJobStore> {
-    RankingService::new(store, &RuleReader).with_policy(loaded.config.verification.policy())
-}
-
-fn finish(result: io::Result<()>, what: &str) -> anyhow::Result<ExitCode> {
-    match result {
-        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(ExitCode::SUCCESS),
-        other => {
-            other.with_context(|| format!("could not write {what}"))?;
-            Ok(ExitCode::SUCCESS)
-        }
-    }
-}
-
-/// Runs a use case against the store, closing it afterwards.
-macro_rules! with_store {
-    ($loaded:expr, |$store:ident| $body:expr) => {{
-        let $store = open($loaded).await?;
-        let result: anyhow::Result<ExitCode> = async { $body }.await;
-        $store.close().await;
-        result
-    }};
 }
 
 pub async fn feedback(
@@ -116,52 +72,36 @@ pub async fn feedback(
     args: FeedbackArgs,
     loaded: &LoadedConfig,
 ) -> anyhow::Result<ExitCode> {
-    with_store!(loaded, |store| {
-        let records = load_records(&store, &args.id).await?;
-        let recorded = service(&store, loaded)
-            .record(&records, action, args.reason.as_deref(), Utc::now())
-            .await
-            .context("could not save the feedback")?;
+    with_app!(loaded, |app| {
+        let opportunity = app.resolve(&args.id).await?;
+        let outcome = app
+            .record_feedback(
+                &opportunity,
+                action,
+                args.reason.as_deref(),
+                jobhunt_app::now(),
+            )
+            .await?;
         finish(
-            rank_render::recorded(&mut anstream::stdout().lock(), &recorded),
+            rank_render::recorded(&mut anstream::stdout().lock(), &outcome),
             "the feedback",
         )
     })
 }
 
-pub async fn rank(args: RankArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
-    with_store!(loaded, |store| {
-        let query = RankQuery {
-            text: args.query.join(" "),
-            store_top: args.limit,
-            all: args.all,
-        };
-        let report = service(&store, loaded).rank(&query, Utc::now()).await?;
-        finish(
-            rank_render::rank_list(
-                &mut anstream::stdout().lock(),
-                &report,
-                args.limit,
-                args.all,
-            ),
-            "the ranking",
-        )
-    })
-}
-
 pub async fn why(args: WhyArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
-    with_store!(loaded, |store| {
-        let records = load_records(&store, &args.id).await?;
-        let now = Utc::now();
-        let service = service(&store, loaded);
-        let explained = service.explain(&records, now).await?;
-        service.mark_seen(&records, now).await?;
+    with_app!(loaded, |app| {
+        let opportunity = app.resolve(&args.id).await?;
+        let inspection = app.inspect(&opportunity, true, jobhunt_app::now()).await?;
+        let Some(ranking) = &inspection.ranking else {
+            return Err(jobhunt_app::AppError::NoProfile.into());
+        };
         finish(
             rank_render::brief(
                 &mut anstream::stdout().lock(),
-                &explained.ranking,
+                ranking,
                 args.details,
-                explained.reused,
+                inspection.reused_ranking,
             ),
             "the brief",
         )
@@ -169,8 +109,8 @@ pub async fn why(args: WhyArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCod
 }
 
 pub async fn taste(args: TasteArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
-    with_store!(loaded, |store| {
-        let service = service(&store, loaded);
+    with_app!(loaded, |app| {
+        let service = app.ranking();
         let (_, person) = service.person().await?;
         let model = service.taste(&person).await?;
         finish(
@@ -181,8 +121,11 @@ pub async fn taste(args: TasteArgs, loaded: &LoadedConfig) -> anyhow::Result<Exi
 }
 
 pub async fn pipeline(args: PipelineArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
-    with_store!(loaded, |store| {
-        let entries = service(&store, loaded).pipeline(args.all).await?;
+    with_app!(loaded, |app| {
+        let entries = app.pipeline(args.all).await?;
+        if args.json {
+            return print_json(&PipelineView::of(&entries));
+        }
         finish(
             rank_render::pipeline(&mut anstream::stdout().lock(), &entries),
             "the pipeline",
@@ -191,12 +134,12 @@ pub async fn pipeline(args: PipelineArgs, loaded: &LoadedConfig) -> anyhow::Resu
 }
 
 pub async fn log(args: LogArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
-    with_store!(loaded, |store| {
-        let service = service(&store, loaded);
+    with_app!(loaded, |app| {
+        let service = app.ranking();
         let events = match &args.id {
             Some(id) => {
-                let records = load_records(&store, id).await?;
-                service.state(&records).await?.events
+                let opportunity = app.resolve(id).await?;
+                service.state(&opportunity.records).await?.events
             }
             None => service.feedback().await?,
         };

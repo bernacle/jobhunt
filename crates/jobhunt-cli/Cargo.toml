@@ -20,9 +20,11 @@ chrono.workspace = true
 clap.workspace = true
 directories.workspace = true
 futures.workspace = true
+jobhunt-app.workspace = true
 jobhunt-core.workspace = true
 jobhunt-eligibility.workspace = true
 jobhunt-jobs.workspace = true
+jobhunt-mcp.workspace = true
 jobhunt-profile.workspace = true
 jobhunt-ranking.workspace = true
 jobhunt-resume.workspace = true
@@ -39,6 +41,7 @@ url.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+tokio = { workspace = true, features = ["process", "io-util"] }
 wiremock.workspace = true
 
 [lints]

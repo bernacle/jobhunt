@@ -10,6 +10,8 @@
 
 [logging]
 # A tracing filter directive. Overridden by -v flags and JOBHUNT_LOG/RUST_LOG.
+# The same setting applies to `jobhunt mcp`, whose logs also go to stderr
+# (stdout carries only the MCP protocol).
 level = "error"
 # "text" or "json" (logs always go to stderr).
 format = "text"
@@ -24,6 +26,10 @@ max_retries = 2
 # Boards that support it are asked "has anything changed?" (HTTP ETag) and
 # skipped when not; after this many hours they are re-read in full anyway.
 revalidate_after_hours = 24
+# `jobhunt find` (and the MCP search_jobs tool) work from stored jobs while
+# every source was read within this many hours, and refresh the sources
+# first otherwise. `find --refresh` always refreshes; `--offline` never does.
+refresh_after_hours = 12
 
 [verification]
 # `jobhunt verify` reuses an attempt this recent instead of asking the

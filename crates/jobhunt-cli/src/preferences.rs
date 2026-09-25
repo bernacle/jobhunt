@@ -7,13 +7,13 @@ use std::str::FromStr;
 use anyhow::bail;
 use chrono::Utc;
 use clap::Subcommand;
-use jobhunt_profile::{
-    Arrangement, CompanyTrait, CompensationBound, Engagement, PayPeriod, PreferenceValue,
-    ProfileService, RuleParser, Stance, WorkAspect, WorkMode,
+use jobhunt_app::preferences::{
+    ArrangementInput, EngagementInput, PeriodInput, PreferenceInput, PreferenceUpdate, StanceInput,
+    WorkModeInput,
 };
 
 use crate::config::LoadedConfig;
-use crate::profile_args::{StanceArg, finish, open_store};
+use crate::profile_args::{StanceArg, finish};
 use crate::profile_render::{self, short};
 
 #[derive(Debug, clap::Args)]
@@ -191,44 +191,53 @@ impl FromStr for Amount {
 }
 
 pub async fn run(args: PreferencesArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
-    let store = open_store(loaded).await?;
-    let result = execute(args, &store).await;
-    store.close().await;
+    let app = crate::local::open(loaded).await?;
+    let result = execute(args, &app).await;
+    app.close().await;
     result
 }
 
-async fn execute(
-    args: PreferencesArgs,
-    store: &jobhunt_storage::SqliteJobStore,
-) -> anyhow::Result<ExitCode> {
-    let service = ProfileService::new(store);
+async fn execute(args: PreferencesArgs, app: &jobhunt_app::LocalApp) -> anyhow::Result<ExitCode> {
     let now = Utc::now();
     let mut out = anstream::stdout().lock();
     match args.command.unwrap_or(PreferencesCommand::Show) {
         PreferencesCommand::Show => {
-            let data = service.load_or_new(now).await?;
+            let data = app.profiles().load_or_new(now).await?;
             finish(profile_render::preferences(&mut out, &data))
         }
         PreferencesCommand::Add { words } => {
-            let outcome = service
-                .add_statement(&words.join(" "), &RuleParser, now)
-                .await?;
-            finish(profile_render::statement_outcome(&mut out, &outcome))
+            let update = PreferenceUpdate {
+                statement: Some(words.join(" ")),
+                ..PreferenceUpdate::default()
+            };
+            let changes = app.update_preferences(&update, now).await?;
+            match &changes.statement {
+                Some(outcome) => finish(profile_render::statement_outcome(&mut out, outcome)),
+                None => bail!("the statement is empty"),
+            }
         }
         PreferencesCommand::Remove { id } => {
-            service.remove(&id, now).await?;
+            let update = PreferenceUpdate {
+                remove: vec![id.clone()],
+                ..PreferenceUpdate::default()
+            };
+            app.update_preferences(&update, now).await?;
             finish(writeln!(out, "Removed {}.", short(&id)))
         }
         PreferencesCommand::Set(set) => {
-            let values = values(set)?;
+            let update = PreferenceUpdate {
+                set: vec![input(set)],
+                ..PreferenceUpdate::default()
+            };
+            let changes = app.update_preferences(&update, now).await?;
             let mut result = Ok(());
-            for (value, stance) in values {
-                let (pref, replaced) = service.set_preference(value, stance, now).await?;
+            for (pref, replaced, repeated) in &changes.set {
                 if result.is_ok() {
                     result = writeln!(
                         out,
-                        "Set: {} {} ({})",
-                        stance.as_str(),
+                        "{}: {} {} ({})",
+                        if *repeated { "Already set" } else { "Set" },
+                        pref.stance.as_str(),
                         pref.value,
                         short(pref.id)
                     );
@@ -244,16 +253,21 @@ async fn execute(
     }
 }
 
-fn values(set: SetCommand) -> anyhow::Result<Vec<(PreferenceValue, Stance)>> {
-    Ok(match set {
-        SetCommand::Role { role, stance } => {
-            vec![(
-                PreferenceValue::Role {
-                    role: role.trim().to_lowercase(),
-                },
-                stance.into(),
-            )]
-        }
+/// The structured preference a `set` command gives (validated by the
+/// application, the same way as the MCP update_preferences tool).
+fn input(set: SetCommand) -> PreferenceInput {
+    let stance = |s: StanceArg| match s {
+        StanceArg::Require => StanceInput::Require,
+        StanceArg::Want => StanceInput::Want,
+        StanceArg::Accept => StanceInput::Accept,
+        StanceArg::Avoid => StanceInput::Avoid,
+    };
+    let yes = |a: YesNo| a == YesNo::Yes;
+    match set {
+        SetCommand::Role { role, stance: s } => PreferenceInput::Role {
+            role,
+            stance: stance(s),
+        },
         SetCommand::Compensation {
             minimum,
             target,
@@ -261,147 +275,78 @@ fn values(set: SetCommand) -> anyhow::Result<Vec<(PreferenceValue, Stance)>> {
             per,
             contract,
             employment,
-        } => {
-            if minimum.is_none() && target.is_none() {
-                bail!("give --minimum, --target, or both");
-            }
-            let currency = currency.trim().to_uppercase();
-            if currency.len() != 3 || !currency.chars().all(|c| c.is_ascii_alphabetic()) {
-                bail!("--currency must be a three-letter ISO code such as USD, EUR or BRL");
-            }
-            let period = match per {
-                PeriodArg::Year => PayPeriod::Year,
-                PeriodArg::Month => PayPeriod::Month,
-                PeriodArg::Day => PayPeriod::Day,
-                PeriodArg::Hour => PayPeriod::Hour,
-            };
-            let arrangement = if contract {
-                Some(Arrangement::Contract)
+        } => PreferenceInput::Compensation {
+            minimum: minimum.map(|a| a.0),
+            target: target.map(|a| a.0),
+            currency,
+            period: match per {
+                PeriodArg::Year => PeriodInput::Year,
+                PeriodArg::Month => PeriodInput::Month,
+                PeriodArg::Day => PeriodInput::Day,
+                PeriodArg::Hour => PeriodInput::Hour,
+            },
+            applies_to: if contract {
+                Some(ArrangementInput::Contract)
             } else if employment {
-                Some(Arrangement::Employment)
+                Some(ArrangementInput::Employment)
             } else {
                 None
-            };
-            let value = |bound, amount: Amount| PreferenceValue::Compensation {
-                bound,
-                amount: amount.0,
-                currency: Some(currency.clone()),
-                period,
-                arrangement,
-            };
-            let mut out = Vec::new();
-            if let Some(amount) = minimum {
-                out.push((value(CompensationBound::Minimum, amount), Stance::Required));
-            }
-            if let Some(amount) = target {
-                out.push((value(CompensationBound::Target, amount), Stance::Wanted));
-            }
-            out
-        }
-        SetCommand::WorkMode { mode, stance } => {
-            let mode = match mode {
-                ModeArg::Remote => WorkMode::Remote,
-                ModeArg::Hybrid => WorkMode::Hybrid,
-                ModeArg::Onsite => WorkMode::Onsite,
-            };
-            vec![(PreferenceValue::WorkMode { mode }, stance.into())]
-        }
-        SetCommand::Location { place } => {
-            let place = place.join(" ").trim().to_owned();
-            if place.is_empty() {
-                bail!(
-                    "say where you live, e.g. jobhunt preferences set location \"Lisbon, Portugal\""
-                );
-            }
-            vec![(PreferenceValue::CurrentLocation { place }, Stance::Required)]
-        }
-        SetCommand::Region { region, stance } => {
-            vec![(
-                PreferenceValue::Region {
-                    region: region.trim().to_owned(),
-                },
-                stance.into(),
-            )]
-        }
-        SetCommand::Timezone { zone, stance } => {
-            vec![(
-                PreferenceValue::Timezone {
-                    zone: zone.trim().to_owned(),
-                },
-                stance.into(),
-            )]
-        }
-        SetCommand::Relocation { answer } => vec![(
-            PreferenceValue::Relocation {
-                willing: answer == YesNo::Yes,
             },
-            Stance::Required,
-        )],
-        SetCommand::Sponsorship { answer } => vec![(
-            PreferenceValue::Sponsorship {
-                needed: answer == YesNo::Yes,
+        },
+        SetCommand::WorkMode { mode, stance: s } => PreferenceInput::WorkMode {
+            mode: match mode {
+                ModeArg::Remote => WorkModeInput::Remote,
+                ModeArg::Hybrid => WorkModeInput::Hybrid,
+                ModeArg::Onsite => WorkModeInput::Onsite,
             },
-            Stance::Required,
-        )],
-        SetCommand::AuthorizedIn { place } => {
-            let place = place.join(" ").trim().to_owned();
-            if place.is_empty() {
-                bail!("name a country, e.g. jobhunt preferences set authorized-in Portugal");
-            }
-            vec![(
-                PreferenceValue::WorkAuthorization { place },
-                Stance::Required,
-            )]
-        }
-        SetCommand::Engagement { kind, stance } => vec![(
-            PreferenceValue::Engagement {
-                engagement: match kind {
-                    EngagementArg::Employee => Engagement::Employee,
-                    EngagementArg::Contractor => Engagement::Contractor,
-                },
+            stance: stance(s),
+        },
+        SetCommand::Location { place } => PreferenceInput::Location {
+            place: place.join(" "),
+        },
+        SetCommand::Region { region, stance: s } => PreferenceInput::Region {
+            region,
+            stance: stance(s),
+        },
+        SetCommand::Timezone { zone, stance: s } => PreferenceInput::Timezone {
+            zone,
+            stance: stance(s),
+        },
+        SetCommand::Relocation { answer } => PreferenceInput::Relocation {
+            willing: yes(answer),
+        },
+        SetCommand::Sponsorship { answer } => PreferenceInput::Sponsorship {
+            needed: yes(answer),
+        },
+        SetCommand::AuthorizedIn { place } => PreferenceInput::AuthorizedIn {
+            place: place.join(" "),
+        },
+        SetCommand::Engagement { kind, stance: s } => PreferenceInput::Engagement {
+            engagement: match kind {
+                EngagementArg::Employee => EngagementInput::Employee,
+                EngagementArg::Contractor => EngagementInput::Contractor,
             },
-            stance.into(),
-        )],
-        SetCommand::Company { kind, stance } => {
-            let Some(company) = CompanyTrait::from_canonical(&kind.trim().to_lowercase()) else {
-                let valid: Vec<String> = CompanyTrait::ALL
-                    .iter()
-                    .map(|t| t.as_str().replace('_', "-"))
-                    .collect();
-                bail!(
-                    "unknown company kind {kind:?}; use one of: {}",
-                    valid.join(", ")
-                );
-            };
-            vec![(PreferenceValue::Company { company }, stance.into())]
-        }
-        SetCommand::Domain { domain, stance } => {
-            let raw = domain.join(" ");
-            let domain = jobhunt_profile::infer::canonical_domain(&raw)
-                .map_or_else(|| raw.trim().to_lowercase(), str::to_owned);
-            if domain.is_empty() {
-                bail!("name a domain, e.g. jobhunt preferences set domain \"developer tools\"");
-            }
-            vec![(PreferenceValue::Domain { domain }, stance.into())]
-        }
-        SetCommand::WorkStyle { aspect, stance } => {
-            let Some(aspect) = WorkAspect::from_canonical(&aspect.trim().to_lowercase()) else {
-                let valid: Vec<String> = WorkAspect::ALL
-                    .iter()
-                    .map(|a| a.as_str().replace('_', "-"))
-                    .collect();
-                bail!(
-                    "unknown work-style aspect {aspect:?}; use one of: {}",
-                    valid.join(", ")
-                );
-            };
-            vec![(PreferenceValue::WorkStyle { aspect }, stance.into())]
-        }
-    })
+            stance: stance(s),
+        },
+        SetCommand::Company { kind, stance: s } => PreferenceInput::Company {
+            company: kind,
+            stance: stance(s),
+        },
+        SetCommand::Domain { domain, stance: s } => PreferenceInput::Domain {
+            domain: domain.join(" "),
+            stance: stance(s),
+        },
+        SetCommand::WorkStyle { aspect, stance: s } => PreferenceInput::WorkStyle {
+            aspect,
+            stance: stance(s),
+        },
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use jobhunt_profile::{CompanyTrait, Engagement, PreferenceValue, Stance};
+
     use super::*;
 
     #[test]
@@ -414,8 +359,8 @@ mod tests {
     }
 
     #[test]
-    fn structured_values() {
-        let comp = values(SetCommand::Compensation {
+    fn set_commands_become_the_shared_inputs() {
+        let comp = input(SetCommand::Compensation {
             minimum: Some(Amount(120_000)),
             target: Some(Amount(150_000)),
             currency: "usd".into(),
@@ -423,6 +368,7 @@ mod tests {
             contract: false,
             employment: false,
         })
+        .values()
         .unwrap();
         assert_eq!(comp.len(), 2);
         assert_eq!(comp[0].1, Stance::Required);
@@ -431,15 +377,17 @@ mod tests {
             PreferenceValue::Compensation { currency: Some(c), amount: 120_000, .. } if c == "USD"
         ));
         assert!(
-            values(SetCommand::Company {
+            input(SetCommand::Company {
                 kind: "unicorn".into(),
                 stance: StanceArg::Want
             })
+            .values()
             .is_err()
         );
-        let auth = values(SetCommand::AuthorizedIn {
+        let auth = input(SetCommand::AuthorizedIn {
             place: vec!["Portugal".into()],
         })
+        .values()
         .unwrap();
         assert_eq!(
             auth[0],
@@ -450,11 +398,16 @@ mod tests {
                 Stance::Required
             )
         );
-        assert!(values(SetCommand::AuthorizedIn { place: vec![] }).is_err());
-        let engagement = values(SetCommand::Engagement {
+        assert!(
+            input(SetCommand::AuthorizedIn { place: vec![] })
+                .values()
+                .is_err()
+        );
+        let engagement = input(SetCommand::Engagement {
             kind: EngagementArg::Contractor,
             stance: StanceArg::Avoid,
         })
+        .values()
         .unwrap();
         assert_eq!(
             engagement[0],
@@ -465,10 +418,11 @@ mod tests {
                 Stance::Unwanted
             )
         );
-        let company = values(SetCommand::Company {
+        let company = input(SetCommand::Company {
             kind: "founder-led".into(),
             stance: StanceArg::Want,
         })
+        .values()
         .unwrap();
         assert_eq!(
             company[0].0,

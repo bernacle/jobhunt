@@ -265,7 +265,46 @@ impl SourceSpec {
     }
 
     pub fn build(&self, http: &HttpClient) -> Result<Box<JobSource>, SourceError> {
+        self.build_at(http, None)
+    }
+
+    /// Like [`SourceSpec::build`], but with every API request sent to
+    /// `base` instead of the source's real host when it is given. For
+    /// offline tests against a local server; not a user setting.
+    pub fn build_at(
+        &self,
+        http: &HttpClient,
+        base: Option<&str>,
+    ) -> Result<Box<JobSource>, SourceError> {
         let http = http.clone();
+        if let Some(base) = base {
+            return Ok(match self {
+                Self::Ashby { key, board } => Box::new(AshbySource::with_api_base(
+                    key.clone(),
+                    board.clone(),
+                    http,
+                    base,
+                )?),
+                Self::Greenhouse { key, board } => Box::new(GreenhouseSource::with_api_base(
+                    key.clone(),
+                    board.clone(),
+                    http,
+                    base,
+                )?),
+                Self::Lever { key, site } => Box::new(LeverSource::with_api_base(
+                    key.clone(),
+                    site.clone(),
+                    http,
+                    base,
+                )?),
+                Self::Yc { key, company } => Box::new(YcSource::with_base(
+                    key.clone(),
+                    company.clone(),
+                    http,
+                    base,
+                )?),
+            });
+        }
         Ok(match self {
             Self::Ashby { key, board } => {
                 Box::new(AshbySource::new(key.clone(), board.clone(), http)?)

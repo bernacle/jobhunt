@@ -14,8 +14,6 @@ use jobhunt_jobs::verification::{
     ApplicationBasis, ApplicationStatus, Authority, CompensationChange, CompensationStatus,
     OpportunityTrust, RecordTrust, Standing, TrustState, VerificationAge, VerificationRecord, ago,
 };
-use jobhunt_profile::ProfileService;
-use jobhunt_storage::SqliteJobStore;
 
 use crate::render::{DIM, compensation_text};
 
@@ -23,12 +21,6 @@ const GOOD: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::G
 const OPEN: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::Yellow)));
 const BAD: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::Red)));
 const HEADING: Style = Style::new().bold();
-
-/// The person's facts, or `None` when there is no profile yet.
-pub async fn profile_facts(store: &SqliteJobStore) -> anyhow::Result<Option<ProfileFacts>> {
-    let data = ProfileService::new(store).load().await?;
-    Ok(data.as_ref().map(ProfileFacts::from_profile))
-}
 
 fn style(status: Eligibility) -> Style {
     match status {

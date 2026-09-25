@@ -137,7 +137,7 @@ impl Env {
 
     /// The id of the stored job with exactly this title.
     fn id_of(&self, title: &str) -> String {
-        let out = self.ok(&["find", "--offline", "-n", "100"]);
+        let out = self.ok(&["find", "--raw", "--offline", "-n", "100"]);
         let at = out
             .find(&format!(". {title}\n"))
             .unwrap_or_else(|| panic!("no job titled {title:?} in:\n{out}"));
@@ -161,10 +161,18 @@ fn has(out: &str, expected: &[&str]) {
 async fn ranks_learns_and_explains() {
     let env = Env::new().await;
 
-    // Without a profile there is nothing to rank against.
+    // Without a profile there is nothing to rank against: `find` lists the
+    // inventory and says how to start; the stored-only shortlist can't.
+    let out = env.ok(&["find", "--offline"]);
+    has(
+        &out,
+        &[
+            "No profile found, so these are not personalized. Start with:\n  jobhunt init resume.pdf",
+        ],
+    );
     let output = env.run(&["rank"]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("needs a career profile"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("No profile found"));
 
     env.ok(&["init", resume().to_str().unwrap()]);
     env.ok(&["preferences", "set", "location", "New", "York,", "NY"]);
@@ -197,13 +205,18 @@ async fn ranks_learns_and_explains() {
     has(
         &out,
         &[
-            "Worth your attention",
+            "Checked 11 open jobs",
+            "passed basic eligibility",
+            "2 are worth reviewing",
             "Member of Technical Staff - Systems — Modal   Strong fit",
             "Security Engineer, Cloud — Ramp   Strong fit",
+            "✓ Verified open just now · ✓ Eligible:",
+            "Why this may be worth your time",
             "+ Infrastructure roles: a role you want",
             "+ Meets your minimum of USD 180,000 per year across the range",
             "+ Reaches your target of USD 250,000 per year at the top of the range",
             "maybe or low priority (--all)",
+            "Offline: used stored jobs without refreshing or verifying them.",
             "Tiers are coarse on purpose",
         ],
     );
@@ -212,22 +225,22 @@ async fn ranks_learns_and_explains() {
     assert_eq!(out.matches(" · jobhunt why opp_").count(), 2, "{out}");
 
     // Everything else is still inspectable, in its place.
-    let all = env.ok(&["rank", "--all"]);
+    let all = env.ok(&["rank", "--all", "-n", "25"]);
     has(
         &all,
         &[
-            "Promising, but verify before spending time",
-            "? Not verified yet: it may be closed or changed",
-            "Could be worth it, if you can take it",
+            "? Not verified yet",
             "? Eligibility unclear: Requires hybrid presence in London",
             "- Sales roles: a role you don't want",
             "- Account Manager | Commercial: sales, while your experience is in engineering",
             "Account Manager | Commercial — Ramp   Low priority",
             "- Not one of the roles you listed (backend roles, infrastructure roles)",
             "- Customer-facing engineering (solutions / forward-deployed), not product engineering",
+            " · jobhunt verify opp_",
+            " · jobhunt check opp_",
         ],
     );
-    let first_unverified = all.find("Promising, but verify").unwrap();
+    let first_unverified = all.find("? Not verified yet").unwrap();
     assert!(all.find("Security Engineer, Cloud").unwrap() < first_unverified);
 
     // The brief: why, caveats, unknowns, and every signal with evidence.
@@ -427,5 +440,7 @@ async fn the_pipeline_follows_each_step() {
     // Unknown ids are errors, not feedback.
     let output = env.run(&["save", "job_00000000000000000000000000000000"]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("no stored job has the id"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("no stored opportunity or job has the id")
+    );
 }

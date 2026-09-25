@@ -263,7 +263,7 @@ async fn init_verify_show_check_and_find() {
     env.ok(None, &["init", resume().to_str().unwrap()]);
     let live = sources(Board::Live).await;
     discover(&env.db(), &live).await;
-    let linear = job_id(&env.ok(None, &["find", "--offline", "Fullstack"]));
+    let linear = job_id(&env.ok(None, &["find", "--raw", "--offline", "Fullstack"]));
 
     // Before any verification, show says so.
     let out = env.ok(None, &["show", &linear]);
@@ -356,6 +356,7 @@ async fn init_verify_show_check_and_find() {
             None,
             &[
                 "find",
+                "--raw",
                 "--offline",
                 "-n",
                 "50",
@@ -376,7 +377,7 @@ async fn init_verify_show_check_and_find() {
         ],
     );
     // Lever.
-    let spotify = job_id(&env.ok(None, &["find", "--offline", "Audiobook"]));
+    let spotify = job_id(&env.ok(None, &["find", "--raw", "--offline", "Audiobook"]));
     let out = env.ok(Some(&live), &["verify", &spotify]);
     has(
         &out,
@@ -431,12 +432,18 @@ async fn init_verify_show_check_and_find() {
     );
 
     // find filters on the new decisions.
-    let eligible = env.ok(None, &["find", "--offline", "--eligible", "-n", "100"]);
+    let eligible = env.ok(
+        None,
+        &["find", "--raw", "--offline", "--eligible", "-n", "100"],
+    );
     assert!(!eligible.contains("INELIGIBLE"), "{eligible}");
     assert!(!eligible.contains("UNCLEAR"), "{eligible}");
-    let possible = env.ok(None, &["find", "--offline", "--possible", "-n", "100"]);
+    let possible = env.ok(
+        None,
+        &["find", "--raw", "--offline", "--possible", "-n", "100"],
+    );
     assert!(!possible.contains("INELIGIBLE"), "{possible}");
-    let all = env.ok(None, &["find", "--offline", "-n", "100"]);
+    let all = env.ok(None, &["find", "--raw", "--offline", "-n", "100"]);
     has(
         &all,
         &[

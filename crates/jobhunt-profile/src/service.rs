@@ -115,6 +115,10 @@ pub struct StatementOutcome {
     pub preferences: Vec<Preference>,
     /// Older preferences the new ones replaced.
     pub replaced: Vec<Preference>,
+    /// The same statement was already in effect (its text was stored and
+    /// everything read from it is still active), so nothing changed. Adding
+    /// a statement is therefore safe to retry.
+    pub repeated: bool,
 }
 
 pub struct ProfileService<'a, R: ProfileRepository + ?Sized> {
@@ -437,6 +441,22 @@ impl<'a, R: ProfileRepository + ?Sized> ProfileService<'a, R> {
         let text = clean_block(text)
             .ok_or_else(|| ProfileError::Invalid("the statement is empty".into()))?;
         let mut data = self.load_or_new(now).await?;
+        if let Some(existing) = data.statements.iter().rev().find(|s| s.text == text) {
+            let read: Vec<Preference> = data
+                .preferences
+                .iter()
+                .filter(|p| p.statement == Some(existing.id))
+                .cloned()
+                .collect();
+            if read.iter().all(|p| p.active) {
+                return Ok(StatementOutcome {
+                    statement: existing.clone(),
+                    preferences: read,
+                    replaced: Vec::new(),
+                    repeated: true,
+                });
+            }
+        }
         let readout = parser.read(&text);
         let id = StatementId::derive(&[&self.id.to_string(), &text, &now.to_rfc3339()]);
         let any_uncertain = readout
@@ -491,6 +511,7 @@ impl<'a, R: ProfileRepository + ?Sized> ProfileService<'a, R> {
             statement,
             preferences,
             replaced,
+            repeated: false,
         })
     }
 

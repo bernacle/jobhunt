@@ -1,6 +1,6 @@
 [package]
 name = "jobhunt-mcp"
-description = "Model Context Protocol server for JobHunt (not implemented yet; see crate docs)."
+description = "The JobHunt MCP server: the local product's use cases as Model Context Protocol tools over stdio."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,6 +8,16 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+jobhunt-app.workspace = true
+jobhunt-jobs.workspace = true
+jobhunt-ranking.workspace = true
+rmcp.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true
