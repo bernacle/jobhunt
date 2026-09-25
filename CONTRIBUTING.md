@@ -90,20 +90,16 @@ immediately rather than depending on a third party.
 
 Fix formatting with `cargo fmt --all`.
 
-### The pre-push hook
+### Optional pre-push hook
 
-[`.githooks/pre-push`](.githooks/pre-push) runs `./scripts/check.sh` before
-every `git push` (with `--cloud` when `JOBHUNT_TEST_DATABASE_URL` is set)
-and aborts the push if it fails. A push that only deletes branches is not
-checked. Git doesn't enable versioned hooks by itself; do it once per clone:
+Not installed automatically. To run the gate before every `git push`:
 
 ```bash
-git config core.hooksPath .githooks
+printf '#!/bin/sh\nexec ./scripts/check.sh\n' > .git/hooks/pre-push
+chmod +x .git/hooks/pre-push
 ```
 
-In an emergency, `git push --no-verify` skips it. CI remains the source of
-truth, but GitHub Actions minutes are limited (see below), so a push should
-reach GitHub already green.
+Skip it once with `git push --no-verify`. CI remains the source of truth.
 
 ## Offline and live tests
 
@@ -143,8 +139,8 @@ verification request with `JOBHUNT_VERIFY_ENDPOINT=http://127.0.0.1:<port>`
 ## Continuous integration
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull
-requests that are ready for review (and by hand: **Actions → CI → Run
-workflow**). Its jobs are the required status checks:
+requests that are ready for review (not on drafts) and on every push to
+`main`. Its jobs are the required status checks:
 
 | Check | What fails it |
 | --- | --- |
@@ -171,37 +167,30 @@ Notes:
   deliberate change to `rust-version` (and the README).
 - The other jobs use the latest stable Rust, so a new Rust release can bring
   new clippy lints. Fix them in a small, separate PR.
-- A new push to a pull request cancels that PR's run in progress. Manual
-  runs are never cancelled.
+- A new push to a pull request cancels that PR's run in progress. Runs on
+  `main` are never cancelled.
 - Dependencies are cached with `Swatinem/rust-cache` (keyed on OS, rustc
-  version, `Cargo.lock` and job). Only runs on `main` write the cache; pull
-  requests reuse it. Since pushes to `main` no longer run CI, the cache is
-  only refreshed by a manual run on `main`
-  (`gh workflow run CI --ref main`), worth doing after a merge that changes
-  `Cargo.lock` or when a new stable Rust comes out.
+  version, `Cargo.lock` and job). Only `main` writes the cache; pull
+  requests reuse it.
+- Dependabot opens one grouped PR a week for Cargo minor/patch updates and
+  one a month for GitHub Actions. They go through the same checks,
+  including `msrv`.
 
-### Saving Actions minutes: drafts and no CI on `main`
+### Draft pull requests skip CI
 
-The repository is private on GitHub Free (2,000 Actions minutes a month),
-so CI only runs when its result matters:
+The repository is private, so Actions minutes are limited (3,000 a month
+on GitHub Pro), and one full run costs about 25 of them. CI runs when its
+result matters: on pull requests that are ready for review and on `main`.
 
 - **Draft pull requests skip every job**, `ci-passed` included. GitHub counts
   a skipped required check as passing. That's acceptable because a draft
   can't be merged, and marking it **Ready for review** runs the whole suite
   for real; those results replace the skips. Every push to a ready PR runs
   it again.
-- **Pushes to `main` don't run CI.** The ruleset requires the branch to be
-  up to date with `main` before merging (strict status checks), so the
-  commit that lands is the one CI already verified on the pull request.
-
-The flow: open the pull request as a draft (`gh pr create --draft`), push
-as often as you like (the pre-push hook checks each push locally), and mark
-it ready (`gh pr ready`) when it's done. If CI then fails, fix it on the
-ready PR, or convert it back to a draft (`gh pr ready --undo`) for a longer
-round of changes.
-- Dependabot opens one grouped PR a week for Cargo minor/patch updates and
-  one a month for GitHub Actions. They go through the same checks,
-  including `msrv`.
+- The flow: open the pull request as a draft (`gh pr create --draft`), run
+  `./scripts/check.sh` locally while iterating, and mark it ready
+  (`gh pr ready`) when it's done. For a longer round of changes after
+  that, convert it back to a draft (`gh pr ready --undo`).
 
 ### Live source validation
 
@@ -236,7 +225,7 @@ the adapter (with a new fixture) in a PR.
    `RULE_READER_REVISION` (`reason.rs`) for how reasons are read. Ranking
    never changes an eligibility decision. Schema changes are new, additive
    migrations; never edit an existing one.
-3. Run `./scripts/check.sh` (the pre-push hook does it on every push).
+3. Run `./scripts/check.sh`.
 4. Open a **draft** PR against `main`; CI doesn't run on drafts. When the
    change is done, mark it ready for review, which runs CI. Merge when CI is
    green. A solo maintainer doesn't need approvals.

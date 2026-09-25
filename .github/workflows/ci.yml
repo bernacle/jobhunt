@@ -1,4 +1,5 @@
-# Required quality gates for pull requests that are ready for review.
+# Required quality gates for pull requests that are ready for review, and
+# for every push to main.
 #
 # Everything here is offline: no job talks to Ashby, Greenhouse, Lever or
 # YC. Live source checks run separately in live.yml and never block merges.
@@ -7,26 +8,22 @@
 # check names used by branch protection. Renaming a job means updating the
 # protection rule (see CONTRIBUTING.md and .github/rulesets/main.json).
 #
-# `scripts/check.sh` runs the same commands locally (and the pre-push hook in
-# .githooks runs it); keep the two in sync.
+# `scripts/check.sh` runs the same commands locally; keep the two in sync.
 #
-# Saving Actions minutes (the repository is on a limited plan):
-#
-# - Draft pull requests skip every job. GitHub counts a skipped required
-#   check as passing, which is acceptable here: a draft cannot be merged,
-#   and marking it "Ready for review" (the ready_for_review event) runs the
-#   whole suite for real, replacing the skips. Open PRs as drafts, iterate
-#   with the local gate, and mark them ready when done.
-# - Pushes to main don't run CI. The ruleset requires a PR branch to be up
-#   to date with main (strict status checks), so what lands on main is
-#   exactly what was verified on the PR. workflow_dispatch still allows a
-#   manual run on any branch, main included.
+# Draft pull requests skip every job, to save Actions minutes while a change
+# is still being iterated on. GitHub counts a skipped required check as
+# passing, which is acceptable here: a draft cannot be merged, and marking
+# it "Ready for review" (the ready_for_review event) runs the whole suite
+# for real, replacing the skips. Open PRs as drafts, run scripts/check.sh
+# locally while iterating, and mark them ready when done.
 
 name: CI
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -34,8 +31,8 @@ permissions:
 
 concurrency:
   # One group per pull request, so a new push cancels the run for the
-  # commit it replaces. Manual runs get one group per ref and commit and
-  # are never cancelled.
+  # commit it replaces. Pushes to main get one group per commit: every
+  # commit that lands on main is verified, none is cancelled.
   group: >-
     ${{ github.workflow }}-${{ github.event_name == 'pull_request'
     && format('pr-{0}', github.event.pull_request.number)
