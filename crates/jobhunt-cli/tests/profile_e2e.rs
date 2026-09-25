@@ -405,7 +405,8 @@ async fn markdown_reimport_through_the_libraries() {
             &[pix.to_string()],
             Verification::Confirmed,
             None,
-            Utc::now(),
+            // Between the imports, on the same clock as they are.
+            Utc.with_ymd_and_hms(2026, 9, 25, 12, 1, 30).unwrap(),
         )
         .await
         .unwrap();
