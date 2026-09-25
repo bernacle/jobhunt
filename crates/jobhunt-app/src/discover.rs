@@ -53,9 +53,7 @@ impl RefreshReason {
             Self::NeverRead { sources } if *sources == 1 => "1 source was never read".into(),
             Self::NeverRead { sources } => format!("{sources} sources were never read"),
             Self::Stale { oldest } => format!("sources last read {}", ago(now - *oldest)),
-            Self::Fresh { oldest } => format!("every source read within {}", ago(now - *oldest))
-                .replace("within just now", "the last minute")
-                .replace(" ago", ""),
+            Self::Fresh { oldest } => format!("every source read {}", ago(now - *oldest)),
             Self::Disabled => "working offline".into(),
         }
     }

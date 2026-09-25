@@ -100,6 +100,14 @@ async fn handshake_tools_errors_and_clean_shutdown_with_logs_on_stderr() {
             "{name}"
         );
     }
+    // Only standard JSON Schema: no tool-specific numeric formats.
+    let schemas = serde_json::to_string(&tools).unwrap();
+    for format in ["\"uint", "\"int64", "\"double"] {
+        assert!(
+            !schemas.contains(&format!("\"format\":{format}")),
+            "{format}"
+        );
+    }
     let search = tools.iter().find(|t| t["name"] == "search_jobs").unwrap();
     assert_eq!(
         search["inputSchema"]["$defs"]["RefreshInput"]["oneOf"]

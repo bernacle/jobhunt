@@ -44,7 +44,7 @@ use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::tool::IntoCallToolResult;
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::model::{
-    CallToolResponse, CallToolResult, ContentBlock, Implementation, ServerCapabilities,
+    CallToolResponse, CallToolResult, ContentBlock, Implementation, JsonObject, ServerCapabilities,
     ServerConfig,
 };
 use rmcp::service::RequestContext;
@@ -340,6 +340,39 @@ where
     }
 }
 
+/// Numeric `format`s schemars adds (`uint8`, `uint64`, `double`, …) are
+/// not JSON Schema formats; strict validators warn about them. The type,
+/// and any `minimum` / `maximum`, already say what they meant.
+fn standard_schema(schema: &JsonObject) -> JsonObject {
+    fn clean(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Object(map) => {
+                let numeric = map
+                    .get("format")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|f| {
+                        f.starts_with("uint")
+                            || f.starts_with("int")
+                            || f == "double"
+                            || f == "float"
+                    });
+                if numeric {
+                    map.remove("format");
+                }
+                map.values_mut().for_each(clean);
+            }
+            serde_json::Value::Array(items) => items.iter_mut().for_each(clean),
+            _ => {}
+        }
+    }
+    let mut value = serde_json::Value::Object(schema.clone());
+    clean(&mut value);
+    match value {
+        serde_json::Value::Object(map) => map,
+        _ => schema.clone(),
+    }
+}
+
 /// The server: one [`LocalApp`], shared by concurrent requests.
 #[derive(Clone)]
 pub struct JobHuntServer {
@@ -358,10 +391,16 @@ impl std::fmt::Debug for JobHuntServer {
 #[tool_router]
 impl JobHuntServer {
     pub fn new(app: Arc<LocalApp>) -> Self {
-        Self {
-            app,
-            tool_router: Self::tool_router(),
+        let mut tool_router = Self::tool_router();
+        for route in tool_router.map.values_mut() {
+            let tool = &mut route.attr;
+            tool.input_schema = Arc::new(standard_schema(&tool.input_schema));
+            tool.output_schema = tool
+                .output_schema
+                .as_ref()
+                .map(|schema| Arc::new(standard_schema(schema)));
         }
+        Self { app, tool_router }
     }
 
     async fn feedback(

@@ -9,7 +9,7 @@
 //!    enough, so the shortlist rests on what employers publish now;
 //! 4. rank again, and keep the top few, with the funnel that led there.
 //!
-//! Ranking, gating, tiers and briefs are [`RankingService`]'s; verification
+//! Ranking, gating, tiers and briefs are [`jobhunt_ranking::RankingService`]'s; verification
 //! is the verification service's. Nothing here re-decides them.
 
 use chrono::{DateTime, Utc};
@@ -225,7 +225,7 @@ impl LocalApp {
 pub struct RefreshSummary {
     /// Sources were read during this search.
     pub performed: bool,
-    /// Why ("sources last read 2 days ago", "every source read within 3 hours").
+    /// Why ("sources last read 2 days ago", "every source read 3 hours ago").
     pub reason: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sources_read: Option<usize>,

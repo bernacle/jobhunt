@@ -28,7 +28,7 @@ impl Opportunity {
     }
 }
 
-/// `opp_1a2b3c4d` for display. [`resolve`] accepts it back as long as it is
+/// `opp_1a2b3c4d` for display. [`LocalApp::resolve`](crate::LocalApp::resolve) accepts it back as long as it is
 /// unique.
 pub fn short_id(id: &impl ToString) -> String {
     let text = id.to_string();
