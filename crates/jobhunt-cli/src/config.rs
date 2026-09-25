@@ -71,18 +71,25 @@ pub enum LogFormat {
 pub struct DiscoveryConfig {
     /// Sources fetched at the same time.
     pub concurrency: usize,
+    /// Requests in flight to one host at the same time, across all sources.
+    pub max_requests_per_host: usize,
     /// Per-request timeout, in seconds.
     pub request_timeout_secs: u64,
     /// Retries for transient HTTP failures.
     pub max_retries: u32,
+    /// Hours a source's "not modified" answer may stand in for a full
+    /// fetch. After that the listing is re-read in full. 0 always re-reads.
+    pub revalidate_after_hours: u32,
 }
 
 impl Default for DiscoveryConfig {
     fn default() -> Self {
         Self {
-            concurrency: 4,
+            concurrency: 8,
+            max_requests_per_host: 4,
             request_timeout_secs: 30,
             max_retries: 2,
+            revalidate_after_hours: 24,
         }
     }
 }
@@ -92,8 +99,13 @@ impl DiscoveryConfig {
         HttpSettings {
             timeout: Duration::from_secs(self.request_timeout_secs.max(1)),
             max_retries: self.max_retries,
+            max_per_host: self.max_requests_per_host.max(1),
             ..HttpSettings::default()
         }
+    }
+
+    pub fn validator_max_age(&self) -> chrono::Duration {
+        chrono::Duration::hours(i64::from(self.revalidate_after_hours))
     }
 }
 
@@ -223,7 +235,11 @@ mod tests {
         assert_eq!(loaded.file, None);
         assert_eq!(loaded.database, dir.path().join("data").join("jobhunt.db"));
         assert_eq!(loaded.config.logging.level, "error");
-        assert!(!loaded.config.sources.ashby.is_empty());
+        let sources = &loaded.config.sources;
+        assert!(!sources.ashby.is_empty());
+        assert!(!sources.greenhouse.is_empty());
+        assert!(!sources.lever.is_empty());
+        assert!(!sources.yc.is_empty());
     }
 
     #[test]
@@ -259,6 +275,10 @@ mod tests {
         assert_eq!(loaded.config.discovery.request_timeout_secs, 30);
         assert_eq!(loaded.config.sources.ashby.len(), 1);
         assert_eq!(loaded.config.sources.ashby[0].board, "posthog");
+        assert!(
+            loaded.config.sources.greenhouse.is_empty(),
+            "configuring sources replaces every default"
+        );
     }
 
     #[test]
@@ -302,14 +322,27 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../config.example.toml");
         let loaded = load(Some(&example), None, Some(&paths(dir.path()))).unwrap();
-        let boards: Vec<_> = loaded
+        let keys: Vec<String> = loaded
             .config
             .sources
-            .ashby
+            .specs()
+            .unwrap()
             .iter()
-            .map(|b| b.board.as_str())
+            .map(|s| s.key().to_string())
             .collect();
-        assert_eq!(boards, ["linear", "posthog"]);
+        assert_eq!(
+            keys,
+            [
+                "ashby:linear",
+                "ashby:posthog",
+                "greenhouse:anthropic",
+                "greenhouse:stripe",
+                "lever:spotify",
+                "lever:qonto",
+                "yc:posthog"
+            ]
+        );
+        assert_eq!(loaded.config.sources.careers.len(), 1);
         assert_eq!(loaded.config.discovery, DiscoveryConfig::default());
         assert_eq!(loaded.config.logging, LoggingConfig::default());
     }

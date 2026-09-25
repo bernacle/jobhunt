@@ -8,6 +8,7 @@
 
 pub mod error;
 pub mod fingerprint;
+pub mod html;
 pub mod id;
 pub mod ingest;
 pub mod source;
@@ -21,7 +22,7 @@ pub use fingerprint::{Fingerprint, FingerprintBuilder};
 pub use id::{ParseIdError, StableId};
 pub use ingest::{IngestCounts, UpsertOutcome};
 pub use source::{
-    Provenance, RecordError, RecordErrorReason, Source, SourceBatch, SourceError, SourceKey,
-    SourceKeyError,
+    FetchRequest, Fetched, Provenance, RecordError, RecordErrorReason, Source, SourceBatch,
+    SourceError, SourceKey, SourceKeyError,
 };
 pub use urls::{CanonicalUrl, UrlError};

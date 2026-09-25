@@ -15,14 +15,21 @@ level = "error"
 format = "text"
 
 [discovery]
-# Sources fetched at the same time.
-concurrency = 4
+# Sources fetched at the same time, and requests to any one host at a time.
+concurrency = 8
+max_requests_per_host = 4
 # Per-request timeout in seconds, and retries for transient HTTP failures.
 request_timeout_secs = 30
 max_retries = 2
+# Boards that support it are asked "has anything changed?" (HTTP ETag) and
+# skipped when not; after this many hours they are re-read in full anyway.
+revalidate_after_hours = 24
 
-# Ashby job boards to search: the <board> in https://jobs.ashbyhq.com/<board>.
-# Listing any board here replaces the built-in defaults.
+# Sources to search. Listing any source here replaces all built-in defaults,
+# so this file fully controls what is searched. Each source can set `company`
+# to control the displayed company name.
+
+# Ashby boards: https://jobs.ashbyhq.com/<board>
 [[sources.ashby]]
 board = "linear"
 company = "Linear"
@@ -30,3 +37,34 @@ company = "Linear"
 [[sources.ashby]]
 board = "posthog"
 company = "PostHog"
+
+# Greenhouse boards: https://job-boards.greenhouse.io/<board>
+# (Greenhouse reports the company name itself.)
+[[sources.greenhouse]]
+board = "anthropic"
+
+[[sources.greenhouse]]
+board = "stripe"
+
+# Lever sites: https://jobs.lever.co/<site>. Use region = "eu" for
+# https://jobs.eu.lever.co/<site>.
+[[sources.lever]]
+site = "spotify"
+company = "Spotify"
+
+[[sources.lever]]
+site = "qonto"
+company = "Qonto"
+
+# Y Combinator companies (Work at a Startup):
+# https://www.ycombinator.com/companies/<slug>/jobs
+[[sources.yc]]
+slug = "posthog"
+
+# A company careers page. JobHunt finds the Ashby, Greenhouse or Lever board
+# the page links to or embeds and reads that board, so you don't need to know
+# which one the company uses. Pages that only load their jobs with
+# JavaScript can't be detected; configure their board directly instead.
+[[sources.careers]]
+url = "https://www.notion.com/careers"
+company = "Notion"

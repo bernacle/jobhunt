@@ -11,12 +11,16 @@
 //! flag, addresses and compensation, which map directly onto the canonical
 //! model. It does not include the company's display name, so that comes from
 //! configuration (falling back to the board name).
+//!
+//! One response is the whole board, so a successful fetch is a complete
+//! listing. The endpoint sends an `ETag` and honors `If-None-Match`, which
+//! makes an unchanged board cost a single empty `304` response.
 
 use chrono::{DateTime, Utc};
 use jobhunt_core::text::{clean_block_opt, clean_line, clean_line_opt};
 use jobhunt_core::{
-    CanonicalUrl, Provenance, RecordError, RecordErrorReason, Source, SourceBatch, SourceError,
-    SourceKey,
+    CanonicalUrl, FetchRequest, Fetched, Provenance, RecordError, RecordErrorReason, Source,
+    SourceBatch, SourceError, SourceKey,
 };
 use jobhunt_jobs::{
     Compensation, CompensationComponent, CompensationKind, EmploymentType, JobPosting, PayInterval,
@@ -26,7 +30,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use tracing::debug;
 use url::Url;
 
-use crate::http::HttpClient;
+use crate::http::{Conditional, HttpClient, not_found_as};
 
 /// Source kind used in keys such as `ashby:linear`.
 pub const KIND: &str = "ashby";
@@ -139,22 +143,25 @@ impl Source for AshbySource {
         &self.key
     }
 
-    async fn fetch(&self) -> Result<SourceBatch<JobPosting>, SourceError> {
-        let body = self
+    async fn fetch(&self, request: &FetchRequest) -> Result<Fetched<JobPosting>, SourceError> {
+        let response = self
             .http
-            .get_bytes(&self.endpoint)
+            .get_conditional(&self.endpoint, request.validator.as_deref())
             .await
-            .map_err(|error| match error {
-                SourceError::Status { url, status: 404 } => SourceError::NotFound {
-                    url,
-                    what: format!("Ashby job board {:?}", self.board.board),
-                },
-                other => other,
-            })?;
-        parse_board(&body, &self.context).map_err(|error| SourceError::Decode {
+            .map_err(not_found_as(|| {
+                format!("Ashby job board {:?}", self.board.board)
+            }))?;
+        let (body, etag) = match response {
+            Conditional::NotModified => return Ok(Fetched::NotModified),
+            Conditional::Modified { body, etag } => (body, etag),
+        };
+        let mut batch = parse_board(&body, &self.context).map_err(|error| SourceError::Decode {
             url: self.endpoint.to_string(),
             source: Box::new(error),
-        })
+        })?;
+        batch.complete = true;
+        batch.validator = etag;
+        Ok(Fetched::Batch(batch))
     }
 }
 
@@ -343,6 +350,7 @@ fn compensation_component(raw: AshbyCompensationComponent) -> Option<Compensatio
     };
     Some(CompensationComponent {
         kind,
+        label: None,
         currency: clean_line_opt(raw.currency_code.as_deref()),
         min: raw.min_value,
         max: raw.max_value,

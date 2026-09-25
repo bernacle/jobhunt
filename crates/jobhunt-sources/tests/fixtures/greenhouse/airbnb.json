@@ -1,0 +1,309 @@
+{
+  "jobs": [
+    {
+      "absolute_url": "https://careers.airbnb.com/positions/8152132?gh_jid=8152132",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "education": "education_required",
+      "internal_job_id": 3527779,
+      "location": {
+        "name": "Canada"
+      },
+      "metadata": [
+        {
+          "id": 9245691,
+          "name": "Is this job part of ACC?",
+          "value": false,
+          "value_type": "yes_no"
+        },
+        {
+          "id": 10216612,
+          "name": "Workplace Type",
+          "value": "Remote",
+          "value_type": "single_select"
+        }
+      ],
+      "id": 8152132,
+      "updated_at": "2026-09-24T18:49:00-04:00",
+      "requisition_id": "MULTI",
+      "title": "Gestionnaire des réclamations complexes",
+      "pay_input_ranges": [
+        {
+          "min_cents": 8300000,
+          "max_cents": 9800000,
+          "currency_type": "CAD",
+          "title": "Canada Annual Pay Range",
+          "blurb": "<p><span style=\"font-size: 16px;\"><strong><span style=\"font-family: arial, helvetica, sans-serif; color: rgb(0, 0, 0);\">How We'll Take Care of You:</span></strong></span></p>\n<p><span style=\"font-size: 16px;\">Our job titles may span more than one career level. The actual base pay is dependent upon many factors, such as: training, transferable skills, work experience, business needs and market demands. The base pay range shown below is annualized, is subject to change and may be modified in the future. This role may also be eligible for bonus, equity, benefits, and Employee Travel Credits.</span></p>"
+        }
+      ],
+      "company_name": "Airbnb",
+      "first_published": "2026-08-24T10:18:14-04:00",
+      "language": "fr",
+      "application_deadline": null,
+      "content": "&lt;div class=&quot;content-intro&quot;&gt;&lt;p&gt;&lt;span style=&quot;font-family: helvetica, arial, sans-serif; font-size: 12pt;&quot;&gt;Airbnb was born in 2007 when two hosts welcomed three guests to their San Francisco home, and has since grown to over 5 million hosts who have welcomed over 2 billion guest arrivals in almost every country across the globe. Every day, hosts offer unique stays and experiences that make it possible for guests to connect with communities in a more authentic way.&lt;/span&gt;&lt;/p&gt;&lt;/div&gt;&lt;p&gt;Airbnb a pris le jour en 2007 lorsque deux Hôtes ont accueilli trois invités dans leur maison de San Francisco, et compte depuis lors plus de 4 millions d&#39;Hôtes qui ont accueilli plus d&#39;un milliard d&#39;invités dans presque tous les pays du monde. Chaque jour, les Hôtes proposent des séjours et des expériences uniques qui permettent aux invités de se connecter de manière plus authentique aux communautés.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;La communauté qui vous attend :&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;L&#39;équipe AirCover est chargée de concevoir, de créer, de lancer et de gérer l&#39;activité AirCover au sein d&#39;Airbnb. On a l&#39;énorme responsabilité envers notre communauté d&#39;hôtes et de voyageurs d&#39;être présents quand leurs réservations ne se déroulent pas exactement comme prévu. On a beaucoup de travail à accomplir dans les prochaines années et on cherche une personne qui nous aidera à gérer tout ce qui doit être fait pour offrir des services exceptionnels à notre communauté.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Votre contribution&amp;nbsp;:&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;En tant que gestionnaire des réclamations complexes, vous jouerez un rôle essentiel dans la protection de l&#39;intégrité de notre plateforme Aircover en déterminant, en étudiant et en gérant efficacement les stratégies de risque et d&#39;atténuation pour résoudre les réclamations de pertes complexes et importantes.&lt;/p&gt;\n&lt;p&gt;Vous gérerez les partenaires pour définir les priorités, renforcer la responsabilité, apporter des améliorations et faire évoluer les réclamations qui affectent Airbnb. Vous travaillerez avec des partenaires internes et externes pour définir les priorités, renforcer la responsabilité et apporter des améliorations.&amp;nbsp;&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;Vous travaillerez en étroite collaboration avec des équipes transversales pour gérer les risques émergents tout en permettant la croissance de l&#39;entreprise sur divers marchés. La philosophie sera d&#39;identifier les lacunes en matière d&#39;intelligence et de risque et de travailler avec d&#39;autres équipes de gestion des risques internes (comme l&#39;équipe Confiance et l&#39;équipe Sécurité), des experts tiers, nos partenaires, la gestion des produits de la plateforme, la gestion des crises mondiales, le soutien à la communauté, les politiques et les équipes juridiques de la confidentialité pour renforcer la plateforme Airbnb.&lt;/p&gt;\n&lt;p&gt;Vous ferez des rapports lors des examens mensuels, trimestriels et annuels des activités commerciales de votre région. Vous agirez en tant que visionnaire avec des parties prenantes (p. ex. : confiance, juridique, confidentialité, sécurité, gestion des produits, politiques), et comprendrez l&#39;incidence des politiques et de la feuille de route des produits sur l&#39;atténuation des risques liés aux menaces émergentes.&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Journée type&amp;nbsp;:&amp;nbsp;&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;Gérer, orienter et comprendre l&#39;incidence des politiques et de la feuille de route des produits sur l&#39;atténuation des risques et de l&#39;exposition.&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;Être responsable de l&#39;examen des réclamations pour pertes importantes avec nos assureurs sur une base mensuelle ou trimestrielle, en fonction de l&#39;assureur ou du marché.&amp;nbsp; Vous assurer qu&#39;on gère les attentes des assureurs et qu&#39;on garde une longueur d&#39;avance sur tout problème potentiel de couverture ou relationnel ainsi que sur les changements matériels importants qui pourraient affecter nos prévisions.&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;Gérer les réclamations qui affectent Airbnb Financials et la compagnie d&#39;assurance captive.&lt;/li&gt;\n&lt;li&gt;Élaborer un plan de résolution des réclamations pour pertes complexes et importantes qui incite l&#39;assureur ou l&#39;administrateur tiers à résoudre la réclamation tout en répondant aux besoins des parties prenantes internes.&lt;/li&gt;\n&lt;li&gt;Coordonner les réclamations de pertes complexes et importantes avec les services juridiques, GCM, et de confiance, ainsi que nos courtiers, assureurs et administrateurs tiers sur des cas complexes qui peuvent aussi impliquer des problèmes de couverture ou d&#39;autorisation.&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;Être responsable du rendement et des résultats des compagnies d&#39;assurance et des partenaires dans plusieurs emplacements dans le monde sur les réclamations complexes qui peuvent avoir une incidence sur les limites de la police ou nécessiter d&#39;aviser les courtiers et les compagnies d&#39;assurance en vertu des polices d&#39;assurance.&lt;/li&gt;\n&lt;li&gt;Travailler en étroite collaboration avec les équipes transversales pour gérer les risques et l&#39;exposition dans des réclamations de pertes complexes et importantes.&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;Collaborer avec les services internes tels que les autres équipes d&#39;Aircover Ops, les services juridiques, la confiance et la sécurité du SC pour partager les informations sur les réclamations et améliorer leur traitement par nos assureurs et les administrateurs tiers tout en élaborant un plan de résolution pour mener une réclamation à la conclusion souhaitée.&lt;/li&gt;\n&lt;li&gt;Assurer le respect des politiques, des procédures et des exigences légales de l&#39;entreprise en matière de traitement des réclamations.&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;strong&gt;Votre expertise :&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;&lt;strong&gt;Analytique :&lt;/strong&gt; Posséder d&#39;excellentes compétences analytiques et de résolution de problèmes, permettant de gérer les réclamations complexes et les sinistres importants en identifiant le risque et l&#39;exposition pour Airbnb.&lt;/li&gt;\n&lt;li&gt;&lt;strong&gt;Solide connaissance de la résolution de dossiers complexes :&lt;/strong&gt; Comprendre les techniques, les méthodologies d&#39;enquête et les aspects juridiques liés au règlement des réclamations complexes et graves.&lt;/li&gt;\n&lt;li&gt;&lt;strong&gt;Communication solide :&lt;/strong&gt; Excellentes compétences en communication verbale et écrite, avec la capacité d&#39;expliquer des sujets complexes à divers publics. Habileté à présenter des enjeux clients complexes et délicats, avec la capacité d&#39;analyser de grands ensembles de données et d&#39;en tirer des conclusions raisonnables.&lt;/li&gt;\n&lt;li&gt;&lt;strong&gt;Influencer les équipes transversales d&#39;Airbnb à l&#39;échelle mondiale :&lt;/strong&gt; Capacité éprouvée à collaborer efficacement entre les disciplines, les régions et les niveaux hiérarchiques. Solides compétences de négociation et expérience dans la communication de recommandations aux parties prenantes internes et externes.&lt;/li&gt;\n&lt;li&gt;&lt;strong&gt;Jugement&lt;/strong&gt;\n&lt;ul&gt;\n&lt;li&gt;Travailler de façon proactive à l&#39;obtention d&#39;un règlement juste et approprié des réclamations dans des délais raisonnables, en employant des stratégies efficaces de résolution de conflits.&lt;/li&gt;\n&lt;li&gt;Évaluer et interpréter le libellé des polices d&#39;assurance et la jurisprudence pertinente, en tenant compte des détails précis du sinistre, afin de prendre des décisions éclairées en matière de couverture.&lt;/li&gt;\n&lt;li&gt;Coordonner les enquêtes sur les sinistres avec des experts externes pour diverses expositions et gérer le processus de règlement jusqu&#39;à la résolution finale.&lt;/li&gt;\n&lt;li&gt;Déterminer la responsabilité rapidement et judicieusement en fonction des renseignements disponibles, en faisant preuve de pensée critique et stratégique efficace ainsi que d&#39;une prise de décision judicieuse.&lt;/li&gt;\n&lt;/ul&gt;\n&lt;/li&gt;\n&lt;li&gt;Être un ambassadeur des normes de qualité élevées, de l&#39;innovation, de la résolution de conflits et de l&#39;excellence de l&#39;expérience client.&lt;/li&gt;\n&lt;li&gt;Grand souci du détail, minutie dans le traitement de dossiers complexes.&lt;/li&gt;\n&lt;li&gt;Expérience de travail avec des parties prenantes internes et/ou des fournisseurs tiers pour résoudre des différends complexes de manière détaillée, efficace et rapide.&lt;/li&gt;\n&lt;li&gt;Plus de 10 ans d&#39;expérience en couverture de réclamations d&#39;assurance et en litige, avec un accent sur la responsabilité civile et les biens.&lt;/li&gt;\n&lt;li&gt;Solide expérience en matière de polices d&#39;assurance.&lt;/li&gt;\n&lt;li&gt;Agir comme mentor auprès des autres en simplifiant l&#39;information complexe, notamment les connaissances en réclamations, l&#39;analyse de données, les renseignements d&#39;affaires et les obstacles de processus.&lt;/li&gt;\n&lt;li&gt;Établir des partenariats et être responsable de participer aux revues des réclamations de sinistres importants avec nos assureurs sur une base mensuelle ou trimestrielle, selon l&#39;assureur ou le marché. Disposé à être disponible sur appel et/ou à travailler les fins de semaine et les soirs.&lt;/li&gt;\n&lt;li&gt;Capacité démontrée à cerner et à résoudre des problèmes grâce à des compétences efficaces en résolution de problèmes.&lt;/li&gt;\n&lt;li&gt;Capacité éprouvée à négocier avec habileté dans des situations difficiles, tant avec des groupes internes qu&#39;externes.&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;strong&gt;Lieu de travail&amp;nbsp;:&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;Ce poste est situé au Canada (possibilité de télétravail).&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;Le poste peut impliquer de travailler occasionnellement dans un bureau d&#39;Airbnb ou de participer à des événements en dehors du bureau (tel que convenu avec votre supérieur).&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;Actuellement, les employés peuvent habiter en Colombie-Britannique, en Ontario, au Québec, en Alberta ou en Saskatchewan. Cette liste est constamment mise à jour, contactez-nous si la province dans laquelle vous vivez n&#39;y figure pas. Si vous travaillez pour une autre entité d&#39;Airbnb, le responsable du recrutement vous indiquera dans quelles provinces vous pouvez travailler.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Votre emplacement :&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;En raison de la nature de ce poste, le candidat retenu devra être basé au Canada pour pouvoir effectuer son travail. Actuellement, les employés peuvent être situés dans : la Colombie-Britannique, l’Ontario, le Québec, l’Alberta ou le Saskatchewan. Cette liste est continuellement mise à jour, veuillez vérifier avec nous si les provinces dans lesquelles vous vivez figurent sur la liste. Si votre poste est employé par une autre entité Airbnb, votre recruteur vous informera des provinces dans lesquelles vous êtes éligible pour travailler.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Notre engagement envers l’inclusion et l’appartenance :&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;Airbnb s&#39;engage à travailler avec le vivier de talents le plus large possible. Nous pensons que la diversité des idées favorise l’innovation et l’engagement, et nous permet d’attirer des personnes créatives et de développer les meilleurs produits, services et solutions. Toutes les personnes qualifiées sont encouragées à postuler.&lt;/p&gt;\n&lt;p&gt;Nous nous efforçons également de proposer un processus de candidature et d&#39;entretien inclusif pour les personnes handicapées. Si vous êtes un candidat handicapé et avez besoin d&#39;aménagements raisonnables pour soumettre une candidature, veuillez nous contacter à l&#39;adresse : raisonnableaccommodations@airbnb.com. Veuillez inclure votre nom complet, le poste pour lequel vous postulez et les aménagements nécessaires pour vous aider dans le processus de recrutement.&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;Nous vous demandons de nous contacter uniquement si vous êtes un candidat dont le handicap vous empêche de remplir notre candidature en ligne.&lt;/p&gt;\n&lt;hr&gt;\n&lt;p&gt;&lt;em&gt;Nous utilisons des outils automatisés pour aider notre équipe de recrutement à examiner efficacement un grand nombre de candidatures. Toutes les décisions finales d’embauche sont prises par une personne humaine.&lt;/em&gt;&lt;/p&gt;\n&lt;p&gt;&lt;em&gt;Ce poste est nouvellement créé et ne remplace ni ne pourvoit un poste existant.&lt;/em&gt;&lt;/p&gt;&lt;div class=&quot;content-pay-transparency&quot;&gt;&lt;div class=&quot;pay-input&quot;&gt;&lt;div class=&quot;description&quot;&gt;&lt;p&gt;&lt;span style=&quot;font-size: 16px;&quot;&gt;&lt;strong&gt;&lt;span style=&quot;font-family: arial, helvetica, sans-serif; color: rgb(0, 0, 0);&quot;&gt;How We&#39;ll Take Care of You:&lt;/span&gt;&lt;/strong&gt;&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-size: 16px;&quot;&gt;Our job titles may span more than one career level. The actual base pay is dependent upon many factors, such as: training, transferable skills, work experience, business needs and market demands. The base pay range shown below is annualized, is subject to change and may be modified in the future. This role may also be eligible for bonus, equity, benefits, and Employee Travel Credits.&lt;/span&gt;&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;title&quot;&gt;Canada Annual Pay Range&lt;/div&gt;&lt;div class=&quot;pay-range&quot;&gt;&lt;span&gt;$83,000&lt;/span&gt;&lt;span class=&quot;divider&quot;&gt;&amp;mdash;&lt;/span&gt;&lt;span&gt;$98,000 CAD&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;content-conclusion&quot;&gt;&lt;p&gt;&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: helvetica, arial, sans-serif; font-size: 12pt;&quot;&gt;&lt;strong&gt;Reasonable Accommodations:&lt;/strong&gt; We are committed to providing reasonable accommodations throughout the recruitment process for applicants with disabilities. If you need assistance, or an accommodation, please let your recruiter know once you are contacted about a role.&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: helvetica, arial, sans-serif; font-size: 12pt;&quot;&gt;&lt;strong&gt;A Note on Recruiting Scams:&lt;/strong&gt; Scammers sometimes pose as Airbnb recruiters to get money or personal information from candidates. A few things that will always be true for Airbnb’s hiring process: our open roles are posted on Airbnb’s Career’s Page at careers.airbnb.com, and our recruiters correspond only from @&lt;a href=&quot;http://airbnb.com&quot;&gt;airbnb.com&lt;/a&gt; or @&lt;a href=&quot;http://ext.airbnb.com&quot;&gt;ext.airbnb.com&lt;/a&gt; email addresses. Our recruiters will never ask for your Social Security number, bank account details, passport, or payment app information while you are interviewing.&amp;nbsp; We’ll also never ask you to pay a fee, send money, deposit or cash a check, or purchase work-related equipment (such as a company laptop) during the interview process. We encourage candidates to remain vigilant of these recruiting scams and not share sensitive information if you do not believe an individual is actually affiliated with Airbnb.&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&amp;nbsp;&lt;/p&gt;&lt;/div&gt;",
+      "departments": [
+        {
+          "id": 1394,
+          "name": "Operations",
+          "child_ids": [],
+          "parent_id": 73698
+        }
+      ],
+      "offices": [
+        {
+          "id": 64283,
+          "name": "Canada",
+          "location": null,
+          "child_ids": [
+            1170,
+            23350
+          ],
+          "parent_id": 17515
+        },
+        {
+          "id": 63868,
+          "name": "United States",
+          "location": null,
+          "child_ids": [
+            246412,
+            258081,
+            258082,
+            258083,
+            87306,
+            87309,
+            211524,
+            87312,
+            87316,
+            87315,
+            104152,
+            88158,
+            85791,
+            87313,
+            88161,
+            87308,
+            87311,
+            87307,
+            80804,
+            109320,
+            87314,
+            88160,
+            78632,
+            87310,
+            88159,
+            241531,
+            108489,
+            62810,
+            62444,
+            85003,
+            104153,
+            12964,
+            11235,
+            55,
+            4447,
+            5924,
+            1316,
+            162,
+            5925,
+            1086,
+            1355
+          ],
+          "parent_id": 17515
+        }
+      ],
+      "ai_disclaimer": null,
+      "include_ai_disclaimer": null,
+      "ai_opt_out_request_url": null
+    },
+    {
+      "absolute_url": "https://careers.airbnb.com/positions/8231416?gh_jid=8231416",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "internal_job_id": 3562002,
+      "location": {
+        "name": "United States "
+      },
+      "metadata": [
+        {
+          "id": 9245691,
+          "name": "Is this job part of ACC?",
+          "value": false,
+          "value_type": "yes_no"
+        },
+        {
+          "id": 10216612,
+          "name": "Workplace Type",
+          "value": "Remote",
+          "value_type": "single_select"
+        }
+      ],
+      "id": 8231416,
+      "updated_at": "2026-09-24T21:35:15-04:00",
+      "requisition_id": "ONE",
+      "title": "Associate Principal, Procurement Innovation Supplier Programs",
+      "pay_input_ranges": [
+        {
+          "min_cents": 10200000,
+          "max_cents": 12000000,
+          "currency_type": "USD",
+          "title": "Pay Range",
+          "blurb": "<p><span style=\"font-size: 16px;\"><strong><span style=\"font-family: arial, helvetica, sans-serif; color: rgb(0, 0, 0);\">How We'll Take Care of You:</span></strong></span></p>\n<p class=\"p1\"><span style=\"font-size: 16px;\">Our job titles may span more than one career level. The actual base pay is dependent upon many factors, such as: training, transferable skills, work experience, business needs and market demands. The base pay range is subject to change and may be modified in the future. This role may also be eligible for bonus, equity, benefits, and Employee Travel Credits. &nbsp;</span></p>"
+        }
+      ],
+      "company_name": "Airbnb",
+      "first_published": "2026-09-24T18:17:39-04:00",
+      "language": "en",
+      "application_deadline": null,
+      "content": "&lt;div class=&quot;content-intro&quot;&gt;&lt;p&gt;&lt;span style=&quot;font-family: helvetica, arial, sans-serif; font-size: 12pt;&quot;&gt;Airbnb was born in 2007 when two hosts welcomed three guests to their San Francisco home, and has since grown to over 5 million hosts who have welcomed over 2 billion guest arrivals in almost every country across the globe. Every day, hosts offer unique stays and experiences that make it possible for guests to connect with communities in a more authentic way.&lt;/span&gt;&lt;/p&gt;&lt;/div&gt;&lt;p&gt;&lt;span style=&quot;font-family: arial, helvetica, sans-serif; color: #000000;&quot;&gt;&lt;strong&gt;The Community You Will Join:&amp;nbsp;&lt;/strong&gt;&lt;/span&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;The Procurement team at Airbnb manages the source-to-pay processes including Accounts Payable, Travel and Expense, and the Contingent Workforce program. Procurement Innovation is a pillar within Procurement overseeing procurement tools, processes, reporting, and AI.&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;We are a collaborative, forward-thinking team that embraces an AI-first mindset — leveraging technology, automation, and data to simplify processes and unlock new efficiencies. Guided by Airbnb’s mission to create a world where anyone can belong, we focus on delivering value through curiosity, creativity, and integrity.&lt;/li&gt;\n&lt;li&gt;Your role will involve close collaboration with key cross-functional partners, including Finance Technology Group, Procurement Operation, Third-Party Security, and various other business units. Together, we will ensure the efficient management of our programs and create an environment of collaboration, innovation, and inclusivity.&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;Our focus on robust onboarding, monitoring, and promoting a great supplier experience will be at the forefront of everything you do. Join us and be part of a team that is making a positive impact in the world of procurement.&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: arial, helvetica, sans-serif; color: #000000;&quot;&gt;&lt;strong&gt;The Difference You Will Make:&lt;/strong&gt;&lt;/span&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;In this exciting role, you will have responsibility to manage the supplier onboarding process, including the management of the tools, orchestration, and support the cross-function teams involved in onboarding operations to smoothly onboard third-party suppliers into the Airbnb financial system&lt;/li&gt;\n&lt;li&gt;You will also provide in-depth knowledge and optimization of supplier programs at Airbnb including maintaining effective supplier risk oversight measures, and establishing critical supplier programs in tandem with our Sourcing team.&lt;/li&gt;\n&lt;li&gt;In this role, we will measure your impact by developing process improvement recommendations based on your deep understanding of current procurement practices. You will enhance the supplier experience by executing transformational initiatives, aligning it with stakeholders&#39; business needs while mitigating risk for Airbnb.&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: arial, helvetica, sans-serif; color: #000000;&quot;&gt;&lt;strong&gt;A Typical Day:&amp;nbsp;&lt;/strong&gt;&lt;/span&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;Oversee and maintain supplier onboarding programs, ensuring the process meets the business and commercial needs of the organization.&lt;/li&gt;\n&lt;li&gt;Enrich the supplier experience by executing transformational initiatives that anticipate emerging supplier needs and deliver innovative solutions, aligning with stakeholders&#39; business needs while mitigating risk for Airbnb.&lt;/li&gt;\n&lt;li&gt;Monitor supplier compliance to document operational health and improvements; communicate progress, barriers, risks, and benefits to appropriate business and management levels.&lt;/li&gt;\n&lt;li&gt;Collaborate with various teams to understand the requirements of the supplier risk management program and identify opportunities for system and operational enhancements.&amp;nbsp;&lt;/li&gt;\n&lt;li&gt;Manage project execution and tool implementation, providing detailed subject matter advice in the development of deliverables.&lt;/li&gt;\n&lt;li&gt;Provide expertise in the areas of source-to-pay, supplier risk management, regulatory assessment, procurement technology, and overall procurement transformation functions.&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: arial, helvetica, sans-serif; color: #000000;&quot;&gt;&lt;strong&gt;Your Expertise:&lt;/strong&gt;&lt;/span&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;Degree or advanced degree in business, finance, supply chain or related fields.&lt;/li&gt;\n&lt;li&gt;8+ years of experience managing procurement programs and/or leading preferred supplier programs&lt;/li&gt;\n&lt;li&gt;Experience managing supplier onboarding and risk management tools and processes, with expertise in implementing enterprise-wide systems.&lt;/li&gt;\n&lt;li&gt;Experience using data, automation, or AI tools to support decision-making.&lt;/li&gt;\n&lt;li&gt;Skilled in building relationships in a cross-functional environment and proven success in influencing stakeholders at all levels.&lt;/li&gt;\n&lt;li&gt;Highly analytical, with strong problem-solving skills and a data-driven approach to decision-making.&lt;/li&gt;\n&lt;li&gt;Excellent communication and interpersonal skills, both written and oral, with the ability to influence up, down, and across the organization.&lt;/li&gt;\n&lt;li&gt;Self-motivated, reliable, and detail-oriented, capable of managing multiple tasks efficiently with minimal supervision.&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;span style=&quot;color: #000000; font-family: arial, helvetica, sans-serif;&quot;&gt;&lt;strong&gt;Your Location:&lt;/strong&gt;&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: arial, helvetica, sans-serif; color: #000000;&quot;&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;This position is US - Remote Eligible. The role may include occasional work at an Airbnb office or attendance at offsites, as agreed to with your manager. While the position is Remote Eligible, you must live in a state where Airbnb, Inc. has a registered entity. &lt;a style=&quot;color: #000000;&quot; href=&quot;https://careers.airbnb.com/&quot;&gt;Click here for the up-to-date list of excluded states. This list is continuously evolving, so please check back with us if the state you live in is on the exclusion list&lt;/a&gt; &lt;/span&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;&amp;nbsp;If your position is employed by another Airbnb entity, your recruiter will inform you what states you are eligible to work from.&lt;/span&gt;&lt;/span&gt;&lt;span style=&quot;color: #000000; font-family: arial, helvetica, sans-serif;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: arial, helvetica, sans-serif; color: #000000;&quot;&gt;&lt;strong&gt;Our Commitment To Inclusion &amp;amp; Belonging:&lt;/strong&gt;&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-weight: 400; font-family: arial, helvetica, sans-serif; color: #000000;&quot;&gt;Airbnb is committed to working with the broadest talent pool possible. We believe diverse ideas foster innovation and engagement, and allow us to attract creatively-led people, and to develop the best products, services and solutions. All qualified individuals are encouraged to apply.&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: arial, helvetica, sans-serif; color: #000000;&quot;&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;We strive to also provide a disability inclusive application and interview process. If you are a candidate with a disability and require reasonable accommodation in order to submit an application, please contact us at: &lt;/span&gt;&lt;a style=&quot;color: #000000;&quot; href=&quot;mailto:reasonableaccommodations@airbnb.com&quot;&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;reasonableaccommodations@airbnb.com&lt;/span&gt;&lt;/a&gt;&lt;span style=&quot;font-weight: 400;&quot;&gt;. Please include your full name, the role you’re applying for and the accommodation necessary to assist you with the recruiting process.&amp;nbsp;&lt;/span&gt;&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-weight: 400; font-family: arial, helvetica, sans-serif; color: #000000;&quot;&gt;We ask that you only reach out to us if you are a candidate whose disability prevents you from being able to complete our online application.&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-weight: 400; font-family: arial, helvetica, sans-serif; color: #000000;&quot;&gt;&lt;strong&gt;Equal Employment Opportunity&lt;/strong&gt;:&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-weight: 400; font-family: arial, helvetica, sans-serif; color: #000000;&quot;&gt;Airbnb values diversity &amp;amp; belonging and is proud to be an Equal Employment Opportunity employer. All individuals seeking employment at Airbnb are considered without regard to race, color, religion, national origin, age, gender, sex, marital status, ancestry, physical or mental disability, veteran status, gender identity, gender expression, sexual orientation, or any other legally protected characteristic.&lt;/span&gt;&lt;/p&gt;&lt;div class=&quot;content-pay-transparency&quot;&gt;&lt;div class=&quot;pay-input&quot;&gt;&lt;div class=&quot;description&quot;&gt;&lt;p&gt;&lt;span style=&quot;font-size: 16px;&quot;&gt;&lt;strong&gt;&lt;span style=&quot;font-family: arial, helvetica, sans-serif; color: rgb(0, 0, 0);&quot;&gt;How We&#39;ll Take Care of You:&lt;/span&gt;&lt;/strong&gt;&lt;/span&gt;&lt;/p&gt;\n&lt;p class=&quot;p1&quot;&gt;&lt;span style=&quot;font-size: 16px;&quot;&gt;Our job titles may span more than one career level. The actual base pay is dependent upon many factors, such as: training, transferable skills, work experience, business needs and market demands. The base pay range is subject to change and may be modified in the future. This role may also be eligible for bonus, equity, benefits, and Employee Travel Credits. &amp;nbsp;&lt;/span&gt;&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;title&quot;&gt;Pay Range&lt;/div&gt;&lt;div class=&quot;pay-range&quot;&gt;&lt;span&gt;$102,000&lt;/span&gt;&lt;span class=&quot;divider&quot;&gt;&amp;mdash;&lt;/span&gt;&lt;span&gt;$120,000 USD&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;content-conclusion&quot;&gt;&lt;p&gt;&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: helvetica, arial, sans-serif; font-size: 12pt;&quot;&gt;&lt;strong&gt;Reasonable Accommodations:&lt;/strong&gt; We are committed to providing reasonable accommodations throughout the recruitment process for applicants with disabilities. If you need assistance, or an accommodation, please let your recruiter know once you are contacted about a role.&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: helvetica, arial, sans-serif; font-size: 12pt;&quot;&gt;&lt;strong&gt;A Note on Recruiting Scams:&lt;/strong&gt; Scammers sometimes pose as Airbnb recruiters to get money or personal information from candidates. A few things that will always be true for Airbnb’s hiring process: our open roles are posted on Airbnb’s Career’s Page at careers.airbnb.com, and our recruiters correspond only from @&lt;a href=&quot;http://airbnb.com&quot;&gt;airbnb.com&lt;/a&gt; or @&lt;a href=&quot;http://ext.airbnb.com&quot;&gt;ext.airbnb.com&lt;/a&gt; email addresses. Our recruiters will never ask for your Social Security number, bank account details, passport, or payment app information while you are interviewing.&amp;nbsp; We’ll also never ask you to pay a fee, send money, deposit or cash a check, or purchase work-related equipment (such as a company laptop) during the interview process. We encourage candidates to remain vigilant of these recruiting scams and not share sensitive information if you do not believe an individual is actually affiliated with Airbnb.&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&amp;nbsp;&lt;/p&gt;&lt;/div&gt;",
+      "departments": [
+        {
+          "id": 76,
+          "name": "Financial Planning and Analysis",
+          "child_ids": [],
+          "parent_id": 73694
+        }
+      ],
+      "offices": [
+        {
+          "id": 63868,
+          "name": "United States",
+          "location": null,
+          "child_ids": [
+            246412,
+            258081,
+            258082,
+            258083,
+            87306,
+            87309,
+            211524,
+            87312,
+            87316,
+            87315,
+            104152,
+            88158,
+            85791,
+            87313,
+            88161,
+            87308,
+            87311,
+            87307,
+            80804,
+            109320,
+            87314,
+            88160,
+            78632,
+            87310,
+            88159,
+            241531,
+            108489,
+            62810,
+            62444,
+            85003,
+            104153,
+            12964,
+            11235,
+            55,
+            4447,
+            5924,
+            1316,
+            162,
+            5925,
+            1086,
+            1355
+          ],
+          "parent_id": 17515
+        }
+      ],
+      "ai_disclaimer": null,
+      "include_ai_disclaimer": null,
+      "ai_opt_out_request_url": null
+    },
+    {
+      "absolute_url": "https://careers.airbnb.com/positions/8184174?gh_jid=8184174",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "internal_job_id": 3541546,
+      "location": {
+        "name": "London, United Kingdom"
+      },
+      "metadata": [
+        {
+          "id": 9245691,
+          "name": "Is this job part of ACC?",
+          "value": false,
+          "value_type": "yes_no"
+        },
+        {
+          "id": 10216612,
+          "name": "Workplace Type",
+          "value": "Hybrid",
+          "value_type": "single_select"
+        }
+      ],
+      "id": 8184174,
+      "updated_at": "2026-09-24T18:49:00-04:00",
+      "requisition_id": "MULTI",
+      "title": "Account Manager ",
+      "pay_input_ranges": [
+        {
+          "min_cents": 4600000,
+          "max_cents": 5400000,
+          "currency_type": "GBP",
+          "title": "United Kingdom Annual Pay Range",
+          "blurb": "<p><span style=\"font-size: 16px;\"><strong><span style=\"font-family: arial, helvetica, sans-serif; color: rgb(0, 0, 0);\">How We'll Take Care of You:</span></strong></span></p>\n<p><span style=\"font-size: 16px;\">Our job titles may span more than one career level. The actual base pay is dependent upon many factors, such as: training, transferable skills, work experience, business needs and market demands. The base pay range shown below is annualized, is subject to change and may be modified in the future. This role may also be eligible for bonus, equity, benefits, and Employee Travel Credits.</span></p>"
+        }
+      ],
+      "company_name": "Airbnb",
+      "first_published": "2026-09-09T04:35:19-04:00",
+      "language": "en",
+      "application_deadline": null,
+      "content": "&lt;div class=&quot;content-intro&quot;&gt;&lt;p&gt;&lt;span style=&quot;font-family: helvetica, arial, sans-serif; font-size: 12pt;&quot;&gt;Airbnb was born in 2007 when two hosts welcomed three guests to their San Francisco home, and has since grown to over 5 million hosts who have welcomed over 2 billion guest arrivals in almost every country across the globe. Every day, hosts offer unique stays and experiences that make it possible for guests to connect with communities in a more authentic way.&lt;/span&gt;&lt;/p&gt;&lt;/div&gt;&lt;p&gt;&lt;strong&gt;The Community you will join:&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;Our Supply Team is growing, and we want you to be part of it! As a &lt;strong&gt;Market Associate / Account Manager,&lt;/strong&gt; you will play a crucial role in the retention, growth, and optimisation of host entrepreneurs and rising hosts in your assigned territory. These hosts are individuals who manage their own property or support owners by hosting on their behalf. You will focus on building strong relationships with these hosts, helping them optimise their listings, improve pricing strategies, and enhance their overall success on Airbnb.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;The difference you will make:&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;As a Market Associate, you will be responsible for the retention and growth of long-tail Hosts in an assigned territory. You will establish and nurture business relationships with emerging professional host accounts by suggesting and supporting strategic initiatives that drive their success on Airbnb. These initiatives will include supply optimisation, pricing optimisation, host recruitment, and platform education. In addition, as these Hosts successfully grow on the platform, it will be imperative that you help them maintain best-in-class hospitality standards for an excellent guest experience. Beyond one-to-one account management responsibilities, you’ll also support Market Managers on your team to deliver one-to-many education programs, such as webinars and scaled e-mail communication. Ultimately, this team will be responsible for helping long-tail Hosts thrive on Airbnb.&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;A typical day:&amp;nbsp;&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;Manage a book of business consisting of host entrepreneurs and rising hosts, ensuring their retention, growth, and optimisation on Airbnb.&lt;/li&gt;\n&lt;li&gt;Conduct one-on-one optimisation and onboarding conversations, providing strategic recommendations on pricing, availability, and listing quality.&lt;/li&gt;\n&lt;li&gt;Secure availability over high compression dates, ensuring hosts maximise their revenue potential.&lt;/li&gt;\n&lt;li&gt;Educate hosts on product updates and policy changes, while channeling their feedback to internal teams.&lt;/li&gt;\n&lt;li&gt;Respond to host inquiries and provide timely, high-quality support to improve their experience on the platform.&lt;/li&gt;\n&lt;li&gt;Analyse performance data to identify trends and take action on opportunities that drive increased bookings and host success.&lt;/li&gt;\n&lt;li&gt;Develop long-lasting relationships with hosts, ensuring they receive ongoing support tailored to their needs.&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;strong&gt;Your expertise:&amp;nbsp;&lt;/strong&gt;&lt;/p&gt;\n&lt;ul&gt;\n&lt;li&gt;3+ years of experience in new sales, account management, or partner support.&lt;/li&gt;\n&lt;li&gt;2+ years of hospitality/travel industry experience (nice to have).&lt;/li&gt;\n&lt;li&gt;Strong time management and prioritisation skills, with the ability to manage multiple accounts effectively.&lt;/li&gt;\n&lt;li&gt;Proven experience working a book of business, driving engagement and growth through proactive account management.&lt;/li&gt;\n&lt;li&gt;Highly goal-driven, with a strong bias for action and persistence in the face of challenges.&lt;/li&gt;\n&lt;li&gt;Excellent communication and presentation skills, with the ability to engage effectively via phone, email, and in-person.&lt;/li&gt;\n&lt;li&gt;Proficiency in CRM tools, particularly working with leads and opportunities (Salesforce experience is a plus).&lt;/li&gt;\n&lt;/ul&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: arial, helvetica, sans-serif; color: #000000;&quot;&gt;&lt;strong&gt;Our Commitment To Inclusion &amp;amp; Belonging:&lt;/strong&gt;&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: arial, helvetica, sans-serif; color: #000000;&quot;&gt;Airbnb is committed to working with the broadest talent pool possible. We believe diverse ideas foster innovation and engagement, and allow us to attract creatively-led people, and to develop the best products, services and solutions. All qualified individuals are encouraged to apply.&lt;/span&gt;&lt;/p&gt;&lt;div class=&quot;content-pay-transparency&quot;&gt;&lt;div class=&quot;pay-input&quot;&gt;&lt;div class=&quot;description&quot;&gt;&lt;p&gt;&lt;span style=&quot;font-size: 16px;&quot;&gt;&lt;strong&gt;&lt;span style=&quot;font-family: arial, helvetica, sans-serif; color: rgb(0, 0, 0);&quot;&gt;How We&#39;ll Take Care of You:&lt;/span&gt;&lt;/strong&gt;&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-size: 16px;&quot;&gt;Our job titles may span more than one career level. The actual base pay is dependent upon many factors, such as: training, transferable skills, work experience, business needs and market demands. The base pay range shown below is annualized, is subject to change and may be modified in the future. This role may also be eligible for bonus, equity, benefits, and Employee Travel Credits.&lt;/span&gt;&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;title&quot;&gt;United Kingdom Annual Pay Range&lt;/div&gt;&lt;div class=&quot;pay-range&quot;&gt;&lt;span&gt;£46,000&lt;/span&gt;&lt;span class=&quot;divider&quot;&gt;&amp;mdash;&lt;/span&gt;&lt;span&gt;£54,000 GBP&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;content-conclusion&quot;&gt;&lt;p&gt;&amp;nbsp;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: helvetica, arial, sans-serif; font-size: 12pt;&quot;&gt;&lt;strong&gt;Reasonable Accommodations:&lt;/strong&gt; We are committed to providing reasonable accommodations throughout the recruitment process for applicants with disabilities. If you need assistance, or an accommodation, please let your recruiter know once you are contacted about a role.&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&lt;span style=&quot;font-family: helvetica, arial, sans-serif; font-size: 12pt;&quot;&gt;&lt;strong&gt;A Note on Recruiting Scams:&lt;/strong&gt; Scammers sometimes pose as Airbnb recruiters to get money or personal information from candidates. A few things that will always be true for Airbnb’s hiring process: our open roles are posted on Airbnb’s Career’s Page at careers.airbnb.com, and our recruiters correspond only from @&lt;a href=&quot;http://airbnb.com&quot;&gt;airbnb.com&lt;/a&gt; or @&lt;a href=&quot;http://ext.airbnb.com&quot;&gt;ext.airbnb.com&lt;/a&gt; email addresses. Our recruiters will never ask for your Social Security number, bank account details, passport, or payment app information while you are interviewing.&amp;nbsp; We’ll also never ask you to pay a fee, send money, deposit or cash a check, or purchase work-related equipment (such as a company laptop) during the interview process. We encourage candidates to remain vigilant of these recruiting scams and not share sensitive information if you do not believe an individual is actually affiliated with Airbnb.&lt;/span&gt;&lt;/p&gt;\n&lt;p&gt;&amp;nbsp;&lt;/p&gt;&lt;/div&gt;",
+      "departments": [
+        {
+          "id": 247,
+          "name": "Business Development",
+          "child_ids": [],
+          "parent_id": 73691
+        }
+      ],
+      "offices": [
+        {
+          "id": 151,
+          "name": "London, United Kingdom",
+          "location": "London, United Kingdom",
+          "child_ids": [],
+          "parent_id": 64290
+        }
+      ],
+      "ai_disclaimer": null,
+      "include_ai_disclaimer": null,
+      "ai_opt_out_request_url": null
+    }
+  ],
+  "meta": {
+    "total": 3
+  }
+}

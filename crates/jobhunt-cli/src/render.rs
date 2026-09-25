@@ -1,12 +1,14 @@
 //! Human-readable output.
 
+use std::collections::HashMap;
 use std::io::{self, Write};
 
 use anstyle::{AnsiColor, Style};
 use chrono::{DateTime, Utc};
 use jobhunt_core::text::search_key;
 use jobhunt_jobs::{
-    Compensation, CompensationKind, EmploymentType, JobRecord, PayInterval, WorkplaceType,
+    Compensation, CompensationKind, DiscoveryReport, EmploymentType, JobRecord, OpportunityId,
+    PayInterval, ScanKind, WorkplaceType,
 };
 
 const TITLE: Style = Style::new().bold();
@@ -20,9 +22,18 @@ const LINK: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::C
 ///     Linear · North America (+1 more) · Remote · Full-time
 ///     $180K – $250K • Offers Equity
 ///     https://jobs.ashbyhq.com/linear/f04f398b-…
-///     ashby:linear · posted 9 days ago
+///     ashby:linear · posted 9 days ago · job_02e5…
+///     also listed on yc:linear
 /// ```
-pub fn jobs(out: &mut impl Write, records: &[JobRecord], now: DateTime<Utc>) -> io::Result<()> {
+///
+/// `also_listed` holds, per opportunity, the other sources' records of the
+/// same job (cross-source duplicates), which are named on the last line.
+pub fn jobs(
+    out: &mut impl Write,
+    records: &[JobRecord],
+    also_listed: &HashMap<OpportunityId, Vec<JobRecord>>,
+    now: DateTime<Utc>,
+) -> io::Result<()> {
     let width = records.len().to_string().len();
     for (index, record) in records.iter().enumerate() {
         let job = &record.posting;
@@ -39,6 +50,17 @@ pub fn jobs(out: &mut impl Write, records: &[JobRecord], now: DateTime<Utc>) -> 
         }
         writeln!(out, "{indent}{LINK}{}{LINK:#}", job.url)?;
         writeln!(out, "{indent}{DIM}{}{DIM:#}", provenance_line(record, now))?;
+        if let Some(others) = also_listed.get(&record.opportunity_id) {
+            let sources: Vec<String> = others
+                .iter()
+                .map(|o| o.posting.provenance.source.to_string())
+                .collect();
+            writeln!(
+                out,
+                "{indent}{DIM}also listed on {}{DIM:#}",
+                sources.join(", ")
+            )?;
+        }
         writeln!(out)?;
     }
     Ok(())
@@ -76,13 +98,11 @@ fn details_line(record: &JobRecord) -> String {
 
 fn provenance_line(record: &JobRecord, now: DateTime<Utc>) -> String {
     let source = &record.posting.provenance.source;
-    match record.posting.posted_at {
-        Some(posted) => format!("{source} · posted {}", relative_date(posted, now)),
-        None => format!(
-            "{source} · found {}",
-            relative_date(record.first_seen_at, now)
-        ),
-    }
+    let when = match record.posting.posted_at {
+        Some(posted) => format!("posted {}", relative_date(posted, now)),
+        None => format!("found {}", relative_date(record.first_seen_at, now)),
+    };
+    format!("{source} · {when} · {}", record.id)
 }
 
 pub fn employment_label(value: &EmploymentType) -> &str {
@@ -111,10 +131,12 @@ pub fn compensation_text(comp: &Compensation) -> Option<String> {
     if let Some(summary) = &comp.summary {
         return Some(summary.clone());
     }
-    let salary = comp
+    let salaries: Vec<_> = comp
         .components
         .iter()
-        .find(|c| c.kind == CompensationKind::Salary && (c.min.is_some() || c.max.is_some()))?;
+        .filter(|c| c.kind == CompensationKind::Salary && (c.min.is_some() || c.max.is_some()))
+        .collect();
+    let salary = salaries.first()?;
     let amount = |v: f64| format_amount(v);
     let range = match (salary.min, salary.max) {
         (Some(min), Some(max)) if min == max => amount(min),
@@ -136,7 +158,137 @@ pub fn compensation_text(comp: &Compensation) -> Option<String> {
         Some(PayInterval::Year) => " per year",
         Some(PayInterval::OneTime) | None => "",
     };
-    Some(format!("{currency}{range}{interval}"))
+    let label = match &salary.label {
+        Some(label) if salaries.len() > 1 => format!(" ({label}; +{} more)", salaries.len() - 1),
+        Some(label) => format!(" ({label})"),
+        None if salaries.len() > 1 => format!(" (+{} more)", salaries.len() - 1),
+        None => String::new(),
+    };
+    Some(format!("{currency}{range}{interval}{label}"))
+}
+
+/// The last line of `find`: what the run did, in lifecycle terms.
+///
+/// `Checked 14 sources in 3.2s: 2,431 open jobs (12 new, 3 updated, 1 closed).`
+pub fn run_summary(report: &DiscoveryReport) -> String {
+    let totals = report.totals();
+    let open = totals.inserted + totals.updated + totals.unchanged + totals.reopened;
+    let mut changes = vec![
+        format!("{} new", totals.inserted),
+        format!("{} updated", totals.updated),
+    ];
+    if totals.reopened > 0 {
+        changes.push(format!("{} reopened", totals.reopened));
+    }
+    if totals.closed > 0 {
+        changes.push(format!("{} closed", totals.closed));
+    }
+    let mut line = format!(
+        "Checked {} in {:.1}s: {} ({}).",
+        plural(report.sources.len() as u64, "source", "sources"),
+        report.elapsed.as_secs_f64(),
+        plural(open as u64, "open job", "open jobs"),
+        changes.join(", ")
+    );
+    let failed = report.failures().count();
+    if failed > 0 {
+        line.push_str(&format!(" {failed} failed."));
+    }
+    if report.dedupe.multi_source_opportunities > 0 {
+        line.push_str(&format!(
+            " {} listed by more than one source.",
+            plural(
+                report.dedupe.multi_source_opportunities as u64,
+                "job is",
+                "jobs are"
+            )
+        ));
+    }
+    line
+}
+
+/// Per-source statistics of a run, one row per source.
+pub fn scan_table(out: &mut impl Write, report: &DiscoveryReport) -> io::Result<()> {
+    let width = report
+        .sources
+        .iter()
+        .map(|s| s.source.to_string().len())
+        .max()
+        .unwrap_or(6)
+        .max(6);
+    writeln!(
+        out,
+        "{:<width$}  {:>6}  {:>8}  {:>5}  {:>5}  {:>7}  {:>9}  {:>8}  {:>6}  {:>6}",
+        "source",
+        "time",
+        "received",
+        "rej.",
+        "new",
+        "updated",
+        "unchanged",
+        "reopened",
+        "closed",
+        "scan"
+    )?;
+    for source in &report.sources {
+        let time = format!("{:.1}s", source.elapsed.as_secs_f64());
+        match &source.result {
+            Ok(stats) => {
+                let c = &stats.counts;
+                let scan = match (stats.kind, stats.closing_withheld) {
+                    (ScanKind::Complete, None) => "full",
+                    (ScanKind::Complete, Some(_)) => "held",
+                    (ScanKind::Partial, _) => "partial",
+                    (ScanKind::NotModified, _) => "same",
+                };
+                writeln!(
+                    out,
+                    "{:<width$}  {:>6}  {:>8}  {:>5}  {:>5}  {:>7}  {:>9}  {:>8}  {:>6}  {:>6}",
+                    source.source.to_string(),
+                    time,
+                    c.received,
+                    c.rejected,
+                    c.inserted,
+                    c.updated,
+                    c.unchanged,
+                    c.reopened,
+                    c.closed,
+                    scan
+                )?;
+            }
+            Err(_) => writeln!(
+                out,
+                "{:<width$}  {:>6}  failed",
+                source.source.to_string(),
+                time
+            )?,
+        }
+    }
+    let t = report.totals();
+    writeln!(
+        out,
+        "{:<width$}  {:>6}  {:>8}  {:>5}  {:>5}  {:>7}  {:>9}  {:>8}  {:>6}",
+        "total",
+        format!("{:.1}s", report.elapsed.as_secs_f64()),
+        t.received,
+        t.rejected,
+        t.inserted,
+        t.updated,
+        t.unchanged,
+        t.reopened,
+        t.closed
+    )?;
+    writeln!(
+        out,
+        "scan: full = complete listing, same = source reported no change, \
+         partial = incomplete listing (nothing closed), held = complete but closing withheld"
+    )?;
+    writeln!(
+        out,
+        "cross-source: {} links, {} jobs listed by more than one source, {} look-alikes kept \
+         apart (same company and title but no shared URL or ATS id)",
+        report.dedupe.links, report.dedupe.multi_source_opportunities, report.dedupe.look_alikes
+    )
 }
 
 /// Formats with thousands separators, keeping up to two decimals when present.
@@ -185,7 +337,7 @@ pub fn plural(count: impl Into<u64>, singular: &str, plural: &str) -> String {
 mod tests {
     use chrono::TimeZone;
     use jobhunt_core::{CanonicalUrl, Provenance, SourceKey};
-    use jobhunt_jobs::{CompensationComponent, JobPosting, SourceLocation};
+    use jobhunt_jobs::{CompensationComponent, JobPosting, JobStatus, SourceLocation};
 
     use super::*;
 
@@ -231,27 +383,49 @@ mod tests {
         };
         JobRecord {
             id: posting.id(),
+            opportunity_id: OpportunityId::founded_by(posting.id()),
             posting,
             first_seen_at: now(),
             last_seen_at: now(),
             content_updated_at: now(),
+            status: JobStatus::Open,
+            closed_at: None,
         }
     }
 
     #[test]
     fn renders_a_job_block() {
         let mut out = Vec::new();
-        jobs(&mut out, &[record()], now()).unwrap();
+        let r = record();
+        let id = r.id;
+        jobs(&mut out, &[r], &HashMap::new(), now()).unwrap();
         let text = String::from_utf8(out).unwrap();
         // anstyle writes escape codes; strip them for a stable comparison.
         let plain = strip_ansi(&text);
         assert_eq!(
             plain,
-            " 1. Design Engineer (Web & Brand)\n\
-            \x20   Linear · North America (+1 more) · Remote · Full-time\n\
-            \x20   $180K – $250K • Offers Equity\n\
-            \x20   https://jobs.ashbyhq.com/linear/f04f398b\n\
-            \x20   ashby:linear · posted 8 days ago\n\n"
+            format!(
+                " 1. Design Engineer (Web & Brand)\n\
+                \x20   Linear · North America (+1 more) · Remote · Full-time\n\
+                \x20   $180K – $250K • Offers Equity\n\
+                \x20   https://jobs.ashbyhq.com/linear/f04f398b\n\
+                \x20   ashby:linear · posted 8 days ago · {id}\n\n"
+            )
+        );
+    }
+
+    #[test]
+    fn names_other_sources_of_the_same_job() {
+        let r = record();
+        let mut twin = record();
+        twin.posting.provenance.source = SourceKey::new("yc", "linear").unwrap();
+        let also: HashMap<_, _> = [(r.opportunity_id, vec![twin])].into();
+        let mut out = Vec::new();
+        jobs(&mut out, &[r], &also, now()).unwrap();
+        let plain = strip_ansi(&String::from_utf8(out).unwrap());
+        assert!(
+            plain.contains("\n    also listed on yc:linear\n"),
+            "{plain}"
         );
     }
 
@@ -266,7 +440,10 @@ mod tests {
         r.posting.compensation = None;
         r.posting.posted_at = None;
         assert_eq!(details_line(&r), "Linear");
-        assert_eq!(provenance_line(&r, now()), "ashby:linear · found today");
+        assert_eq!(
+            provenance_line(&r, now()),
+            format!("ashby:linear · found today · {}", r.id)
+        );
     }
 
     #[test]
@@ -284,6 +461,7 @@ mod tests {
             components: vec![
                 CompensationComponent {
                     kind: CompensationKind::EquityPercentage,
+                    label: None,
                     currency: None,
                     min: None,
                     max: None,
@@ -291,6 +469,7 @@ mod tests {
                 },
                 CompensationComponent {
                     kind: CompensationKind::Salary,
+                    label: None,
                     currency: Some("USD".into()),
                     min: Some(211_400.0),
                     max: Some(290_600.5),
@@ -307,6 +486,26 @@ mod tests {
             components: vec![],
         };
         assert_eq!(compensation_text(&empty), None);
+
+        let range = |label: &str, currency: &str| CompensationComponent {
+            kind: CompensationKind::Salary,
+            label: Some(label.into()),
+            currency: Some(currency.into()),
+            min: Some(100.0),
+            max: Some(200.0),
+            interval: Some(PayInterval::Year),
+        };
+        let regional = Compensation {
+            summary: None,
+            components: vec![
+                range("US Annual Pay Range", "USD"),
+                range("Canada Annual Pay Range", "CAD"),
+            ],
+        };
+        assert_eq!(
+            compensation_text(&regional).as_deref(),
+            Some("USD 100 – 200 per year (US Annual Pay Range; +1 more)")
+        );
     }
 
     #[test]

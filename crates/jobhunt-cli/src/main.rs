@@ -4,6 +4,7 @@ mod config;
 mod find;
 mod logging;
 mod render;
+mod show;
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -42,6 +43,8 @@ struct Cli {
 enum Command {
     /// Fetch jobs from the configured sources, save them locally, and show them.
     Find(find::FindArgs),
+    /// Show everything stored about one job: every source listing it and its history.
+    Show(show::ShowArgs),
     /// Show where JobHunt keeps its files and the effective configuration.
     Config,
 }
@@ -81,7 +84,8 @@ async fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     );
 
     match cli.command {
-        Command::Find(args) => find::run(args, &loaded).await,
+        Command::Find(args) => find::run(args, &loaded, cli.verbose).await,
+        Command::Show(args) => show::run(args, &loaded).await,
         Command::Config => show_config(&loaded),
     }
 }
@@ -134,8 +138,29 @@ mod tests {
         };
         assert_eq!(args.query, ["rust", "backend"]);
         assert_eq!(args.limit, 5);
-        assert_eq!(args.sources[0].to_string(), "ashby:linear");
+        assert_eq!(
+            args.sources[0],
+            find::SourceArg::Key("ashby:linear".parse().unwrap())
+        );
         assert!(!args.offline);
+    }
+
+    #[test]
+    fn parses_show_and_url_sources() {
+        let cli = Cli::try_parse_from(["jobhunt", "show", "job_02e51190085f8a9a0772e845ddd9f329"])
+            .unwrap();
+        assert!(matches!(cli.command, Command::Show(_)));
+        let cli = Cli::try_parse_from([
+            "jobhunt",
+            "find",
+            "--source",
+            "https://www.notion.com/careers",
+        ])
+        .unwrap();
+        let Command::Find(args) = cli.command else {
+            panic!("expected find");
+        };
+        assert!(matches!(args.sources[0], find::SourceArg::Url(_)));
     }
 
     #[test]

@@ -10,7 +10,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use jobhunt_core::{Source, SourceKey};
+use jobhunt_core::{FetchRequest, Fetched, Source, SourceKey};
 use jobhunt_sources::{AshbyBoard, AshbySource, HttpClient, HttpSettings};
 
 #[tokio::test]
@@ -27,7 +27,10 @@ async fn live_board_converts_cleanly() {
     )
     .unwrap();
 
-    let batch = source.fetch().await.unwrap();
+    let Fetched::Batch(batch) = source.fetch(&FetchRequest::default()).await.unwrap() else {
+        panic!("unconditional fetch answered not modified");
+    };
+    assert!(batch.complete);
     println!(
         "ashby:{board}: {} received, {} converted, {} rejected, {} skipped",
         batch.received(),
