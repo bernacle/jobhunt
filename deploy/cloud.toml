@@ -1,0 +1,96 @@
+# JobHunt Cloud: the shared job corpus.
+#
+# The discovery worker reads every source listed here once per schedule
+# tier (see the README: "Scheduled discovery") and stores their jobs once,
+# for everyone. It uses the same format as the local config file
+# (config.example.toml); the service reads it through JOBHUNT_CONFIG.
+# Environment variables override the settings below (JOBHUNT_LOG,
+# JOBHUNT_DISCOVERY_CONCURRENCY, JOBHUNT_VERIFICATION_FRESH_HOURS, ...).
+#
+# Adding a board here is the way to grow the corpus; people's own local
+# sources stay on their machines (their synced feedback brings the jobs it
+# refers to).
+
+[logging]
+level = "info,sqlx=warn"
+format = "json"
+
+[discovery]
+concurrency = 6
+max_requests_per_host = 3
+request_timeout_secs = 30
+max_retries = 2
+revalidate_after_hours = 24
+
+[verification]
+reuse_minutes = 15
+fresh_hours = 24
+stale_hours = 72
+concurrency = 4
+
+[[sources.ashby]]
+board = "linear"
+company = "Linear"
+
+[[sources.ashby]]
+board = "ramp"
+company = "Ramp"
+
+[[sources.ashby]]
+board = "notion"
+company = "Notion"
+
+[[sources.ashby]]
+board = "supabase"
+company = "Supabase"
+
+[[sources.ashby]]
+board = "posthog"
+company = "PostHog"
+
+[[sources.ashby]]
+board = "modal"
+company = "Modal"
+
+[[sources.ashby]]
+board = "replit"
+company = "Replit"
+
+[[sources.ashby]]
+board = "vanta"
+company = "Vanta"
+
+[[sources.greenhouse]]
+board = "anthropic"
+
+[[sources.greenhouse]]
+board = "stripe"
+
+[[sources.greenhouse]]
+board = "figma"
+
+[[sources.greenhouse]]
+board = "airbnb"
+
+[[sources.lever]]
+site = "spotify"
+company = "Spotify"
+
+[[sources.lever]]
+site = "palantir"
+company = "Palantir"
+
+[[sources.lever]]
+site = "zoox"
+company = "Zoox"
+
+[[sources.lever]]
+site = "qonto"
+company = "Qonto"
+region = "eu"
+
+[[sources.yc]]
+slug = "posthog"
+
+[[sources.yc]]
+slug = "doordash"

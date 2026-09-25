@@ -39,7 +39,9 @@ use std::time::Duration;
 use jobhunt_jobs::StorageError;
 use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
 
-pub use accounts::{Account, ApiToken, IdentityLink, NewApiToken, TokenCheck, UserId, hash_token};
+pub use accounts::{
+    Account, ApiToken, IdentityLink, NewApiToken, TOKEN_PREFIX, TokenCheck, UserId, hash_token,
+};
 pub use crypto::{CryptoError, Keyring};
 pub use rotate::Reencrypted;
 pub use schedule::{
