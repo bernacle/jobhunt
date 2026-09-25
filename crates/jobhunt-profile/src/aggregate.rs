@@ -512,6 +512,22 @@ impl ProfileData {
                 add("preferences", format!("no {what} set"));
             }
         }
+        for p in view
+            .compensation()
+            .minimum
+            .iter()
+            .chain(&view.compensation().target)
+        {
+            if let crate::PreferenceValue::Compensation { currency: None, .. } = p.value {
+                add(
+                    "preferences",
+                    format!(
+                        "compensation “{}” has no currency; set it with jobhunt preferences set compensation --currency …",
+                        p.value
+                    ),
+                );
+            }
+        }
         let uncertain = view
             .active()
             .filter(|p| p.certainty == crate::Certainty::Uncertain)

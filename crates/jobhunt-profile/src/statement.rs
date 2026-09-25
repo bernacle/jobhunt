@@ -32,6 +32,8 @@ pub struct ReadPreference {
     pub certainty: Certainty,
     /// The clause it was read from, verbatim.
     pub snippet: String,
+    /// How an ambiguous part was read ("“$” can mean USD, CAD, …").
+    pub note: Option<String>,
 }
 
 /// What a parser made of a statement.
@@ -61,7 +63,7 @@ impl StatementParser for RuleParser {
     fn read(&self, text: &str) -> StatementReadout {
         let mut out = StatementReadout::default();
         for clause in clauses(text) {
-            let found = read_clause(&clause);
+            let found = read_clause(&clause, text);
             if found.is_empty() {
                 out.unparsed.push(clause);
                 continue;
@@ -438,7 +440,7 @@ const TIMEZONE_ABBREVIATIONS: [&str; 16] = [
     "UTC", "IST", "JST",
 ];
 
-fn read_clause(clause: &str) -> Vec<ReadPreference> {
+fn read_clause(clause: &str, statement: &str) -> Vec<ReadPreference> {
     let ws = words(clause);
     let polarity = polarity(&ws);
     let hedged = has_any(&ws, &HEDGES) || clause.contains('?');
@@ -449,12 +451,13 @@ fn read_clause(clause: &str) -> Vec<ReadPreference> {
     };
     let stance = stance_for(polarity);
     let mut out = Vec::new();
-    let mut push = |value, stance, certainty| {
+    let mut push_noted = |value, stance, certainty, note: Option<String>| {
         out.push(ReadPreference {
             value,
             stance,
             certainty,
             snippet: clause.to_owned(),
+            note,
         })
     };
 
@@ -478,11 +481,12 @@ fn read_clause(clause: &str) -> Vec<ReadPreference> {
     );
     let money: Vec<Amount> = money
         .into_iter()
-        .filter(|a| a.currency.is_some() || a.thousands || comp_context)
+        .filter(|a| a.currency.is_some() || a.symbol.is_some() || a.thousands || comp_context)
         .collect();
-    for (value, stance, certainty) in compensation(&ws, &money, hedged) {
-        push(value, stance, certainty);
+    for (value, stance, certainty, note) in compensation(&ws, &money, hedged, statement) {
+        push_noted(value, stance, certainty, note);
     }
+    let mut push = |value, stance, certainty| push_noted(value, stance, certainty, None);
 
     // Location and logistics.
     let remote_only = has_any(
@@ -711,31 +715,95 @@ fn read_clause(clause: &str) -> Vec<ReadPreference> {
 #[derive(Debug, Clone, PartialEq)]
 struct Amount {
     value: u64,
+    /// ISO code, when the text says which currency it is.
     currency: Option<&'static str>,
+    /// A symbol shared by several currencies ("$", "¥"), when that is all
+    /// the amount says.
+    symbol: Option<&'static str>,
     period: Option<PayPeriod>,
     /// Written with a thousands suffix ("120k").
     thousands: bool,
     start: usize,
 }
 
-const CURRENCY_PREFIXES: [(&str, &str); 12] = [
+/// Symbols that name exactly one currency. "$" and "¥" are not here: they
+/// are shared by several currencies (see [`AMBIGUOUS_SYMBOLS`]).
+const CURRENCY_PREFIXES: [(&str, &str); 15] = [
     ("US$", "USD"),
     ("R$", "BRL"),
     ("CA$", "CAD"),
     ("C$", "CAD"),
     ("A$", "AUD"),
     ("AU$", "AUD"),
-    ("$", "USD"),
+    ("NZ$", "NZD"),
+    ("MX$", "MXN"),
+    ("S$", "SGD"),
+    ("HK$", "HKD"),
     ("€", "EUR"),
     ("£", "GBP"),
-    ("¥", "JPY"),
     ("₹", "INR"),
     ("CHF", "CHF"),
+    ("CN¥", "CNY"),
 ];
 
-const CURRENCY_CODES: [&str; 14] = [
-    "USD", "EUR", "GBP", "BRL", "CAD", "AUD", "CHF", "JPY", "INR", "MXN", "ARS", "SEK", "PLN",
-    "NZD",
+const CURRENCY_CODES: [&str; 18] = [
+    "USD", "EUR", "GBP", "BRL", "CAD", "AUD", "CHF", "JPY", "CNY", "INR", "MXN", "ARS", "SEK",
+    "PLN", "NZD", "SGD", "HKD", "COP",
+];
+
+/// Symbols several currencies use, with the words that can tell them apart
+/// when the statement uses them. Without such evidence the currency stays
+/// unknown: "$120k" alone could be USD, CAD, AUD, …
+struct AmbiguousSymbol {
+    symbol: &'static str,
+    /// For the note: what it can mean.
+    meanings: &'static str,
+    /// Currency code, and words in a statement that point to it.
+    contexts: &'static [(&'static str, &'static [&'static str])],
+}
+
+const AMBIGUOUS_SYMBOLS: [AmbiguousSymbol; 2] = [
+    AmbiguousSymbol {
+        symbol: "$",
+        meanings: "USD, CAD, AUD, NZD, SGD, MXN and other dollars",
+        contexts: &[
+            (
+                "USD",
+                &[
+                    "=US",
+                    "=USA",
+                    "=U.S",
+                    "united states",
+                    "american",
+                    "san francisco",
+                    "bay area",
+                    "new york",
+                    "seattle",
+                    "austin",
+                    "boston",
+                    "los angeles",
+                    "chicago",
+                ],
+            ),
+            (
+                "CAD",
+                &["canada", "canadian", "toronto", "vancouver", "montreal"],
+            ),
+            ("AUD", &["australia", "australian", "sydney", "melbourne"]),
+            ("NZD", &["new zealand", "auckland", "wellington"]),
+            ("SGD", &["singapore"]),
+            ("HKD", &["hong kong"]),
+            ("MXN", &["mexico", "mexican"]),
+        ],
+    },
+    AmbiguousSymbol {
+        symbol: "¥",
+        meanings: "JPY and CNY",
+        contexts: &[
+            ("JPY", &["japan", "japanese", "tokyo"]),
+            ("CNY", &["china", "chinese", "shanghai", "beijing"]),
+        ],
+    },
 ];
 
 /// Finds money amounts: `$120k`, `120,000 USD`, `€90k/year`, `R$ 25.000 por mês`,
@@ -776,6 +844,10 @@ fn amounts(text: &str) -> Vec<Amount> {
                     .find(|code| before.to_uppercase().ends_with(*code))
                     .copied()
             });
+        let symbol = AMBIGUOUS_SYMBOLS
+            .iter()
+            .map(|a| a.symbol)
+            .find(|symbol| currency.is_none() && before.ends_with(symbol));
         let (mut value, decimals) = number_value(&raw, currency == Some("BRL"));
         let after_trim = after.trim_start();
         let lower_after = after_trim.to_lowercase();
@@ -819,6 +891,8 @@ fn amounts(text: &str) -> Vec<Amount> {
             out.push(Amount {
                 value: value.round() as u64,
                 currency,
+                // "$120k USD": the code settles it.
+                symbol: if currency.is_some() { None } else { symbol },
                 period,
                 thousands,
                 start: at,
@@ -841,6 +915,18 @@ fn amounts(text: &str) -> Vec<Amount> {
             }
             if out[k].currency.is_none() {
                 out[k].currency = out[k - 1].currency;
+            }
+            if out[k - 1].currency.is_some() {
+                out[k - 1].symbol = None;
+            }
+            if out[k].currency.is_some() {
+                out[k].symbol = None;
+            }
+            if out[k - 1].symbol.is_none() && out[k - 1].currency.is_none() {
+                out[k - 1].symbol = out[k].symbol;
+            }
+            if out[k].symbol.is_none() && out[k].currency.is_none() {
+                out[k].symbol = out[k - 1].symbol;
             }
             if out[k - 1].period.is_none() {
                 out[k - 1].period = b.period;
@@ -911,9 +997,69 @@ fn period_after(rest: &str) -> Option<PayPeriod> {
     }
 }
 
-type CompValue = (PreferenceValue, Stance, Certainty);
+type CompValue = (PreferenceValue, Stance, Certainty, Option<String>);
 
-fn compensation(ws: &[Word], money: &[Amount], hedged: bool) -> Vec<CompValue> {
+/// How the currency of an amount was settled.
+enum CurrencyReading {
+    /// The text names it (a code, or a symbol only one currency uses).
+    Stated(&'static str),
+    /// An ambiguous symbol, read from other words in the statement.
+    FromContext(&'static str, String),
+    /// Nothing says which currency it is.
+    Unknown(Option<String>),
+}
+
+fn read_currency(amount: &Amount, clause: &[Word], statement: &str) -> CurrencyReading {
+    if let Some(code) = amount.currency {
+        return CurrencyReading::Stated(code);
+    }
+    // A code elsewhere in the same clause ("$120k, paid in USD").
+    let codes: Vec<&'static str> = CURRENCY_CODES
+        .iter()
+        .copied()
+        .filter(|code| clause.iter().any(|w| w.original == *code))
+        .collect();
+    if let [code] = codes[..] {
+        return CurrencyReading::Stated(code);
+    }
+    let Some(AmbiguousSymbol {
+        symbol,
+        meanings,
+        contexts,
+    }) = amount
+        .symbol
+        .and_then(|s| AMBIGUOUS_SYMBOLS.iter().find(|a| a.symbol == s))
+    else {
+        return CurrencyReading::Unknown(None);
+    };
+    let words = words(statement);
+    let mut found: Vec<(&'static str, String)> = Vec::new();
+    for (code, cues) in contexts.iter() {
+        for cue in cues.iter() {
+            if let Some(range) = Pattern::new(cue).find(&words) {
+                if !found.iter().any(|(c, _)| c == code) {
+                    found.push((code, span_text(statement, &words, &range).to_owned()));
+                }
+                break;
+            }
+        }
+    }
+    let set_it = "set it with `jobhunt preferences set compensation --currency …`";
+    match &found[..] {
+        [(code, cue)] => CurrencyReading::FromContext(
+            code,
+            format!(
+                "“{symbol}” read as {code} because your statement mentions “{cue}”; \
+                 if that is wrong, {set_it}"
+            ),
+        ),
+        _ => CurrencyReading::Unknown(Some(format!(
+            "“{symbol}” can mean {meanings}, so the currency is unknown; {set_it}"
+        ))),
+    }
+}
+
+fn compensation(ws: &[Word], money: &[Amount], hedged: bool, statement: &str) -> Vec<CompValue> {
     if money.is_empty() {
         return Vec::new();
     }
@@ -996,7 +1142,12 @@ fn compensation(ws: &[Word], money: &[Amount], hedged: bool) -> Vec<CompValue> {
             None if amount.value < 1_000 => (PayPeriod::Hour, false),
             None => (PayPeriod::Month, false),
         };
-        let certain = !hedged && period_certain && amount.currency.is_some();
+        let (currency, currency_certain, note) = match read_currency(amount, ws, statement) {
+            CurrencyReading::Stated(code) => (Some(code), true, None),
+            CurrencyReading::FromContext(code, note) => (Some(code), false, Some(note)),
+            CurrencyReading::Unknown(note) => (None, false, note),
+        };
+        let certain = !hedged && period_certain && currency_certain;
         let stance = match bound {
             CompensationBound::Minimum => Stance::Required,
             CompensationBound::Target => Stance::Wanted,
@@ -1005,7 +1156,7 @@ fn compensation(ws: &[Word], money: &[Amount], hedged: bool) -> Vec<CompValue> {
             PreferenceValue::Compensation {
                 bound,
                 amount: amount.value,
-                currency: amount.currency.map(str::to_owned),
+                currency: currency.map(str::to_owned),
                 period,
                 arrangement,
             },
@@ -1015,6 +1166,7 @@ fn compensation(ws: &[Word], money: &[Amount], hedged: bool) -> Vec<CompValue> {
             } else {
                 Certainty::Uncertain
             },
+            note,
         )
     };
     if money.len() >= 2 {
@@ -1153,17 +1305,80 @@ mod tests {
             PreferenceValue::Compensation {
                 bound: CompensationBound::Minimum,
                 amount: 120_000,
-                currency: Some("USD".into()),
+                currency: None,
                 period: PayPeriod::Year,
                 arrangement: None,
-            }
+            },
+            "“$” alone does not say which dollar"
         );
         assert_eq!(comp.stance, Stance::Required);
-        assert_eq!(comp.certainty, Certainty::Certain);
+        assert_eq!(comp.certainty, Certainty::Uncertain);
+        assert!(comp.note.as_deref().unwrap().contains("USD, CAD, AUD"));
         let sre = find(&out, "role:sre");
         assert_eq!(sre.stance, Stance::Unwanted);
         assert_eq!(sre.snippet, "Avoid pure SRE roles");
         assert_eq!(out.preferences.len(), 4);
+    }
+
+    fn currency(text: &str) -> (Option<String>, Certainty, Option<String>) {
+        let out = read(text);
+        let comp = out
+            .preferences
+            .iter()
+            .find(|p| matches!(p.value, PreferenceValue::Compensation { .. }))
+            .unwrap_or_else(|| panic!("no compensation in {text:?}"));
+        let PreferenceValue::Compensation { currency, .. } = &comp.value else {
+            unreachable!()
+        };
+        (currency.clone(), comp.certainty, comp.note.clone())
+    }
+
+    #[test]
+    fn dollar_signs_stay_ambiguous_without_evidence() {
+        // A code or a symbol only one currency uses settles it.
+        for (text, code) in [
+            ("at least USD 120k", "USD"),
+            ("at least $120k USD", "USD"),
+            ("at least US$120k", "USD"),
+            ("at least CA$150k", "CAD"),
+            ("at least A$150k", "AUD"),
+            ("at least R$ 25.000 per month", "BRL"),
+            ("at least $120k, paid in CAD", "CAD"),
+        ] {
+            let (currency, certainty, note) = currency(text);
+            assert_eq!(currency.as_deref(), Some(code), "{text}");
+            assert_eq!(certainty, Certainty::Certain, "{text}");
+            assert_eq!(note, None, "{text}");
+        }
+
+        // "$" alone: unknown, flagged, explained.
+        let (currency_read, certainty, note) = currency("at least $120k");
+        assert_eq!((currency_read, certainty), (None, Certainty::Uncertain));
+        assert!(note.unwrap().contains("so the currency is unknown"));
+
+        // Context elsewhere in the statement suggests one currency, but
+        // only as an uncertain reading with the reason.
+        let (currency_read, certainty, note) = currency("I live in Toronto. At least $150k.");
+        assert_eq!(currency_read.as_deref(), Some("CAD"));
+        assert_eq!(certainty, Certainty::Uncertain);
+        assert!(note.unwrap().contains("mentions “Toronto”"));
+        let (currency_read, certainty, _) = currency("US-based roles only, at least $120k");
+        assert_eq!(
+            (currency_read.as_deref(), certainty),
+            (Some("USD"), Certainty::Uncertain)
+        );
+
+        // Conflicting context stays unknown.
+        let (currency_read, _, note) = currency("Remote in the US or Canada, at least $120k");
+        assert_eq!(currency_read, None);
+        assert!(note.unwrap().contains("unknown"));
+
+        // The same for the yen sign.
+        assert_eq!(currency("at least ¥8m").0, None);
+        assert_eq!(
+            currency("Based in Tokyo, at least ¥8m").0.as_deref(),
+            Some("JPY")
+        );
     }
 
     #[test]

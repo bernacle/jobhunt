@@ -129,8 +129,29 @@ fn cli_flow_from_resume_to_export() {
         "add",
         "I want small product teams and at least $120k. Avoid pure SRE roles.",
     ]);
-    assert!(out.contains("at least USD 120,000 per year"), "{out}");
+    assert!(
+        out.contains("at least 120,000 per year (currency unknown)"),
+        "“$” alone is not read as USD:\n{out}"
+    );
+    assert!(out.contains("can mean USD, CAD, AUD"), "{out}");
     assert!(out.contains("avoid  sre roles"), "{out}");
+    let out = env.ok(&["profile"]);
+    assert!(out.contains("has no currency"), "{out}");
+    let out = env.ok(&[
+        "preferences",
+        "set",
+        "compensation",
+        "--minimum",
+        "120k",
+        "--currency",
+        "USD",
+    ]);
+    assert!(
+        out.contains("replaces: required at least 120,000 per year (currency unknown)"),
+        "{out}"
+    );
+    let out = env.ok(&["profile"]);
+    assert!(!out.contains("has no currency"), "{out}");
     let out = env.ok(&["preferences"]);
     assert!(out.contains("“I want small product teams and at least $120k. Avoid pure SRE roles.”"));
     assert!(out.contains("from “Avoid pure SRE roles”"), "{out}");

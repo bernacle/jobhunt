@@ -408,6 +408,7 @@ impl SqliteJobStore {
                         statement: c.opt_parse("statement_id")?,
                         snippet: c.opt("snippet")?,
                         certainty: c.canonical("certainty", Certainty::from_canonical)?,
+                        note: c.opt("note")?,
                         active: c.flag("active")?,
                         superseded_by: c.opt_parse("superseded_by")?,
                         created_at: c.time("created_at")?,
@@ -862,6 +863,7 @@ async fn write_profile(
             "statement_id",
             "snippet",
             "certainty",
+            "note",
             "active",
             "superseded_by",
             "created_at",
@@ -880,6 +882,7 @@ async fn write_profile(
             .bind(x.statement.map(|s| s.to_string()))
             .bind(&x.snippet)
             .bind(x.certainty.as_str())
+            .bind(&x.note)
             .bind(x.active)
             .bind(x.superseded_by.map(|s| s.to_string()))
             .bind(encode_timestamp(x.created_at))

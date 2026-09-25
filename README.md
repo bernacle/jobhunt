@@ -497,6 +497,17 @@ deterministic rules: clauses, their polarity ("avoid", "no", "open to",
 "at least", …), and known values. Each preference read from it links back
 to the statement and the clause it came from. Hedged or cue-less readings
 are marked uncertain, and parts that could not be read are kept and shown.
+
+Currencies are never assumed. A code or a symbol only one currency uses
+(`USD 120k`, `$120k USD`, `US$`, `CA$`, `R$`, `€`, `£`) settles it. A bare
+`$` (or `¥`) does not: USD, CAD, AUD, NZD, SGD, MXN and others all write
+`$`. If the rest of the statement points to exactly one of them ("I live
+in Toronto. At least $150k." → CAD), that reading is kept but marked
+uncertain, with a note naming the words it rests on; otherwise the
+currency stays unknown, the note says so, and `jobhunt profile` lists it
+until you set it (`jobhunt preferences set compensation --minimum 120k
+--currency USD`). Compensation will be a hard constraint later, so a
+guessed currency could wrongly exclude or favor jobs.
 A newer preference with the same key (say, a new minimum salary) replaces
 the older one, which is kept as history. Nothing here decides whether a job
 fits; eligibility and ranking will read these constraints later.
@@ -560,7 +571,8 @@ the jobs tables: `profiles`, `profile_documents` (with the extracted text),
 `profile_experiences`, `profile_projects`, `profile_education`,
 `profile_skills`, `profile_claims`, `profile_skill_evidence` (which claims
 back which skill), `profile_preference_statements`, `profile_preferences`
-and `profile_events` (history). Every table is keyed by `profile_id`; a
+and `profile_events` (history); `20260928000000_preference_notes.sql` adds
+the note explaining how an ambiguous preference was read. Every table is keyed by `profile_id`; a
 local install has one profile, but nothing prevents more. Records are
 rows, with JSON only for small values read whole (contact lists, a
 preference's typed value, lists of edited fields). Saving writes the whole

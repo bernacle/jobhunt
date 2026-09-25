@@ -799,6 +799,9 @@ pub fn preferences(out: &mut impl Write, data: &ProfileData) -> io::Result<()> {
                 p.value,
                 short(p.id)
             )?;
+            if let Some(note) = &p.note {
+                writeln!(out, "         {DIM}{note}{DIM:#}")?;
+            }
         }
         writeln!(out)?;
     }
@@ -851,6 +854,9 @@ pub fn statement_outcome(out: &mut impl Write, outcome: &StatementOutcome) -> io
                 ""
             };
             writeln!(out, "  {:<6} {}{doubt}", stance_word(p.stance), p.value)?;
+            if let Some(note) = &p.note {
+                writeln!(out, "         {note}")?;
+            }
         }
     }
     for part in &outcome.statement.unparsed {

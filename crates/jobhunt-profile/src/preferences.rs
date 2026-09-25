@@ -442,13 +442,20 @@ impl fmt::Display for PreferenceValue {
                     CompensationBound::Minimum => "at least",
                     CompensationBound::Target => "target",
                 };
-                let currency = currency.as_deref().unwrap_or("(currency unknown)");
-                write!(
-                    f,
-                    "{bound} {currency} {} per {}",
-                    group_thousands(*amount),
-                    period.as_str()
-                )?;
+                match currency {
+                    Some(currency) => write!(
+                        f,
+                        "{bound} {currency} {} per {}",
+                        group_thousands(*amount),
+                        period.as_str()
+                    )?,
+                    None => write!(
+                        f,
+                        "{bound} {} per {} (currency unknown)",
+                        group_thousands(*amount),
+                        period.as_str()
+                    )?,
+                }
                 if let Some(arrangement) = arrangement {
                     write!(f, " ({})", arrangement.as_str())?;
                 }
@@ -523,6 +530,10 @@ pub struct Preference {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snippet: Option<String>,
     pub certainty: Certainty,
+    /// How an ambiguous part was read, for the user to check ("“$” can
+    /// mean USD, CAD, …, so the currency is unknown").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
     /// False once a newer preference with the same key replaced it, or the
     /// user removed it.
     pub active: bool,
