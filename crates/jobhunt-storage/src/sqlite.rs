@@ -24,7 +24,7 @@ use sqlx::sqlite::{
 use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection};
 use tracing::{debug, info};
 
-static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations/sqlite");
+pub(crate) static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations/sqlite");
 
 /// Ids bound per statement in batched updates (well under SQLite's limit).
 const BATCH: usize = 500;
@@ -86,7 +86,7 @@ static REWRITE_SQL: LazyLock<String> = LazyLock::new(|| {
 /// schema.
 #[derive(Debug, Clone)]
 pub struct SqliteJobStore {
-    pool: SqlitePool,
+    pub(crate) pool: SqlitePool,
     location: String,
 }
 
@@ -1003,11 +1003,11 @@ fn decode_record(row: &SqliteRow) -> Result<JobRecord, StorageError> {
 
 /// Fixed-width UTC RFC 3339 with microseconds, so values sort as text.
 /// Sub-microsecond precision is dropped.
-fn encode_timestamp(value: DateTime<Utc>) -> String {
+pub(crate) fn encode_timestamp(value: DateTime<Utc>) -> String {
     value.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string()
 }
 
-fn decode_timestamp(value: &str) -> Result<DateTime<Utc>, chrono::ParseError> {
+pub(crate) fn decode_timestamp(value: &str) -> Result<DateTime<Utc>, chrono::ParseError> {
     DateTime::parse_from_rfc3339(value).map(|t| t.with_timezone(&Utc))
 }
 
@@ -1174,6 +1174,17 @@ mod tests {
                 "job_events",
                 "job_evidence",
                 "jobs",
+                "profile_claims",
+                "profile_documents",
+                "profile_education",
+                "profile_events",
+                "profile_experiences",
+                "profile_preference_statements",
+                "profile_preferences",
+                "profile_projects",
+                "profile_skill_evidence",
+                "profile_skills",
+                "profiles",
                 "source_scans"
             ]
         );

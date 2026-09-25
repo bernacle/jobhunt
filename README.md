@@ -2,7 +2,9 @@
 
 High-signal job discovery. JobHunt reads jobs from company job boards,
 normalizes them into one canonical model, tracks how each one changes over
-time, stores them locally, and shows you the ones that match.
+time, stores them locally, and shows you the ones that match. It also keeps
+a durable, inspectable model of *you*: your experience, the evidence behind
+every professional claim, and what you want next.
 
 ## What it does today
 
@@ -38,8 +40,15 @@ sources is shown once, with `also listed on <source>` under it.
 source that lists it, when each first appeared and was last verified, and
 its history (new, updated with the changed fields, closed, reopened).
 
-Not built yet: resume/profile import, eligibility, preference learning,
-ranking, and the MCP server.
+`jobhunt init resume.pdf` builds your career profile from your resume
+(see [Career profile](#career-profile)): experiences, projects, education,
+skills, domains, role signals, and an evidence graph where every claim keeps
+the resume text it came from and your decision about it. `jobhunt
+preferences add "…"` records what you want in your own words.
+
+Not built yet: eligibility, ranking and match scores, preference learning
+from saved/rejected jobs, application assistance, resume tailoring, and the
+MCP server.
 
 ## Quick start
 
@@ -171,7 +180,7 @@ non-http careers URLs are rejected with a message naming the problem.
 
 | What | Default location |
 | --- | --- |
-| Database | macOS: `~/Library/Application Support/jobhunt/jobhunt.db`<br>Linux: `~/.local/share/jobhunt/jobhunt.db` |
+| Database (jobs and your profile) | macOS: `~/Library/Application Support/jobhunt/jobhunt.db`<br>Linux: `~/.local/share/jobhunt/jobhunt.db` |
 | Config file (optional) | macOS: `~/Library/Application Support/jobhunt/config.toml`<br>Linux: `~/.config/jobhunt/config.toml` |
 
 `jobhunt config` prints the exact paths on your machine. Use a different
@@ -318,6 +327,248 @@ values JSON, both mapping directly to Postgres (`timestamptz`, `jsonb`). The
 for everyone, and per-user state belongs in separate tables keyed by job or
 opportunity id.
 
+## Career profile
+
+```text
+$ jobhunt init resume.pdf
+Imported resume.pdf (2 pages)
+ignored 3 lines repeated on every page (header, footer, page numbers)
+Marina Costa — Senior Software Engineer · Backend & Platform
+
+Experience
+  Ledgerly — Senior Software Engineer · Mar 2022 – Present · Remote
+  Banco Horizonte — Software Engineer II · Jan 2020 – Apr 2022 · São Paulo, Brazil
+  Banco Horizonte — Software Engineer · Jun 2018 – Dec 2019 · São Paulo, Brazil
+  Full Stack Developer (freelance) · dates unknown
+
+Skills
+  PostgreSQL, AWS, Rust, Docker, Kafka, Kubernetes, React, Terraform, … (+9 more)
+
+Preferences
+  none yet
+
+Evidence
+  77 claims extracted
+  56 directly supported
+  21 need review
+
+Uncertain
+  - Full Stack Developer: no dates found
+
+Next
+  jobhunt profile
+  jobhunt claims review
+  jobhunt preferences add "I want … and at least …; avoid …"
+```
+
+Everything JobHunt believes about you can be inspected (`jobhunt profile`,
+`jobhunt claims`), traced to its source (`jobhunt claims show <id>` prints
+the resume sentence behind a claim), corrected (`jobhunt profile edit`,
+`jobhunt claims reject`), and exported. Nothing needs an API key or the
+network.
+
+### Commands
+
+| Command | Does |
+| --- | --- |
+| `jobhunt init <resume>` | Import a resume (PDF, `.txt` or `.md`), or re-import an updated one |
+| `jobhunt profile [--all]` | Experience, projects, education, skills (used vs only listed), domains, role signals, preferences, evidence counts, what is missing or uncertain |
+| `jobhunt profile edit basics\|experience\|project\|education …` | Correct a value (`--title`, `--start 2021-03`, `--end none`, `--current`, `--tech Rust,Go`, …) |
+| `jobhunt profile add experience\|project\|education\|skill …` | Add what the resume does not say |
+| `jobhunt profile remove <id>` | Delete what you added; reject (hide) what was imported |
+| `jobhunt profile export [-o file]` / `import <file> [--replace]` | Versioned JSON, all or nothing |
+| `jobhunt profile history` | Every import, decision and edit |
+| `jobhunt claims [--kind K] [--state S] [--for <id>] [--all]` | List claims, marked ✓ usable, ? needs review, ✗ rejected |
+| `jobhunt claims review [--all]` | Claims needing review, each with why JobHunt believes it and the resume text |
+| `jobhunt claims show\|confirm\|reject\|reset <id>…` | Inspect or decide (`reject --reason …`) |
+| `jobhunt claims add "…" [--for <id>] [--kind K]` / `edit <id> "…"` | State or reword a claim yourself |
+| `jobhunt preferences` | Preferences by category, and your statements verbatim |
+| `jobhunt preferences add "…"` | A preference statement in your own words |
+| `jobhunt preferences set role\|compensation\|work-mode\|location\|region\|timezone\|relocation\|sponsorship\|company\|domain\|work-style …` | One structured preference |
+| `jobhunt preferences remove <pref_…\|stmt_…>` | Remove a preference, or a statement and what was read from it |
+
+Ids are printed short (`clm_3fa2b1c4`); any unique prefix works. `claim`
+and `prefs` are accepted as aliases.
+
+### Architecture
+
+```text
+jobhunt-cli ──► jobhunt-resume ──► jobhunt-profile ──► jobhunt-core
+     │                                   ▲
+     └──────► jobhunt-storage ───────────┘  (ProfileRepository for SQLite)
+```
+
+- **`jobhunt-profile`** is the domain: the model, the evidence policy,
+  preferences and their parser, the re-import rules, the export format, and
+  `ProfileService` (the use cases the CLI calls, and MCP and web will). It
+  knows nothing about SQL or PDFs; storage is the `ProfileRepository` trait.
+- **`jobhunt-resume`** reads files and parses them into
+  `jobhunt_profile::ParsedResume`, the contract any resume parser fills in.
+  It only structures the document and keeps its words; deciding what those
+  words claim, and how far to trust them, is the domain's job.
+- **`jobhunt-storage`** implements `ProfileRepository` on the same SQLite
+  file as the jobs, in its own tables.
+
+### Reading resumes
+
+PDFs are read locally with `pdf-extract` (pure Rust): no browser, no OCR, no
+LLM. JobHunt lays the text out itself from glyph positions: lines by
+baseline in content-stream order, spaces from real gaps (so kerning does not
+split words, whether the PDF writes space characters or, like TeX, places
+every word separately), wide gaps as column breaks (right-aligned dates),
+paragraph breaks from vertical gaps, ligatures normalized, and lines that
+repeat at the top or bottom of pages (running headers, "Page 2 of 3")
+removed. The PDF reader can panic on damaged files; it runs on its own
+thread, so that becomes an error. Empty or image-only PDFs, damaged files,
+password-protected files and unsupported formats (`.docx`, …) are refused
+with a message saying what to do instead.
+
+The deterministic parser (`jobhunt_resume::DeterministicParser`) finds
+sections by their headings (English and Portuguese), the name, headline,
+contacts and location in the header, and entries by their header lines
+(dates, column gaps, separators such as `—`, `|`, " at "). A company line
+followed by several titled roles is one company with several positions.
+Titles and companies are told apart by title words; when neither side has
+one the entry is flagged ambiguous rather than guessed. Bullets are list
+items when the document marks them, otherwise sentences rebuilt from
+wrapped lines. Missing dates stay missing, with a note; lines it does not
+understand are reported, not dropped.
+
+`ResumeParser` (resume structure) and `StatementParser` (preference
+statements) are traits. An AI-assisted parser can be plugged in later
+behind them; nothing in the profile depends on one, and `jobhunt init`
+never needs an API key.
+
+### The evidence graph
+
+Every professional statement is a **claim** (`clm_…`) about the profile or
+one experience, project or education entry:
+
+| Kind | Example | Provenance |
+| --- | --- | --- |
+| employment, education, project | "Senior Software Engineer at Ledgerly (Mar 2022 – Present)" | extracted |
+| accomplishment, responsibility | each resume bullet, verbatim | extracted |
+| technology | "Used Kafka at Ledgerly" (a "Tech:" line or a bullet naming it) | extracted |
+| skill | "Lists Go as a skill (Languages)" | extracted |
+| domain | "Worked in payments at Ledgerly" | inferred |
+| role | "Backend engineering experience at Ledgerly" | inferred |
+| ownership | "Staff-level role at …", "Mentored or hired engineers at …" | inferred |
+| other | certifications, awards, anything you add | extracted / user_entered |
+
+Each claim records its **source** (the imported document and the resume's
+own words, never a paraphrase), **provenance** (`extracted`, `inferred`,
+`user_entered`), **confidence** (`high`/`medium`/`low`, with the **basis**
+of an inference: "mentions “payment providers”, “PIX”"), and your
+**verification** (`unverified`, `confirmed`, `rejected`).
+
+The evidence policy (`Claim::standing`) decides what may later be used on
+your behalf (application answers, tailoring):
+
+1. rejected claims, and claims about records you rejected, are never used;
+2. a claim whose source left the resume needs review, even if confirmed,
+   until you confirm it again;
+3. confirmed and user-entered claims are usable;
+4. extracted claims are usable when quoted from the resume with high
+   confidence ("directly supported");
+5. everything else, including every inference, needs review.
+
+Inference is never promoted to truth on its own. Skills are records with
+their evidence: *used in your work* (a technology claim in an experience or
+project), *added by you*, or *listed only*, plus when they were last used;
+there are no proficiency scores. Domains and role signals (backend,
+platform, full stack, …; senior, staff, technical leadership, mentorship,
+…) are inferred claims, each with the evidence it rests on.
+
+### Preferences
+
+Preferences are structured values with a stance (`required`, `wanted`,
+`acceptable`, `unwanted`): roles; compensation (minimum and target, amount,
+ISO currency — never assumed from your country — period, employment or
+contract); location (where you live, remote/hybrid/on-site, regions, time
+zones, relocation, visa sponsorship); company and team kinds (startup,
+early-stage, founder-led, product company, agency, consulting, small team,
+…); domains you like or avoid; and work style (ownership, IC vs
+management, greenfield vs maintenance, async, meetings, closeness to
+product, on-call).
+
+`jobhunt preferences add "I want small product teams and at least $120k.
+Avoid pure SRE roles."` stores the statement verbatim, then reads it with
+deterministic rules: clauses, their polarity ("avoid", "no", "open to",
+"at least", …), and known values. Each preference read from it links back
+to the statement and the clause it came from. Hedged or cue-less readings
+are marked uncertain, and parts that could not be read are kept and shown.
+A newer preference with the same key (say, a new minimum salary) replaces
+the older one, which is kept as history. Nothing here decides whether a job
+fits; eligibility and ranking will read these constraints later.
+
+### Re-importing a resume
+
+Run `jobhunt init` again after changing your resume. It never deletes and
+re-inserts:
+
+- **Identity.** Experiences are matched by company and title (and, when the
+  title changed, by company and start date, so a corrected title updates
+  the record), projects by name, education by institution, skills by
+  normalized name, and claims by their subject plus what they say. The same
+  file imported twice changes nothing and duplicates nothing.
+- **Source facts update**, except fields you edited by hand, which always
+  win.
+- **Decisions survive.** Confirmed claims stay confirmed; rejected claims
+  stay rejected and never come back as trusted. If the statement of a
+  one-per-record claim changes (a title or dates), your confirmation of the
+  old statement does not carry over.
+- **Nothing is deleted.** Records and claims the new resume no longer
+  contains are marked stale; stale claims need review before they are used
+  again. A reworded bullet is a new claim that points to the one it
+  replaces. What you entered yourself (records, claims, preferences) is
+  never touched by an import.
+
+`init` prints what changed: new, updated, unchanged and stale counts, the
+decisions and edits it kept, and anything you need to confirm again.
+
+### Export format
+
+`jobhunt profile export` writes one JSON document:
+
+```json
+{
+  "format": "jobhunt.profile",
+  "version": 1,
+  "exported_at": "2026-09-25T12:00:00Z",
+  "generator": "jobhunt 0.1.0",
+  "profile": { "id": "prof_…", "name": "…", "revision": 7, … },
+  "documents": [ { "id": "doc_…", "sha256": "…", "text": "…", … } ],
+  "experiences": [ { "id": "exp_…", "company": "…", "meta": { "origin": "resume", "verification": "unverified", "edited_fields": [], … } } ],
+  "projects": [ … ], "education": [ … ], "skills": [ … ],
+  "claims": [ { "id": "clm_…", "kind": "accomplishment", "subject": { "type": "experience", "id": "exp_…" }, "provenance": "extracted", "verification": "confirmed", "source": { "document": "doc_…", "snippet": "…" }, … } ],
+  "preferences": [ { "id": "pref_…", "value": { "type": "compensation", "bound": "minimum", "amount": 120000, "currency": "USD", "period": "year" }, "stance": "required", … } ],
+  "statements": [ { "id": "stmt_…", "text": "I want small product teams …", "reading": "understood", … } ]
+}
+```
+
+The file contains your resume's text and contact details. `jobhunt profile
+import` checks the format name and version first, parses strictly
+(unknown fields are errors), validates every reference (claim subjects,
+sources, superseded claims, project experiences, preference statements),
+and only then replaces the stored profile in one transaction; an invalid
+file changes nothing. Replacing an existing profile needs `--replace`.
+
+### Storage
+
+The migration `20260927000000_career_profile.sql` adds, without touching
+the jobs tables: `profiles`, `profile_documents` (with the extracted text),
+`profile_experiences`, `profile_projects`, `profile_education`,
+`profile_skills`, `profile_claims`, `profile_skill_evidence` (which claims
+back which skill), `profile_preference_statements`, `profile_preferences`
+and `profile_events` (history). Every table is keyed by `profile_id`; a
+local install has one profile, but nothing prevents more. Records are
+rows, with JSON only for small values read whole (contact lists, a
+preference's typed value, lists of edited fields). Saving writes the whole
+profile in one transaction (upsert by id, delete what is gone, rebuild the
+derived skill evidence) and checks a revision number, so two concurrent
+writers cannot silently overwrite each other. The rules live in the
+domain, so a Postgres backend would only persist them.
+
 ## Logging
 
 Logs are structured (`tracing`) and go to stderr, so they never mix with
@@ -345,18 +596,27 @@ crates/
   jobhunt-core      Domain-agnostic primitives: canonical URLs, stable IDs,
                     fingerprints, HTML-to-text, source keys/provenance, the
                     Source trait (conditional fetch, completeness), counters.
+  jobhunt-profile   The profile domain: career profile, evidence claims and
+                    policy, preferences and their statement parser, resume
+                    re-import rules, export format, ProfileRepository,
+                    ProfileService.
+  jobhunt-resume    Resume files (PDF, text, Markdown) into text, and the
+                    deterministic parser into the profile's ParsedResume.
   jobhunt-jobs      The jobs domain: canonical model, lifecycle rules,
                     cross-source identity, the JobRepository boundary, and the
                     Discovery pipeline.
   jobhunt-sources   Adapters (Ashby, Greenhouse, Lever, YC), careers-page board
                     detection, and the shared HTTP client.
-  jobhunt-storage   Storage backends. SQLite today.
-  jobhunt-cli       The `jobhunt` binary: config, logging, find, show, output.
+  jobhunt-storage   Storage backends. SQLite today (jobs and profiles).
+  jobhunt-cli       The `jobhunt` binary: config, logging, find, show, init,
+                    profile, claims, preferences, output.
   jobhunt-mcp       Placeholder for the MCP server; intentionally empty for now.
 ```
 
-Dependencies only point downward: `cli → sources, storage → jobs → core`.
-`jobhunt-jobs` does not depend on any HTTP or SQL crate.
+Dependencies only point downward: `cli → sources, storage → jobs → core`
+and `cli → resume, storage → profile → core`. `jobhunt-jobs` and
+`jobhunt-profile` do not depend on any HTTP, SQL or PDF crate, nor on each
+other.
 
 ## Tests
 
@@ -382,8 +642,20 @@ rejected, or any converted posting is invalid.
   cross-source grouping and its safeguards, pipeline behavior against an
   in-memory repository.
 - `jobhunt-storage`: migrations (including upgrading a first-release
-  database), lifecycle persistence and history, scans, opportunities,
-  search.
+  database, and a jobs-only database to profiles), lifecycle persistence
+  and history, scans, opportunities, search; profiles stored and loaded
+  exactly, revision conflicts, deletions, skill evidence, claim queries,
+  profile history.
+- `jobhunt-profile`: dates, ids, the evidence policy, vocabularies
+  (technologies, domains, roles, ownership), the preference statement
+  parser, and use cases against an in-memory repository: first import,
+  identical re-import, a changed resume (decisions, edits, stale and
+  superseded claims, corrected titles), rejection across re-imports,
+  manual claims, preferences and supersession, export round trip and
+  all-or-nothing import, concurrent writers.
+- `jobhunt-resume`: fixtures under `tests/fixtures/` (see its README): a
+  two-page Chromium PDF, a TeX-style PDF without space characters,
+  Markdown and plain-text resumes, and blank, truncated and fake PDFs.
 - `jobhunt-sources`: per adapter, conversion of saved real responses
   (`tests/fixtures/<family>/`, including files with deliberately broken
   records) and HTTP behavior against a local mock server (conditional
@@ -392,7 +664,11 @@ rejected, or any converted posting is invalid.
 - `jobhunt-cli`: config, output, and end-to-end tests: every family served
   from one mock server through one pipeline into a SQLite file, then mutated
   across runs to prove NEW / UNCHANGED / UPDATED / CLOSED / REOPENED, that
-  failed and partial scans close nothing, and cross-source grouping.
+  failed and partial scans close nothing, and cross-source grouping; and the
+  `jobhunt` binary through the profile flow (`init`, `profile`,
+  `preferences`, `claims`, edits, `export`, re-import of a changed PDF,
+  `import` into a fresh database, unreadable files) with a temporary
+  database.
 
 Only the offline suite runs in required CI. The live tests run separately,
 three times a week and on demand, in the "Live sources" workflow, so a
@@ -426,6 +702,21 @@ protection.
 Nothing in the pipeline, lifecycle, storage or CLI output changes.
 
 ## Known limitations
+
+Profile:
+
+- Resume parsing is rule-based. Unusual layouts (two-column designs whose
+  columns interleave in the PDF, tables, headings JobHunt does not know)
+  can be misread; `init` reports what it did not understand, and anything
+  can be corrected. Scanned (image-only) PDFs need OCR, which JobHunt does
+  not do; `.docx` must be saved as PDF or text first.
+- Domain, role and seniority inferences come from fixed vocabularies
+  (English, with some Portuguese). They are always marked inferred and
+  need your confirmation.
+- The preference parser understands common phrasings in English;
+  everything else is kept as written and flagged.
+
+Jobs:
 
 - YC companies must be listed individually. The directory of ~1,500 hiring
   companies is available (through the site's public search index), but

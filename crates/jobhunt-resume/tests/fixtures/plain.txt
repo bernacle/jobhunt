@@ -1,0 +1,24 @@
+JOÃO PEREIRA
+Full Stack Developer
+Porto Alegre, RS · joao.pereira@example.com · +55 51 99876-5432
+
+PROFESSIONAL EXPERIENCE
+
+Software Engineer at Fintechly (Contract)
+04/2022 - present
+Building the merchant dashboard in React and Next.js on top of a Node.js
+GraphQL API; reduced page load time by 35% by moving reports to background
+jobs.
+Owning the Stripe billing integration end to end.
+
+Frontend Developer, Lojas Aurora
+2019 - 2022
+Rebuilt the storefront checkout in Vue; conversion grew 12%.
+Wrote the design system used by four product teams.
+
+EDUCATION
+Bachelor of Science in Computer Engineering, Universidade Federal do Rio Grande do Sul
+2014 - 2018
+
+TECHNICAL SKILLS
+JavaScript, TypeScript, React, Vue, Next.js, Node.js, GraphQL, PostgreSQL

@@ -11,9 +11,9 @@ use jobhunt_jobs::{
     PayInterval, ScanKind, WorkplaceType,
 };
 
-const TITLE: Style = Style::new().bold();
-const DIM: Style = Style::new().dimmed();
-const LINK: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::Cyan)));
+pub(crate) const TITLE: Style = Style::new().bold();
+pub(crate) const DIM: Style = Style::new().dimmed();
+pub(crate) const LINK: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(AnsiColor::Cyan)));
 
 /// Writes one block per job:
 ///
@@ -535,7 +535,7 @@ mod tests {
         assert_eq!(plural(3u64, "job", "jobs"), "3 jobs");
     }
 
-    fn strip_ansi(text: &str) -> String {
+    pub(crate) fn strip_ansi(text: &str) -> String {
         let mut out = String::new();
         let mut chars = text.chars();
         while let Some(c) = chars.next() {

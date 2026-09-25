@@ -1,8 +1,14 @@
 //! The `jobhunt` command.
 
+mod claims;
 mod config;
 mod find;
+mod init;
 mod logging;
+mod preferences;
+mod profile;
+mod profile_args;
+mod profile_render;
 mod render;
 mod show;
 
@@ -45,6 +51,17 @@ enum Command {
     Find(find::FindArgs),
     /// Show everything stored about one job: every source listing it and its history.
     Show(show::ShowArgs),
+    /// Import your resume (PDF, .txt or .md) into your career profile. Run it
+    /// again after updating the resume; your edits and decisions are kept.
+    Init(init::InitArgs),
+    /// Show, correct, export or import your career profile.
+    Profile(profile::ProfileArgs),
+    /// Review the evidence behind your profile: list, confirm or reject claims.
+    #[command(alias = "claim")]
+    Claims(claims::ClaimsArgs),
+    /// What you want next: roles, pay, location, companies, domains, work style.
+    #[command(alias = "prefs", alias = "preference")]
+    Preferences(preferences::PreferencesArgs),
     /// Show where JobHunt keeps its files and the effective configuration.
     Config,
 }
@@ -86,6 +103,10 @@ async fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     match cli.command {
         Command::Find(args) => find::run(args, &loaded, cli.verbose).await,
         Command::Show(args) => show::run(args, &loaded).await,
+        Command::Init(args) => init::run(args, &loaded).await,
+        Command::Profile(args) => profile::run(args, &loaded).await,
+        Command::Claims(args) => claims::run(args, &loaded).await,
+        Command::Preferences(args) => preferences::run(args, &loaded).await,
         Command::Config => show_config(&loaded),
     }
 }
@@ -161,6 +182,68 @@ mod tests {
             panic!("expected find");
         };
         assert!(matches!(args.sources[0], find::SourceArg::Url(_)));
+    }
+
+    #[test]
+    fn parses_profile_commands() {
+        let cli = Cli::try_parse_from(["jobhunt", "init", "resume.pdf"]).unwrap();
+        assert!(matches!(cli.command, Command::Init(_)));
+        let cli = Cli::try_parse_from(["jobhunt", "profile"]).unwrap();
+        let Command::Profile(args) = cli.command else {
+            panic!("expected profile");
+        };
+        assert!(args.command.is_none());
+        let cli = Cli::try_parse_from([
+            "jobhunt",
+            "profile",
+            "edit",
+            "experience",
+            "exp_12",
+            "--title",
+            "Staff Engineer",
+            "--start",
+            "2021-03",
+            "--end",
+            "none",
+        ])
+        .unwrap();
+        assert!(matches!(cli.command, Command::Profile(_)));
+        let cli = Cli::try_parse_from(["jobhunt", "claim", "confirm", "clm_1", "clm_2"]).unwrap();
+        assert!(matches!(cli.command, Command::Claims(_)));
+        let cli = Cli::try_parse_from(["jobhunt", "claims", "--state", "review"]).unwrap();
+        assert!(matches!(cli.command, Command::Claims(_)));
+        let cli = Cli::try_parse_from([
+            "jobhunt",
+            "preferences",
+            "add",
+            "I want small product teams",
+        ])
+        .unwrap();
+        assert!(matches!(cli.command, Command::Preferences(_)));
+        let cli = Cli::try_parse_from([
+            "jobhunt",
+            "prefs",
+            "set",
+            "compensation",
+            "--minimum",
+            "120k",
+            "--currency",
+            "USD",
+        ])
+        .unwrap();
+        assert!(matches!(cli.command, Command::Preferences(_)));
+        assert!(
+            Cli::try_parse_from([
+                "jobhunt",
+                "profile",
+                "edit",
+                "experience",
+                "exp_1",
+                "--start",
+                "soon"
+            ])
+            .is_err()
+        );
     }
 
     #[test]
