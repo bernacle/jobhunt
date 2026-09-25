@@ -15,7 +15,6 @@
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use jobhunt_eligibility::evaluate::trust;
-use jobhunt_jobs::JobRepository;
 use jobhunt_jobs::verification::{Standing, VerifyMode, cached};
 use jobhunt_ranking::{Gate, RankQuery, RankReport, Ranking, SignalGroup, Tier};
 use schemars::JsonSchema;

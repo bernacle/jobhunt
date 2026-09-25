@@ -23,9 +23,9 @@ use jobhunt_app::{AppError, FindRequest, LocalApp, RefreshMode, RefreshReason};
 use jobhunt_core::ErrorChain;
 use jobhunt_eligibility::{Eligibility, EligibilityDecision, evaluate_record};
 use jobhunt_jobs::{
-    DiscoveryReport, JobId, JobQuery, JobRecord, JobRepository, JobStatus, OpportunityId, ScanKind,
+    DiscoveryReport, JobId, JobQuery, JobRecord, JobStatus, OpportunityId, ScanKind,
 };
-use jobhunt_storage::SqliteJobStore;
+use jobhunt_storage::Store;
 
 use crate::config::LoadedConfig;
 use crate::local::{StderrProgress, finish, print_json, with_app};
@@ -533,10 +533,10 @@ async fn raw(
 /// When the job's latest verification found it closed, if that is newer
 /// than discovery's last sighting.
 async fn verified_closed(
-    store: &SqliteJobStore,
+    store: &dyn Store,
     record: &JobRecord,
 ) -> anyhow::Result<Option<DateTime<Utc>>> {
-    use jobhunt_jobs::verification::{ListingStatus, VerificationRepository};
+    use jobhunt_jobs::verification::ListingStatus;
     Ok(store
         .latest_verification(record.id)
         .await?
@@ -546,7 +546,7 @@ async fn verified_closed(
 
 /// Other open source records of each shown opportunity.
 async fn other_listings(
-    store: &SqliteJobStore,
+    store: &dyn Store,
     records: &[JobRecord],
 ) -> anyhow::Result<HashMap<OpportunityId, Vec<JobRecord>>> {
     let mut others = HashMap::new();

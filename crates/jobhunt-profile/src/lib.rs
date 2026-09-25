@@ -14,12 +14,15 @@
 //! * [`infer`]: the deterministic vocabularies behind technology, domain,
 //!   role and ownership evidence.
 //! * [`export`]: the versioned, portable profile format.
+//! * [`entities`]: a profile as independent records with stable ids and
+//!   digests, the unit of cloud sync and of encrypted cloud storage.
 //! * [`repository`]: the persistence boundary ([`ProfileRepository`]);
 //!   nothing in this crate knows which database is used.
 //! * [`service`]: the use cases front-ends call.
 
 pub mod aggregate;
 pub mod date;
+pub mod entities;
 pub mod evidence;
 pub mod export;
 pub mod ids;

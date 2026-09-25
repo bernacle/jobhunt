@@ -34,6 +34,50 @@ fn decode(row: &sqlx::sqlite::SqliteRow) -> Result<VerificationRecord, StorageEr
 }
 
 impl SqliteJobStore {
+    /// Inserts one attempt. With `if_absent`, an attempt whose id is
+    /// already stored is left alone and `false` is returned.
+    pub(crate) async fn insert_verification(
+        &self,
+        record: &VerificationRecord,
+        if_absent: bool,
+    ) -> Result<bool, StorageError> {
+        let json = serde_json::to_string(record).map_err(|e| StorageError::Query {
+            operation: "encoding a verification",
+            source: Box::new(e),
+        })?;
+        let verb = if if_absent {
+            "INSERT OR IGNORE"
+        } else {
+            "INSERT"
+        };
+        let result = sqlx::query(&format!(
+            "{verb} INTO job_verifications (id, job_id, opportunity_id, source_kind, \
+             source_instance, attempted_at, succeeded, method, listing_status, \
+             application_status, authority, checked_url, content_fingerprint, failure_kind, \
+             revision, record) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ))
+        .bind(record.id.to_string())
+        .bind(record.job_id.to_string())
+        .bind(record.opportunity_id.to_string())
+        .bind(record.source.kind())
+        .bind(record.source.instance())
+        .bind(encode_timestamp(record.attempted_at))
+        .bind(record.succeeded())
+        .bind(record.method.as_str())
+        .bind(record.listing.as_str())
+        .bind(record.application.status.as_str())
+        .bind(record.authority.as_str())
+        .bind(record.checked_url.as_deref())
+        .bind(record.content_fingerprint.as_deref())
+        .bind(record.failure.as_ref().map(|f| f.kind.as_str()))
+        .bind(&record.revision)
+        .bind(json)
+        .execute(&self.pool)
+        .await
+        .map_err(query_error("saving a verification"))?;
+        Ok(result.rows_affected() > 0)
+    }
+
     async fn verifications_where(
         &self,
         job: JobId,
@@ -65,36 +109,7 @@ impl SqliteJobStore {
 #[async_trait]
 impl VerificationRepository for SqliteJobStore {
     async fn save_verification(&self, record: &VerificationRecord) -> Result<(), StorageError> {
-        let json = serde_json::to_string(record).map_err(|e| StorageError::Query {
-            operation: "encoding a verification",
-            source: Box::new(e),
-        })?;
-        sqlx::query(
-            "INSERT INTO job_verifications (id, job_id, opportunity_id, source_kind, \
-             source_instance, attempted_at, succeeded, method, listing_status, \
-             application_status, authority, checked_url, content_fingerprint, failure_kind, \
-             revision, record) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(record.id.to_string())
-        .bind(record.job_id.to_string())
-        .bind(record.opportunity_id.to_string())
-        .bind(record.source.kind())
-        .bind(record.source.instance())
-        .bind(encode_timestamp(record.attempted_at))
-        .bind(record.succeeded())
-        .bind(record.method.as_str())
-        .bind(record.listing.as_str())
-        .bind(record.application.status.as_str())
-        .bind(record.authority.as_str())
-        .bind(record.checked_url.as_deref())
-        .bind(record.content_fingerprint.as_deref())
-        .bind(record.failure.as_ref().map(|f| f.kind.as_str()))
-        .bind(&record.revision)
-        .bind(json)
-        .execute(&self.pool)
-        .await
-        .map_err(query_error("saving a verification"))?;
-        Ok(())
+        self.insert_verification(record, false).await.map(|_| ())
     }
 
     async fn verification_history(

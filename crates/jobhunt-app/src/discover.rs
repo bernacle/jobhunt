@@ -100,7 +100,7 @@ impl LocalApp {
 
     /// Whether any open job is stored.
     pub async fn has_open_jobs(&self) -> Result<bool, AppError> {
-        use jobhunt_jobs::{JobQuery, JobRepository, JobStatus};
+        use jobhunt_jobs::{JobQuery, JobStatus};
         let query = JobQuery {
             status: Some(JobStatus::Open),
             limit: Some(1),

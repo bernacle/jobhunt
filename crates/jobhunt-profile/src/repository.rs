@@ -33,10 +33,12 @@ pub enum ProfileEventKind {
     StatementRemoved,
     PreferenceSet,
     PreferenceRemoved,
+    /// Changes merged from another copy of the profile (cloud sync).
+    Synced,
 }
 
 impl ProfileEventKind {
-    const ALL: [ProfileEventKind; 16] = [
+    const ALL: [ProfileEventKind; 17] = [
         Self::ResumeImported,
         Self::ProfileImported,
         Self::BasicsEdited,
@@ -53,6 +55,7 @@ impl ProfileEventKind {
         Self::StatementRemoved,
         Self::PreferenceSet,
         Self::PreferenceRemoved,
+        Self::Synced,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -73,6 +76,7 @@ impl ProfileEventKind {
             Self::StatementRemoved => "statement_removed",
             Self::PreferenceSet => "preference_set",
             Self::PreferenceRemoved => "preference_removed",
+            Self::Synced => "synced",
         }
     }
 

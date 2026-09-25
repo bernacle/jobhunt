@@ -17,6 +17,7 @@ jobhunt-profile.workspace = true
 jobhunt-ranking.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 tracing.workspace = true
