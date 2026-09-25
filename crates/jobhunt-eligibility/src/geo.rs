@@ -667,7 +667,7 @@ static CITIES: &[City] = cities!(
     ("TW", "Taipei"),
     ("ID", "Jakarta"),
     ("PH", "Manila"),
-    ("VN", "Ho Chi Minh City"),
+    ("VN", "Ho Chi Minh City", "ho chi minh", "saigon"),
     ("TH", "Bangkok"),
     ("MY", "Kuala Lumpur"),
     ("AU", "Sydney"),

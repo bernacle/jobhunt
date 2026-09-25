@@ -131,10 +131,9 @@ fn record_line(r: &RecordTrust) -> (String, Style) {
         ),
         TrustState::CouldNotVerify => (
             format!(
-                "! Could not verify the {}: {}",
-                name.to_lowercase()
-                    .trim_start_matches("first-party ")
-                    .to_owned(),
+                "! Could not verify the {} listing ({}): {}",
+                family(r.source.kind()),
+                r.source,
                 r.latest.as_ref().map(failure_text).unwrap_or_default()
             ),
             OPEN,

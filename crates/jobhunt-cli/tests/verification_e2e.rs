@@ -437,5 +437,18 @@ async fn init_verify_show_check_and_find() {
     let possible = env.ok(None, &["find", "--offline", "--possible", "-n", "100"]);
     assert!(!possible.contains("INELIGIBLE"), "{possible}");
     let all = env.ok(None, &["find", "--offline", "-n", "100"]);
-    has(&all, &["✗ INELIGIBLE", "? UNCLEAR"]);
+    has(
+        &all,
+        &[
+            "✗ INELIGIBLE",
+            "? UNCLEAR",
+            "✗ Verified closed at its source just now",
+        ],
+    );
+    // The closed Linear job is still listed by discovery, but never offered
+    // as a match.
+    assert!(
+        !eligible.contains("Senior / Staff Fullstack Engineer"),
+        "{eligible}"
+    );
 }

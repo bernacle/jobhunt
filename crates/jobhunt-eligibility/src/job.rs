@@ -1100,7 +1100,12 @@ fn read_sentence(record: &JobRecord, sentence: &str, job: &mut JobRequirements) 
             }
         }
     }
-    if job.worldwide.is_none() && has_any(&WORLDWIDE_CUES) && has_any(&HIRING_CONTEXT) {
+    // "Work from anywhere in the US or Europe" limits; it isn't global.
+    if job.worldwide.is_none()
+        && broad.is_empty()
+        && has_any(&WORLDWIDE_CUES)
+        && has_any(&HIRING_CONTEXT)
+    {
         job.worldwide = Some(ev());
     }
     if has_any(&FLEXIBLE_CUES) && job.flexible_hours.is_none() {

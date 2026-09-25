@@ -174,11 +174,26 @@ fn description_restrictions() {
         ("This position is US only.", Ineligible),
         ("Candidates must be based in the EU.", Ineligible),
         ("You can work from anywhere in the world.", Eligible),
+        // "Anywhere in X" is a limit, not "anywhere".
+        (
+            "You can work from anywhere in the US or Europe.",
+            Ineligible,
+        ),
         ("Remote in the US.", Ineligible),
     ] {
         let j = remote("Remote", description);
         assert_eq!(status(&j, &brazil), expected, "{description}");
     }
+}
+
+#[test]
+fn anywhere_within_places_is_not_global() {
+    let j = remote("Remote", "You can work from anywhere in the US or Europe.");
+    let r = requirements(&j);
+    assert!(r.worldwide.is_none());
+    assert_eq!(r.allow.len(), 2);
+    assert!(r.conflicts.is_empty());
+    assert_eq!(status(&j, &at("Berlin")), Eligible);
 }
 
 #[test]

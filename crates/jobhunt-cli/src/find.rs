@@ -160,7 +160,8 @@ pub async fn run(args: FindArgs, loaded: &LoadedConfig, verbosity: u8) -> anyhow
             let mut verdicts = HashMap::new();
             for record in store.search(&query).await? {
                 let a = evaluate_record(&record, user);
-                if a.status >= min {
+                // A job its source says is gone is never offered as a match.
+                if a.status >= min && verified_closed(&store, &record).await?.is_none() {
                     verdicts.insert(record.id, a);
                     kept.push(record);
                 }
@@ -180,12 +181,19 @@ pub async fn run(args: FindArgs, loaded: &LoadedConfig, verbosity: u8) -> anyhow
         }
     };
     let also_listed = other_listings(&store, &records).await?;
+    let mut closed = HashMap::new();
+    for record in &records {
+        if let Some(at) = verified_closed(&store, record).await? {
+            closed.insert(record.id, at);
+        }
+    }
     store.close().await;
 
     match print_results(
         &records,
         &also_listed,
         &verdicts,
+        &closed,
         total,
         report.as_ref(),
         &args,
@@ -196,6 +204,20 @@ pub async fn run(args: FindArgs, loaded: &LoadedConfig, verbosity: u8) -> anyhow
             Ok(ExitCode::SUCCESS)
         }
     }
+}
+
+/// When the job's latest verification found it closed, if that is newer
+/// than discovery's last sighting.
+async fn verified_closed(
+    store: &SqliteJobStore,
+    record: &JobRecord,
+) -> anyhow::Result<Option<chrono::DateTime<Utc>>> {
+    use jobhunt_jobs::verification::{ListingStatus, VerificationRepository};
+    Ok(store
+        .latest_verification(record.id)
+        .await?
+        .filter(|v| v.listing == ListingStatus::Closed && v.attempted_at >= record.last_seen_at)
+        .map(|v| v.attempted_at))
 }
 
 /// Other open source records of each shown opportunity.
@@ -343,6 +365,7 @@ fn print_results(
     records: &[JobRecord],
     also_listed: &HashMap<OpportunityId, Vec<JobRecord>>,
     verdicts: &HashMap<JobId, EligibilityDecision>,
+    closed: &HashMap<JobId, chrono::DateTime<Utc>>,
     total: u64,
     report: Option<&DiscoveryReport>,
     args: &FindArgs,
@@ -369,7 +392,7 @@ fn print_results(
         };
         writeln!(out, "{hint}")?;
     } else {
-        render::jobs(&mut out, records, also_listed, verdicts, now)?;
+        render::jobs(&mut out, records, also_listed, verdicts, closed, now)?;
         let shown = records.len() as u64;
         if shown < total {
             writeln!(

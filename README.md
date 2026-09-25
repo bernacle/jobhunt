@@ -40,13 +40,14 @@ sources is shown once, with `also listed on <source>` under it.
 source that lists it, when each first appeared and was last verified, and
 its history (new, updated with the changed fields, closed, reopened).
 
-`jobhunt check <job_…|opp_…>` answers whether you can take a job: where
-you can work from, work authorization, work mode, time zone and pay, each
-with the posting's own words behind it, and whether the listing is the
-company's own and still current (see
-[Eligibility and verification](#eligibility-and-verification)). With a
-profile, `find` adds a one-line verdict to every result, and `--eligible` /
-`--possible` filter on it.
+`jobhunt verify <job_…|opp_…>` asks the job's authoritative sources
+whether it is still open and can be applied to, records what they say,
+and checks it against your profile: eligible, conditional, uncertain or
+ineligible, with the posting's own words behind every reason (see
+[Verification and eligibility](#verification-and-eligibility)). `jobhunt
+check` prints the same report from what is stored; `show` includes the
+last verification. With a profile, `find` adds a one-line verdict to every
+result, and `--eligible` / `--possible` filter on it.
 
 `jobhunt init resume.pdf` builds your career profile from your resume
 (see [Career profile](#career-profile)): experiences, projects, education,
@@ -81,8 +82,9 @@ cargo run -- find --source https://www.notion.com/careers          # or by caree
 cargo run -- find --offline designer                 # search stored jobs, no network
 cargo run -- find -v                                 # per-source statistics on stderr
 cargo run -- show job_1e8575ded15556ca9b5ccf5485f05e4b             # one job, its sources and history
-cargo run -- check job_1e8575ded15556ca9b5ccf5485f05e4b            # can you take it? with evidence
-cargo run -- check --refresh job_1e8575ded15556ca9b5ccf5485f05e4b  # re-read its sources first
+cargo run -- verify job_1e8575ded15556ca9b5ccf5485f05e4b           # still open? can you take it?
+cargo run -- verify --details job_1e8575ded15556ca9b5ccf5485f05e4b # with provenance and evidence
+cargo run -- check job_1e8575ded15556ca9b5ccf5485f05e4b            # the same report, from what is stored
 cargo run -- find --offline --eligible               # only jobs your profile says you can take
 cargo run -- config                                  # show file locations and settings
 ```
@@ -320,6 +322,8 @@ baselined without being reported as UPDATED).
 `20260929000000_job_work_authorization.sql` adds the `work_authorization`
 column (Work at a Startup's visa field); the canonical revision was bumped
 so every source is read again and fills it.
+`20260930000000_verification_eligibility.sql` adds the verification and
+eligibility tables below without touching any existing table.
 
 | Table | Holds |
 | --- | --- |
@@ -328,6 +332,8 @@ so every source is read again and fills it.
 | `job_evidence` | identity keys (`url:…`, `ats:<system>:<id>`) used for grouping |
 | `source_scans` | one row per source per run: listing / not modified / failed, complete or not, whether closing was applied or withheld and why, all counts, the validator |
 | `discovery_runs` | one row per run with totals |
+| `job_verifications` | one row per verification attempt: listing, application and authority states, whether it succeeded, the method, URL and failure kind as columns, and the whole record (authority chain, compensation facts, published places, unknowns) as JSON |
+| `eligibility_decisions` | stored eligibility decisions, keyed by opportunity, profile and a digest of every input (see [Caching and revisions](#caching-and-revisions)) |
 
 Unchanged observations add no history, so history grows with changes, not
 with scans. The current row plus the chain of replaced snapshots answers:
@@ -527,9 +533,10 @@ until you set it (`jobhunt preferences set compensation --minimum 120k
 guessed currency could wrongly exclude or favor jobs.
 A newer preference with the same key (say, a new minimum salary) replaces
 the older one, which is kept as history. `jobhunt check` and `find` read
-these constraints (see
-[Eligibility and verification](#eligibility-and-verification)); ranking
-will read them later.
+the location, work-mode, time-zone, relocation, sponsorship,
+authorization and engagement preferences (see
+[Verification and eligibility](#verification-and-eligibility)); ranking
+will read the rest (pay, roles, companies) later.
 
 ### Re-importing a resume
 
@@ -600,98 +607,398 @@ derived skill evidence) and checks a revision number, so two concurrent
 writers cannot silently overwrite each other. The rules live in the
 domain, so a Postgres backend would only persist them.
 
-## Eligibility and verification
+## Verification and eligibility
 
-`jobhunt check` puts both sides next to each other: what the job says
-(locations, remote metadata, work authorization, pay, and eligibility
-sentences of its description, with the source and when the source last
-listed it) and what your profile says (where you live, work modes, time
-zones, relocation, sponsorship, pay minimums, roles).
+Two separate questions, answered separately:
+
+- **Verification**: is this job still open at a source that speaks for the
+  employer, can it be applied to, and what does that source publish right
+  now?
+- **Eligibility**: can *you* work it, from where you are, on the terms the
+  posting states?
+
+A job can be verified active and ineligible ("US residents only"),
+verified active and uncertain ("Remote", no scope), or eligible on paper
+but not verified (and then not recommended). The two answers are never
+collapsed into one state, and neither is a percentage.
 
 ```text
-$ jobhunt check job_02e51190085f8a9a0772e845ddd9f329
-Senior / Staff Fullstack Engineer
-Linear · job_02e51190085f8a9a0772e845ddd9f329
+$ jobhunt verify job_02e51190085f8a9a0772e845ddd9f329
+Verifying 1 source record at 1 source…
+Senior / Staff Fullstack Engineer — Linear
+job_02e51190085f8a9a0772e845ddd9f329 · opp_02e51190085f8a9a0772e845ddd9f329
 
-✗ no: Remote, but Europe only
+Verification
+  ✓ First-party Ashby listing active
+  ✓ Application path active (published by the board's API)
+  Verified 12 seconds ago
 
-  ✗ no       location   Remote, but Europe only
-                        The description also mentions North America; another posting may cover it.
-                        “Europe” (ashby:linear locations)
-                        “This role is open to candidates based in North America and Europe.” (ashby:linear description)
-  ✓ yes      work mode  Work mode: remote, as you require
-                        “remote” (ashby:linear workplace_type)
+Location
+  Remote: Europe
+  Limited to: North America, Europe
+  You: Berlin, Germany
 
-Source:
-  First-party: the company's own Ashby job board, seen 2 hours ago
+Employment
+  Employment: full time
+  Contractor / EOR: not stated
+  Visa sponsorship: not stated
+  Time zone: flexible hours
+
+Compensation
+  Not published
+  Verified from the first-party listing · first verification
+
+Eligibility
+  ELIGIBLE
+
+Why
+  ✓ Germany is within the listed Europe region
+  ✓ Germany is within Europe, which the description allows
+  • The posting says working hours are flexible
+
+Conflicting information
+  ! The location fields say remote in Europe, but the description says North America, Europe
 ```
 
-Each dimension gets a fit, a one-line answer and its evidence:
+For someone in Toronto the same job is `UNCLEAR`: the listing says Europe,
+the description includes North America, and JobHunt can't tell which one
+applies to this role, so it says so and shows both statements. For
+someone in São Paulo it is `INELIGIBLE`: both exclude Brazil.
 
-| Fit | Means |
+This is a compatibility signal computed from what the posting publishes
+and what you told JobHunt. It is not legal advice and does not determine
+work authorization.
+
+### Commands
+
+| Command | Does |
 | --- | --- |
-| `yes` | the posting says so ("Brazil eligible: remote in Latin America", "Salary satisfies your minimum") |
-| `likely` | indirect or partial evidence ("Remote, probably within the United States (the posting lists New York, NY)", a range that spans your minimum, `$` read as USD because the job is in the US) |
-| `unknown` | the posting doesn't say, or JobHunt can't tell ("Remote, but the posting doesn't say where you can work from", "Compensation unknown", "Eligibility unclear because the time zone isn't published") |
-| `unlikely` | indirect evidence against ("Requires authorization to work in the United States" when your profile doesn't say you hold it) |
-| `no` | the posting rules you out ("Remote, but the United States only", "Pay tops out at USD 110,000 a year, below your minimum of USD 150,000", "Work mode: hybrid, but you require remote") |
+| `jobhunt verify <job_…\|opp_…>` | Verify every source record of the job now (reusing an attempt from the last 15 minutes), save the result, and check it against your profile |
+| `jobhunt verify --force <id>` | Ask the sources even if a recent attempt exists |
+| `jobhunt verify --details <id>` | Plus provenance: every record, the method and URLs checked, the authority chain, what changed, and the posting's words and your profile facts under every reason |
+| `jobhunt check <id>` | The detailed report from what is stored, without fetching (`--refresh` verifies first) |
+| `jobhunt show <id>` | Everything stored, with the last verification and the eligibility verdict (no fetch) |
+| `jobhunt find --eligible` / `--possible` | Only eligible or conditional jobs / everything not ruled out |
+| `jobhunt preferences set authorized-in <country>` | A country (or "the EU") you may already work in |
+| `jobhunt preferences set engagement contractor\|employee --stance require\|want\|accept\|avoid` | How you can be hired |
 
-The dimensions:
+### What "verified" means
 
-- **Location.** A remote flag is not "anywhere": remote work counts only
-  where the posting places it, in its location fields ("Remote (Canada)",
-  "Remote - LATAM") or in a sentence of the description ("open to
-  candidates based in North America and Europe", "can be held remotely in
-  the United States"). A remote job that only lists an office city is
-  probably limited to that city's country (`likely`). Remote with no place
-  is `unknown`. Offices abroad depend on your relocation and sponsorship
-  answers and on what the posting says about visas; contractor hiring in
-  your country ("we hire contractors in Brazil through Deel") is another
-  way in ("Contractors from Brazil appear supported"). Places the
-  description excludes are `no`. The best of these paths is the answer, and
-  the others are listed under it; if you require remote work, offices are
-  not considered.
-- **Work authorization.** "Must be authorized to work in the US", security
-  clearances, and Work at a Startup's first-party visa field, against your
-  sponsorship answer and the posting's sponsorship statements (including
-  "we sponsor visas, but not for every role").
-- **Work mode.** Only a `required` mode can rule a job out; wanted and
-  avoided modes are reported.
-- **Time zone.** Published hours ("US - Pacific time", "UTC-3 to UTC+3",
-  "US hours") against your time zones (or your country's). When remote
-  work spans more than six hours of time zones and no hours are published,
-  the answer is `unknown`.
-- **Compensation.** Your minimum against published ranges, per year, in the
-  same currency only: no exchange rates, and no guessing which dollar `$`
-  is (a range in `$` counts as USD, CAD, … only when all the job's places
-  are in one dollar country, and then only as `likely`). A minimum is a hard
-  constraint; unpublished pay is `unknown` and does not lower the verdict.
-- **Role.** Whether the title names a role you want or avoid; reported,
-  never used to rule a job out.
+A verification asks the job's authoritative source directly, through the
+narrowest public endpoint each family has, using the same HTTP client
+(timeouts, bounded retries honoring `Retry-After`, at most 4 requests per
+host) and the same conversion code as discovery:
 
-The overall verdict is the location's, lowered by any hard check (work
-authorization, a required work mode, the time zone, a pay minimum) that
-fits worse; an `unknown` hard check caps it at `likely`.
+| Family | Listing | Application path |
+| --- | --- | --- |
+| Greenhouse | `boards-api.greenhouse.io/v1/boards/<board>/jobs/<id>`; 404 is closed | the board's hosted job page (it holds the form); a redirect to the board with `error=true` is closed |
+| Lever | `api.lever.co/v0/postings/<site>/<id>` (or `api.eu.lever.co`); 404 is closed | the posting's `/apply` page |
+| Ashby | the board (Ashby has no single-job endpoint; one request, the whole board); a job missing from it is closed | the `applyUrl` the board API publishes (the page renders in the browser, so it is not requested) |
+| YC / Work at a Startup | the job's page (its embedded page data); 404, or the company's job list instead, is closed | the Work at a Startup application URL the page names |
 
-**First-party verification.** Every source JobHunt reads is the company's
-own: its Ashby, Greenhouse or Lever board, or the listing it posts itself
-on Y Combinator's Work at a Startup. `check` and `show` say which, and how
-fresh the listing is: `fresh` (seen within two days), `aging` (a week),
-`stale`, or `closed` (missing from its source's last complete listing).
-`check --refresh` re-reads the job's sources first (the same discovery
-pipeline as `find --source`), so the answer rests on what the company
-publishes now, and a job taken down shows as closed.
+Verifying one job never re-reads more than that job's own endpoint (or one
+Ashby board). Records of one opportunity are verified concurrently
+(bounded, `[verification] concurrency`).
 
-In `find`, each result gets a verdict line when you have a profile.
-`--eligible` keeps `yes` and `likely`; `--possible` also keeps `unknown`.
-Because eligibility depends on both the job and your profile, it is
-computed when you ask, not stored: filtering reads every matching job and
-checks each, about 0.3 ms per job in a release build (a second or so for
-a few thousand stored jobs). Stored assessments would need invalidating
-whenever a job or the profile changes; that can come with ranking.
+Each attempt is stored as a **verification record**
+(`jobhunt_jobs::verification::VerificationRecord`), never updated or
+deleted:
 
-The rules live in `jobhunt-eligibility`, which depends on the jobs and
-profile domains but on no storage, HTTP or CLI crate.
+| Field | Holds |
+| --- | --- |
+| `listing` | `active`, `closed` (the source said so), `unreachable` (timeout, 5xx, connection), `ambiguous` (an unreadable answer, or a different record than the job), `unknown` (no verifier for the source) |
+| `application` | `active`, `closed`, `unavailable`, `unknown`, and *how* it is known: `probed` (requested, with the HTTP status), `published` (the source publishes the route), `listing_page`, `not_checked` |
+| `authority`, `authority_chain` | see below; each link records whether JobHunt requested it or the source only named it |
+| `checked_url`, `listing_url`, `method` | what was asked, and how |
+| `changed_fields`, `changed_since_last_verification`, `lifecycle` | what differs from the stored record and from the previous successful verification, and the lifecycle outcome |
+| `compensation` | see [Compensation](#compensation-verification) |
+| `published` | the location, workplace, remote, employment and work-authorization text the source publishes now, verbatim |
+| `unknowns`, `failure` | what could not be established; a typed failure (`timeout`, `unavailable`, `malformed`, `request`, `mismatch`, `not_supported`) with the URL and HTTP status |
+| `revision` | the verification rules revision (`VERIFICATION_REVISION`) |
+
+An attempt **succeeds** when the source gives a definitive answer (active
+or closed). The latest attempt and the latest successful verification are
+kept apart, so a failure never erases an earlier success: "Last attempt 2
+minutes ago failed; last successfully verified 3 days ago".
+
+**Lifecycle.** A live posting is fed back through the existing discovery
+lifecycle exactly as a scan listing only that job would be: an edited job
+is UPDATED (with the changed fields and the replaced version in its
+history), a closed job that is live again is REOPENED with its history
+kept, and `last_seen_at` moves. No scan is recorded and nothing else is
+closed. A job verified closed is not closed in the jobs table (closing is
+discovery's decision, with its safeguards); the trust view shows it as
+closed. A job discovery closed after its last successful verification is
+never shown as verified active.
+
+**Freshness** (`[verification]` in the config, one policy in
+`FreshnessPolicy`): an attempt within `reuse_minutes` (15) is reused
+instead of asking again (`--force` always asks), a success within
+`fresh_hours` (24) is fresh, and older than `stale_hours` (72) it is stale
+and the job is not trusted enough to recommend until verified again.
+`show`, `check` and `find` only read what is stored.
+
+### Authority
+
+Who stands behind a listing, strongest first:
+
+| Level | Means | Sources |
+| --- | --- | --- |
+| `employer_first_party` | a page on the employer's own domain, checked by JobHunt, that publishes the job or embeds its board | (no verifier checks employer pages yet) |
+| `employer_configured_ats` | the employer's own applicant-tracking board, which it configures and publishes | Ashby, Greenhouse, Lever |
+| `trusted_source` | a platform the employer posts to itself, but not its own system | Y Combinator's Work at a Startup |
+| `secondary_source` | a reposting by someone else | none today |
+| `unknown` | a source JobHunt doesn't know | |
+
+A Greenhouse board that publishes the employer's own page as the job's URL
+(`stripe.com/jobs/search?gh_jid=…`) adds that page to the chain, marked as
+named by the board, not checked; the authority stays the board's. Work at
+a Startup is never called first-party.
+
+**Opportunities.** Every source record of an opportunity is verified and
+kept inspectable. The opportunity's status rests on the strongest live
+record (authority, then the most recent success); records that disagree
+(one live, one gone) are listed as conflicts. It is **trusted enough to
+recommend** only when that record is verified active, not stale, at a
+source of at least `trusted_source` authority.
+
+### Location normalization
+
+Places are normalized from the job's structured location fields (and the
+source's structured country), sentences of its description, and your
+`current_location` preference (or, failing that, your resume's header,
+which is then named in every reason that uses it). A place is never
+guessed from the machine's locale or IP.
+
+A normalized place is an area of the table in
+[`geo`](crates/jobhunt-eligibility/src/geo.rs): anywhere, a region, a
+country (ISO 3166-1 alpha-2 codes internally), a first-level subdivision,
+or a city, with standard-time UTC offsets (per city in countries that span
+several zones). The raw text is kept next to it, and text the table
+doesn't know stays unrecognized (`JobHunt doesn't recognize your location
+“…”`), never approximated. ISO codes are used as identifiers, not as
+political statements.
+
+### Region definitions
+
+Membership lives in one tested table (`Region::members`). "Maybe" means
+usage disagrees; a decision built on it is uncertain, never eligible or
+ineligible.
+
+| Region | Includes | Maybe |
+| --- | --- | --- |
+| North America | US, Canada | Mexico |
+| Central America | Belize, Costa Rica, El Salvador, Guatemala, Honduras, Nicaragua, Panama | Mexico |
+| Caribbean | Cuba, Dominican Republic, Jamaica, Trinidad and Tobago, Puerto Rico | |
+| South America | Argentina, Bolivia, Brazil, Chile, Colombia, Ecuador, Guyana, Paraguay, Peru, Suriname, Uruguay, Venezuela | |
+| Latin America (LATAM) | Mexico, Central and South America, the Spanish-speaking Caribbean | Belize, Guyana, Suriname, Jamaica, Trinidad and Tobago |
+| Americas | all of the above | |
+| Europe | the EU, the EEA, the UK, Switzerland, the Western Balkans, Ukraine, Moldova | Turkey, Russia, Belarus |
+| EU | the 27 member states | other European countries (postings often write "EU" for Europe) |
+| EEA | the EU plus Iceland, Liechtenstein, Norway | (formal: nothing else) |
+| Nordics / DACH | Sweden, Norway, Denmark, Finland, Iceland / Germany, Austria, Switzerland | — / Liechtenstein |
+| Middle East | UAE, Saudi Arabia, Israel, Qatar, Kuwait, Bahrain, Oman, Jordan, Lebanon, Syria, Iran | Turkey, Egypt |
+| Africa | the African countries in the table | |
+| EMEA | Europe (including its maybes), the Middle East (including its maybes), Africa | |
+| Asia | East, Southeast and South Asia | the Middle East, Turkey |
+| APAC | East and Southeast Asia, Oceania, India | Pakistan, Bangladesh, Sri Lanka, Nepal |
+| Oceania | Australia, New Zealand | |
+| Global / anywhere | every country | |
+
+### Remote scope
+
+Remote availability is separate from workplace type. A job offers one or
+more **work options**:
+
+- **remote**, with a scope: explicitly global ("Remote - Worldwide",
+  "Anywhere"), a list of areas ("Remote (US)", "Remote - LATAM", "Remote:
+  Brazil, Argentina, Chile"), or **unknown** ("Remote" alone). A remote
+  job that lists only an office city ("New York, NY") has a scope
+  *inferred* from that city's country, which is never enough for a
+  definite answer and gives way to an explicit statement in the
+  description;
+- **office** (on-site, hybrid, or office-based when the source doesn't
+  say how often), at a place;
+- **engagement**: a remote path through a named mechanism in named places
+  ("we hire contractors in Brazil, Argentina and Mexico through Deel").
+
+"Remote" is never "anywhere", "Remote — US" is not "Remote", and
+"Americas" is not "Global". An explicit hybrid or on-site workplace type
+outranks a remote flag (Ashby sets `isRemote` on some hybrid jobs; the
+disagreement is recorded).
+
+### Restrictions
+
+The description is read with fixed English cues, sentence by sentence,
+keeping each sentence as evidence:
+
+- **allowed places** ("must be based in Canada", "US only", "open to
+  candidates in Brazil", "we're hiring in LATAM", "Remote in the US",
+  "applicants must live in NYC"), each *required* or only *preferred*
+  ("candidates in Europe are preferred" is not a rule);
+- **excluded places** ("we are unable to hire in Cuba, Iran, North Korea
+  or Syria");
+- **anywhere** ("work from anywhere", "anywhere in the world"), but not
+  descriptions of the team ("a globally distributed team" is marketing);
+- **offices** ("hybrid in London", "onsite in New York", "based in our
+  Toronto office");
+- **work authorization** ("must be authorized to work in the United
+  States"), and Work at a Startup's first-party visa field ("US
+  citizen/visa only");
+- **sponsorship** (offered; offered "but not for every role";
+  unavailable), **relocation** (help offered, or required);
+- **engagement** (contractors, B2B, employer of record such as Deel or
+  Oyster, where; "we don't work with contractors");
+- **time zones** (below).
+
+### Time zones
+
+A time-zone requirement is kept separate from geography, with its kind:
+**within** a range ("You must be located between UTC-5 and UTC+1", "based
+in a European time zone"), **hours** of a zone with an optional tolerance
+("EST ±3 hours", "Pacific time"), or **overlap** of so many hours
+("4 hours overlap with EST", counted against an 8-hour day). Your zones
+are the ones you stated, else your city's, else your country's range.
+
+- Within: inside passes; outside fails for a requirement; partly inside
+  (a country spanning zones) is uncertain.
+- Hours: within the tolerance (the stated one, else 3 hours) passes;
+  outside a stated tolerance, or with no working-day overlap at all,
+  fails; otherwise uncertain ("5h from your time zone; the posting doesn't
+  say how much shift is acceptable").
+- No time-zone language is "no requirement published", not "unrestricted";
+  vague language ("some overlap with the team") is uncertain; "flexible
+  hours" says hours are flexible. Nothing is inferred from where the
+  company's headquarters are.
+
+### Visa, work authorization, contractors and EOR
+
+- **Authorization** is taken only from what you stated: `authorized-in`
+  preferences, and "no sponsorship needed", which is read as authorized
+  *where you live* (and nowhere else). Living somewhere is not assumed to
+  mean you may work there.
+- An explicit requirement ("authorized to work in the US", the visa field,
+  or an office abroad) passes when you hold it; with sponsorship needed it
+  is conditional if the posting offers sponsorship, uncertain if it offers
+  it "not for every role" or doesn't say, and ineligible if it doesn't
+  sponsor; otherwise it is uncertain and says how to settle it.
+- **"No visa sponsorship" is not "no international applicants."** For a
+  remote option with no authorization requirement it restricts nothing and
+  is reported as such ("doesn't restrict remote work from Brazil by
+  itself").
+- **"US only, no sponsorship"** is ineligible from Brazil because of "US
+  only", not because of "no sponsorship", and it says nothing about a
+  contractor path. A contractor or EOR path exists only where the posting
+  names one (then it is its own work option), or for "remote worldwide,
+  contractor", which is strong evidence. When the scope is unknown, the
+  missing contractor information is named as a reason.
+- Your `engagement` preferences rule paths out (contractor `avoid`) or
+  require them (contractor `require`: a job that doesn't say whether it
+  hires contractors is uncertain).
+
+### Eligibility decisions and rules
+
+Each work option goes through these rules, in order (each a function in
+[`rules`](crates/jobhunt-eligibility/src/rules.rs)):
+
+1. **Listing** (a gate on top of the decision): verified active,
+   recently, at an authoritative source; otherwise "not trusted enough to
+   recommend".
+2. **Work mode and presence**: a work mode you require; being at an
+   office (same city passes; elsewhere in your country is uncertain, or
+   conditional if you'd relocate; abroad is ineligible if you won't
+   relocate, conditional if you would, uncertain if your profile doesn't
+   say).
+3. **Countries** the job allows or rules out (including cities).
+4. **Regions** and remote scope.
+5. **Work authorization and sponsorship.**
+6. **Contractor, B2B and EOR** engagement.
+7. **Time zones.**
+8. **Ambiguity**: what could not be read.
+
+An option is **ineligible** if any rule fails, else **uncertain** if any
+rule can't tell, else **conditional** if it holds only on a condition you
+haven't ruled out (you relocate; the company grants the sponsorship it
+offers), else **eligible**. The job's decision is its best option's; the
+other options are listed with theirs. Every reason records the rule, its
+conclusion, the posting's words (source and field) and the profile fact it
+used, so "why am I eligible?" is answered from the stored decision itself.
+
+**Unknowns stay unknown**: no location in your profile, an unrecognized
+place, a remote scope that isn't published, a membership usage disagrees
+on, an authorization your profile doesn't state: each is uncertain, with
+the reason and, where there is one, the command that settles it.
+
+### Conflicting evidence
+
+Both statements are kept and the disagreement is recorded:
+
+- The structured fields say one scope and the description a narrower one
+  (listed "Remote - Worldwide", description "US only"): the narrower,
+  explicit restriction applies, and the conflict is shown.
+- The description is broader than the fields (listed "Remote (US)",
+  description "open to candidates across the Americas"): for someone the
+  fields exclude but the description includes, it is uncertain, with both
+  statements: the description may describe the company, not the role.
+- "Remote", but "applicants must live in NYC": the city requirement
+  applies and the conflict is shown.
+- Several source records of one opportunity: the live records decide; a
+  record that says nothing defers to one that answers; records that
+  contradict each other (one eligible, one ineligible) make the answer
+  uncertain, with each record's answer kept.
+
+### Compensation verification
+
+Compensation is verified as facts, not scored: whether it is published,
+each range with its source label ("Canada Annual Pay Range"), minimum and
+maximum where given, pay period, and its **currency evidence**: an ISO code
+the source gives, or an ambiguous symbol (`$`, `¥`) kept as such with the
+currency unknown. A bare `$` is never read as USD, whatever country the
+job is in. Each verification compares with the previous successful one:
+first verification, unchanged, changed (with the previous version),
+newly published, removed. Currencies are not converted. Whether pay meets
+your minimum is a ranking question and is not part of eligibility.
+
+### Caching and revisions
+
+Eligibility decisions are stored in `eligibility_decisions` under a key
+that is a digest of everything they depend on: the profile id and
+revision, every source record's material content and lifecycle status, the
+verification each record rests on, and the rules revision
+(`RULES_VERSION`, bumped with any rule or normalization change). A changed
+preference, an UPDATED job, a new verification or a rule change is a new
+key, so a stored decision can never outlive its inputs; older rows remain
+as an audit trail. Trust is always recomputed, since it depends on the
+clock.
+
+### Browser automation
+
+Not used. Every supported family publishes what verification needs as
+plain HTTP responses (JSON APIs, or server-rendered page data), so no
+browser runs anywhere. A browser-backed verifier would be warranted for an
+important first-party page that shows its listing only after JavaScript
+runs (Ashby's hosted application form is one, but its API publishes the
+same route, so it is not needed). It would be another implementation of
+the `ListingVerifier` trait, isolated from the domain.
+
+### Architecture
+
+```text
+jobhunt-cli ──► jobhunt-sources::verify (HttpVerifier) ──► jobhunt-jobs::verification (ListingVerifier)
+     │                                                         ▲
+     ├──► jobhunt-eligibility (rules, decisions, cache) ───────┤ ──► jobhunt-profile
+     └──► jobhunt-storage (VerificationRepository, EligibilityRepository)
+```
+
+- `jobhunt-jobs::verification` is the verification domain: records,
+  states, authority, freshness, trust, compensation facts, the
+  `ListingVerifier` fetch contract, `VerificationRepository` and
+  `VerificationService`. No HTTP or SQL.
+- `jobhunt-sources::verify` implements the contract over HTTP.
+- `jobhunt-eligibility` reads jobs and the profile domain (never profile
+  tables), and owns normalization, extraction, rules, decisions and the
+  `EligibilityRepository` boundary. No HTTP or SQL.
+- `jobhunt-storage` implements both repositories on SQLite.
 
 ## Logging
 
@@ -727,17 +1034,20 @@ crates/
   jobhunt-resume    Resume files (PDF, text, Markdown) into text, and the
                     deterministic parser into the profile's ParsedResume.
   jobhunt-jobs      The jobs domain: canonical model, lifecycle rules,
-                    cross-source identity, the JobRepository boundary, and the
-                    Discovery pipeline.
-  jobhunt-eligibility Job facts with evidence (places, remote scope, work
-                    authorization, time zones, pay), user constraints from the
-                    profile, the assessment, first-party verification and
-                    freshness, and the small geography and time-zone tables.
+                    cross-source identity, the JobRepository boundary, the
+                    Discovery pipeline, and verification (records, states,
+                    authority, freshness, trust, the ListingVerifier contract,
+                    VerificationRepository, VerificationService).
+  jobhunt-eligibility Location normalization (geography and time-zone
+                    tables, region definitions), restriction extraction with
+                    evidence, profile facts, the rules, decisions and reasons,
+                    opportunity aggregation, and the decision cache boundary.
   jobhunt-sources   Adapters (Ashby, Greenhouse, Lever, YC), careers-page board
-                    detection, and the shared HTTP client.
-  jobhunt-storage   Storage backends. SQLite today (jobs and profiles).
-  jobhunt-cli       The `jobhunt` binary: config, logging, find, show, check,
-                    init, profile, claims, preferences, output.
+                    detection, the HTTP verifiers, and the shared HTTP client.
+  jobhunt-storage   Storage backends. SQLite today (jobs, profiles,
+                    verifications, eligibility decisions).
+  jobhunt-cli       The `jobhunt` binary: config, logging, find, show, verify,
+                    check, init, profile, claims, preferences, output.
   jobhunt-mcp       Placeholder for the MCP server; intentionally empty for now.
 ```
 
@@ -756,6 +1066,7 @@ cargo test -p jobhunt-sources --test ashby_live -- --ignored --nocapture
 cargo test -p jobhunt-sources --test greenhouse_live -- --ignored --nocapture
 cargo test -p jobhunt-sources --test lever_live -- --ignored --nocapture
 cargo test -p jobhunt-sources --test yc_live -- --ignored --nocapture
+cargo test -p jobhunt-eligibility --test verification_live -- --ignored --nocapture --test-threads 1
 JOBHUNT_LIVE_GREENHOUSE_BOARDS=gitlab,databricks cargo test -p jobhunt-sources --test greenhouse_live -- --ignored --nocapture
 ```
 
@@ -785,14 +1096,30 @@ rejected, or any converted posting is invalid.
 - `jobhunt-resume`: fixtures under `tests/fixtures/` (see its README): a
   two-page Chromium PDF, a TeX-style PDF without space characters,
   Markdown and plain-text resumes, and blank, truncated and fake PDFs.
-- `jobhunt-eligibility`: place and time-zone parsing on real location
-  strings, and assessments of every adapter's saved real postings for
-  users in different countries (US-only remote, description limits and
-  their evidence, office-country inference, Work at a Startup's visa field,
-  published time zones, offices abroad, work-mode requirements, pay against
-  minimums in and across currencies), plus postings edited to state what
-  the fixtures don't (Latin America, contractors, anywhere, no place),
-  and freshness.
+- `jobhunt-jobs` (verification): active, changed, reopened and deleted
+  listings through the lifecycle, timeouts, 5xx and unreadable answers
+  keeping the last success, reuse and forced verification, mismatched
+  records, unsupported sources, compensation changes across
+  verifications, a bare `$` staying ambiguous, the employer page in the
+  authority chain, and opportunity trust (one source dead and one live,
+  two live, stale, failed, never verified, secondary only, closed by
+  discovery after a verification).
+- `jobhunt-eligibility`: the rule matrix on synthetic postings (remote
+  scopes for Brazil and other countries, disputed memberships, description
+  restrictions and preferences, exclusions, on-site and hybrid with and
+  without relocation, offices named in prose, mixed options, time zones of
+  every kind, work authorization and sponsorship, "no sponsorship" on
+  remote jobs, contractors and EOR, relocation, conflicting evidence,
+  missing profile facts, office-city scopes); the region definitions at
+  their boundaries; every adapter's saved real postings (Linear's Europe
+  listing with a broader description, Figma, Spotify, Work at a Startup's
+  visa field, Pacific hours, Anthropic's Sydney office, a hybrid job with
+  a remote flag); opportunity aggregation and the decision cache
+  (profile, job, verification and rules changes each invalidate it).
+- `jobhunt-sources` (verification): each family's verifier against a local
+  mock serving saved real responses: active, closed and redirected
+  listings, working and broken application paths, 5xx, garbage, timeouts,
+  one request per Ashby board, unsupported sources.
 - `jobhunt-sources`: per adapter, conversion of saved real responses
   (`tests/fixtures/<family>/`, including files with deliberately broken
   records) and HTTP behavior against a local mock server (conditional
@@ -805,9 +1132,15 @@ rejected, or any converted posting is invalid.
   `jobhunt` binary through the profile flow (`init`, `profile`,
   `preferences`, `claims`, edits, `export`, re-import of a changed PDF,
   `import` into a fresh database, unreadable files) with a temporary
-  database; and eligibility through the binary (`find` verdicts and
+  database; eligibility through the binary (`find` verdicts and
   `--eligible`, `check` with evidence, `show`) over real Ashby and
-  Greenhouse responses discovered into a temporary database.
+  Greenhouse responses discovered into a temporary database; and the whole
+  verification flow offline: `init` a resume PDF, discover Ashby,
+  Greenhouse and Lever fixtures, then `verify` against mock authoritative
+  endpoints (`JOBHUNT_VERIFY_ENDPOINT`), `show` and `check` without
+  fetching, reuse within the window, `--force`, `--details`, a profile
+  change, 503s keeping the last success, jobs taken down, and `find`
+  filtering.
 
 Only the offline suite runs in required CI. The live tests run separately,
 three times a week and on demand, in the "Live sources" workflow, so a
@@ -867,11 +1200,20 @@ Eligibility:
   none. Each answer shows the sentences it used.
 - A remote job in a city ("Remote (San Francisco; Oakland)") is treated as
   commuting distance, and whether elsewhere in the country works is
-  `unknown`.
-- No currency conversion; pay in another currency than your minimum is
-  `unknown`.
-- `--refresh` re-reads the whole board of each source (sources publish
-  listings, not single jobs).
+  uncertain. Commuting distance between two cities is never estimated.
+- Work authorization is only what you stated; JobHunt does not know
+  citizenship rules, and the answer is a compatibility signal, not legal
+  advice.
+- No currency conversion, and pay is not part of eligibility (a pay
+  minimum is a ranking question).
+- Verification is plain HTTP. Employer careers pages are not checked
+  (so no listing reaches `employer_first_party` yet); Ashby application
+  pages render in a browser and are known from the API, not requested; a
+  Work at a Startup application page may need an account.
+- A job verified closed stays open in the jobs table until discovery
+  closes it; meanwhile `show`, `check` and `verify` show it closed, `find`
+  marks it ("Verified closed at its source") and `--eligible` /
+  `--possible` never offer it.
 
 Jobs:
 

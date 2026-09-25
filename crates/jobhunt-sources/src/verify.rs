@@ -192,6 +192,17 @@ fn rebase(url: &str, hosts: &[&str], base: &str) -> Option<Url> {
 }
 
 impl HttpVerifier {
+    /// `url` on the configured hosts: unchanged against the real hosts
+    /// (so an EU Lever page stays on `jobs.eu.lever.co`), moved onto the
+    /// test server otherwise.
+    fn target(&self, url: &str, hosts: &[&str], base: &str) -> Option<Url> {
+        if self.hosts == VerifierHosts::default() {
+            Url::parse(url).ok()
+        } else {
+            rebase(url, hosts, base)
+        }
+    }
+
     /// Requests an application route and says what its answer means.
     async fn application(
         &self,
@@ -370,7 +381,7 @@ impl HttpVerifier {
             .as_ref()
             .map(|u| u.to_string())
             .unwrap_or_else(|| format!("{}/apply", posting.url.as_str().trim_end_matches('/')));
-        let application = match rebase(
+        let application = match self.target(
             &apply,
             &["jobs.lever.co", "jobs.eu.lever.co"],
             &self.hosts.lever_jobs,
@@ -487,15 +498,16 @@ impl HttpVerifier {
     }
 
     async fn yc(&self, record: &JobRecord) -> Result<SourceObservation, ObserveError> {
-        let page = rebase(
-            record.posting.url.as_str(),
-            &["www.ycombinator.com", "ycombinator.com"],
-            &self.hosts.yc,
-        )
-        .ok_or_else(|| ObserveError::Request {
-            url: record.posting.url.to_string(),
-            detail: "unusable job URL".into(),
-        })?;
+        let page = self
+            .target(
+                record.posting.url.as_str(),
+                &["www.ycombinator.com", "ycombinator.com"],
+                &self.hosts.yc,
+            )
+            .ok_or_else(|| ObserveError::Request {
+                url: record.posting.url.to_string(),
+                detail: "unusable job URL".into(),
+            })?;
         let mut chain = vec![link(
             LinkKind::PlatformPage,
             &page,
@@ -556,7 +568,7 @@ impl HttpVerifier {
         let posting: JobPosting = yc::to_posting(job, &context).map_err(|e| malformed(&page, e))?;
         let mut unknowns = Vec::new();
         let application = match posting.apply_url.as_ref().and_then(|u| {
-            rebase(
+            self.target(
                 u.as_str(),
                 &["www.workatastartup.com", "workatastartup.com"],
                 &self.hosts.workatastartup,

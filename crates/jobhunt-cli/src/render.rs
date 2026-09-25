@@ -29,7 +29,8 @@ pub(crate) const LINK: Style = Style::new().fg_color(Some(anstyle::Color::Ansi(A
 /// ```
 ///
 /// The eligibility line appears when `verdicts` has the job (there is a
-/// career profile to check it against).
+/// career profile to check it against). A job whose latest verification
+/// found it closed (after discovery last saw it) says so.
 ///
 /// `also_listed` holds, per opportunity, the other sources' records of the
 /// same job (cross-source duplicates), which are named on the last line.
@@ -38,6 +39,7 @@ pub fn jobs(
     records: &[JobRecord],
     also_listed: &HashMap<OpportunityId, Vec<JobRecord>>,
     verdicts: &HashMap<JobId, EligibilityDecision>,
+    closed: &HashMap<JobId, DateTime<Utc>>,
     now: DateTime<Utc>,
 ) -> io::Result<()> {
     let width = records.len().to_string().len();
@@ -51,6 +53,14 @@ pub fn jobs(
             job.title
         )?;
         writeln!(out, "{indent}{}", details_line(record))?;
+        if let Some(at) = closed.get(&record.id) {
+            let red = anstyle::Style::new().fg_color(Some(anstyle::AnsiColor::Red.into()));
+            writeln!(
+                out,
+                "{indent}{red}✗ Verified closed at its source {}{red:#}",
+                jobhunt_jobs::verification::ago(now - *at)
+            )?;
+        }
         if let Some(a) = verdicts.get(&record.id) {
             writeln!(out, "{indent}{}", crate::eligibility::verdict(a))?;
         }
@@ -408,7 +418,15 @@ mod tests {
         let mut out = Vec::new();
         let r = record();
         let id = r.id;
-        jobs(&mut out, &[r], &HashMap::new(), &HashMap::new(), now()).unwrap();
+        jobs(
+            &mut out,
+            &[r],
+            &HashMap::new(),
+            &HashMap::new(),
+            &HashMap::new(),
+            now(),
+        )
+        .unwrap();
         let text = String::from_utf8(out).unwrap();
         // anstyle writes escape codes; strip them for a stable comparison.
         let plain = strip_ansi(&text);
@@ -431,7 +449,15 @@ mod tests {
         twin.posting.provenance.source = SourceKey::new("yc", "linear").unwrap();
         let also: HashMap<_, _> = [(r.opportunity_id, vec![twin])].into();
         let mut out = Vec::new();
-        jobs(&mut out, &[r], &also, &HashMap::new(), now()).unwrap();
+        jobs(
+            &mut out,
+            &[r],
+            &also,
+            &HashMap::new(),
+            &HashMap::new(),
+            now(),
+        )
+        .unwrap();
         let plain = strip_ansi(&String::from_utf8(out).unwrap());
         assert!(
             plain.contains("\n    also listed on yc:linear\n"),
