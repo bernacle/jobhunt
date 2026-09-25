@@ -738,6 +738,9 @@ async fn source_leases_are_exclusive_expire_and_back_off() {
         .find(|r| r.source == taken[1].key.to_string())
         .unwrap();
     assert_eq!(failing.consecutive_failures, 3);
+    // Retried after 1 h, then 2 h, then 4 h.
+    let last = failing.last_finished_at.unwrap();
+    assert_eq!(failing.next_due_at - last, Duration::hours(4));
     let ok = rows
         .iter()
         .find(|r| r.source == taken[0].key.to_string())

@@ -6,8 +6,8 @@
 //!   workers started at the same time (a cron run overlapping a manual
 //!   one, a second replica) get disjoint sources, and a worker that dies
 //!   leaves leases that simply expire. Finishing a source sets its next
-//!   due time: its tier's interval after a success, an exponential backoff
-//!   (capped) after failures.
+//!   due time: its tier's interval after a success; after failures, an
+//!   exponential backoff (1 h, 2 h, 4 h, … capped at 48 h).
 //! * Verification: candidates are open jobs that matter to someone (in a
 //!   pipeline, recently recommended, pushed by a person's sync, or newly
 //!   discovered) whose last attempt is older than the freshness window.
@@ -32,7 +32,10 @@ pub struct ScheduleSettings {
     pub active_every: Duration,
     /// Every other source.
     pub normal_every: Duration,
-    /// The longest a failing source waits before it is tried again.
+    /// A source that failed is tried again after this, doubled for every
+    /// further consecutive failure…
+    pub retry_after: Duration,
+    /// …up to this.
     pub max_backoff: Duration,
     /// "Recently", for the active tier.
     pub active_window: Duration,
@@ -46,6 +49,7 @@ impl Default for ScheduleSettings {
         Self {
             active_every: Duration::from_secs(3 * 3600),
             normal_every: Duration::from_secs(12 * 3600),
+            retry_after: Duration::from_secs(3600),
             max_backoff: Duration::from_secs(48 * 3600),
             active_window: Duration::from_secs(14 * 24 * 3600),
             lease: Duration::from_secs(15 * 60),
@@ -310,8 +314,8 @@ impl PgStore {
                                            ELSE consecutive_failures + 1 END, \
                next_due_at = $3 + CASE WHEN $4 = 'succeeded' \
                  THEN (CASE WHEN tier = 'active' THEN $6::interval ELSE $7::interval END) \
-                 ELSE LEAST((CASE WHEN tier = 'active' THEN $6::interval ELSE $7::interval END) \
-                            * power(2, LEAST(consecutive_failures, 10)), $8::interval) END, \
+                 ELSE LEAST($10::interval * power(2, LEAST(consecutive_failures, 10)), \
+                            $8::interval) END, \
                last_finished_at = $3, last_status = $4, last_error = $5, \
                lease_owner = NULL, lease_expires_at = NULL \
              WHERE source_kind = $1 AND source_instance = $2 AND lease_owner = $9",
@@ -325,6 +329,7 @@ impl PgStore {
         .bind(format!("{} seconds", settings.normal_every.as_secs()))
         .bind(format!("{} seconds", settings.max_backoff.as_secs()))
         .bind(owner)
+        .bind(format!("{} seconds", settings.retry_after.as_secs()))
         .execute(self.pool())
         .await
         .map_err(query_error("recording a source's outcome"))?

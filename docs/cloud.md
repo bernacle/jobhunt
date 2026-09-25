@@ -350,9 +350,10 @@ reads the corpus configured in `deploy/cloud.toml` (`JOBHUNT_CONFIG`):
 
 Cadence (configurable): active sources every 3 hours
 (`JOBHUNT_DISCOVERY_ACTIVE_HOURS`), others every 12 hours
-(`JOBHUNT_DISCOVERY_NORMAL_HOURS`); a failing source backs off
-exponentially (interval × 2^failures, capped at 48 hours,
-`JOBHUNT_DISCOVERY_MAX_BACKOFF_HOURS`). A run stops claiming after 20
+(`JOBHUNT_DISCOVERY_NORMAL_HOURS`); a failing source is retried after
+1 hour, then 2, 4, 8, … hours, capped at 48 hours
+(`JOBHUNT_DISCOVERY_MAX_BACKOFF_HOURS`), and returns to its tier's
+interval after its next success. A run stops claiming after 20
 minutes (`--budget-minutes`). Each source is read once for everyone: no
 per-user crawling, no LLM, no browser.
 
