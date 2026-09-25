@@ -68,6 +68,9 @@ impl StatementParser for RuleParser {
                 out.unparsed.push(clause);
                 continue;
             }
+            // A clause can carry a part that says something else ("at least
+            // USD 180k, and something about vibes"): keep that part too.
+            out.unparsed.extend(unread_parts(&clause, text));
             for pref in found {
                 let key = pref.value.key();
                 if !out.preferences.iter().any(|p| p.value.key() == key) {
@@ -167,6 +170,55 @@ fn split_ci(text: &str, separator: &str) -> Vec<String> {
     }
     out.push(text[last..].to_owned());
     out
+}
+
+/// Words that carry no preference on their own.
+const FILLER: [&str; 40] = [
+    "a", "an", "the", "and", "or", "of", "in", "on", "at", "to", "for", "with", "about", "from",
+    "by", "as", "is", "are", "be", "i", "me", "my", "we", "our", "it", "that", "this", "some",
+    "any", "more", "very", "really", "also", "just", "role", "roles", "job", "jobs", "work",
+    "team",
+];
+
+/// Parts of a clause, split at every ", ", " and " and " or ", that say
+/// something (at least two words that aren't filler) and yield no
+/// preference when read alone. Only called for clauses that yielded
+/// preferences, so a list such as "backend, frontend and devops roles" is
+/// not broken apart: its parts are single words.
+fn unread_parts(clause: &str, statement: &str) -> Vec<String> {
+    let lower = clause.to_lowercase();
+    if lower.len() != clause.len() {
+        return Vec::new();
+    }
+    let mut parts = vec![clause.to_owned()];
+    for separator in [", ", " and ", " or "] {
+        parts = parts
+            .into_iter()
+            .flat_map(|p| split_ci(&p, separator))
+            .collect();
+    }
+    if parts.len() < 2 {
+        return Vec::new();
+    }
+    parts
+        .into_iter()
+        .filter_map(|part| {
+            let mut part = part.trim_matches(|c: char| c.is_whitespace() || c == ',');
+            for connector in ["and ", "or "] {
+                if part.len() > connector.len()
+                    && part[..connector.len()].eq_ignore_ascii_case(connector)
+                {
+                    part = &part[connector.len()..];
+                }
+            }
+            let part = part.to_owned();
+            let meaningful = words(&part)
+                .iter()
+                .filter(|w| w.lower.len() > 2 && !FILLER.contains(&w.lower.as_str()))
+                .count();
+            (meaningful >= 2 && read_clause(&part, statement).is_empty()).then_some(part)
+        })
+        .collect()
 }
 
 /// Splits at " and " / ", " when what follows starts a clause of its own.
@@ -1627,6 +1679,19 @@ mod tests {
         let out = read("purple elephants");
         assert!(out.preferences.is_empty());
         assert_eq!(out.unparsed, ["purple elephants"]);
+    }
+
+    #[test]
+    fn keeps_unread_parts_of_read_clauses() {
+        let out = read("I want backend roles, at least USD 180k, and something about vibes");
+        assert!(
+            out.preferences
+                .iter()
+                .any(|p| p.value.key() == "role:backend")
+        );
+        assert_eq!(out.unparsed, ["something about vibes"]);
+        let out = read("I want backend, frontend and devops roles");
+        assert!(out.unparsed.is_empty(), "{:?}", out.unparsed);
     }
 
     #[test]

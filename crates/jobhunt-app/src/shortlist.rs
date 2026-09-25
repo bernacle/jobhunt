@@ -14,8 +14,9 @@
 
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
+use jobhunt_eligibility::evaluate::trust;
 use jobhunt_jobs::JobRepository;
-use jobhunt_jobs::verification::VerifyMode;
+use jobhunt_jobs::verification::{Standing, VerifyMode, cached};
 use jobhunt_ranking::{Gate, RankQuery, RankReport, Ranking, SignalGroup, Tier};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -109,7 +110,23 @@ impl LocalApp {
                 "limit must be between 1 and {MAX_LIMIT}"
             )));
         }
-        let refresh = self.refresh(request.refresh, &[], progress, now).await?;
+        let refresh = match self.refresh(request.refresh, &[], progress, now).await {
+            // A refresh nobody asked for must not stand between the person
+            // and the jobs already stored (a laptop offline, a board down).
+            Err(AppError::SourceUnavailable { failed, detail })
+                if request.refresh == RefreshMode::Auto && self.has_open_jobs().await? =>
+            {
+                Refresh {
+                    reason: self.freshness(now).await?,
+                    report: None,
+                    warnings: vec![format!(
+                        "could not reach any source ({failed} failed: {detail}); \
+                         using stored jobs"
+                    )],
+                }
+            }
+            other => other?,
+        };
         if self.profile_facts().await?.is_none() {
             return Err(AppError::NoProfile);
         }
@@ -126,22 +143,38 @@ impl LocalApp {
 
         let mut verified_now = 0;
         if request.verify {
+            // The best candidates whose listings aren't trusted yet: ones to
+            // verify first, and ones whose eligibility is unclear (their
+            // listing still deserves checking before they are shown).
             let budget = (request.limit * 2).clamp(1, MAX_VERIFIED);
-            let candidates: Vec<_> = report
+            let mut due = Vec::new();
+            for r in report
                 .rankings
                 .iter()
                 .filter(|r| request.all_tiers || r.tier >= Tier::WorthReviewing)
                 .take(request.limit * 2)
-                .filter(|r| matches!(r.gate, Gate::VerifyFirst { .. }))
-                .map(|r| r.opportunity)
-                .take(budget)
-                .collect();
-            if !candidates.is_empty() {
-                let mut records = Vec::new();
-                for id in &candidates {
-                    records.push(self.store().opportunity_records(*id).await?);
+            {
+                if due.len() >= budget {
+                    break;
                 }
-                let results: Vec<Result<_, AppError>> = futures::stream::iter(&records)
+                let records = match &r.gate {
+                    Gate::VerifyFirst { .. } => {
+                        self.store().opportunity_records(r.opportunity).await?
+                    }
+                    Gate::EligibilityUnclear { .. } => {
+                        let records = self.store().opportunity_records(r.opportunity).await?;
+                        let verified = cached(self.store(), &records).await?;
+                        if trust(&verified, &self.policy(), now).standing == Standing::Trusted {
+                            continue;
+                        }
+                        records
+                    }
+                    _ => continue,
+                };
+                due.push(records);
+            }
+            if !due.is_empty() {
+                let results: Vec<Result<_, AppError>> = futures::stream::iter(&due)
                     .map(|r| self.verify_records(r, VerifyMode::IfDue, progress, now))
                     .buffer_unordered(4)
                     .collect()

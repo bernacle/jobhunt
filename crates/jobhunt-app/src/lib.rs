@@ -117,7 +117,7 @@ impl LocalApp {
     pub async fn open(loaded: LoadedConfig) -> Result<Self, AppError> {
         let store = SqliteJobStore::open(&loaded.database)
             .await
-            .map_err(|e| AppError::storage("opening the local database", e))?;
+            .map_err(|e| AppError::storage("opening it", e))?;
         Ok(Self::with_store(loaded, store))
     }
 

@@ -127,8 +127,6 @@ impl IntoCallToolResult for ToolError {
     }
 }
 
-type ToolResult<T> = Result<Json<T>, ToolError>;
-
 /// Whether to read job boards before answering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -371,7 +369,7 @@ impl JobHuntServer {
         id: &str,
         action: FeedbackAction,
         reason: Option<&str>,
-    ) -> ToolResult<FeedbackResult> {
+    ) -> Result<Json<FeedbackResult>, ToolError> {
         tracing::info!(id, action = action.as_str(), "recording feedback");
         let opportunity = self.app.resolve(id).await?;
         let outcome = self
@@ -401,7 +399,7 @@ impl JobHuntServer {
         &self,
         Parameters(p): Parameters<SearchJobsParams>,
         context: RequestContext<RoleServer>,
-    ) -> ToolResult<SearchResults> {
+    ) -> Result<Json<SearchResults>, ToolError> {
         let limit = usize::from(p.limit.unwrap_or(5));
         if limit == 0 || limit > MAX_LIMIT {
             return Err(AppError::InvalidArguments(format!(
@@ -443,7 +441,10 @@ impl JobHuntServer {
             open_world_hint = false
         )
     )]
-    async fn get_job(&self, Parameters(p): Parameters<GetJobParams>) -> ToolResult<JobDetail> {
+    async fn get_job(
+        &self,
+        Parameters(p): Parameters<GetJobParams>,
+    ) -> Result<Json<JobDetail>, ToolError> {
         let opportunity = self.app.resolve(&p.id).await?;
         let inspection = self.app.inspect(&opportunity, false, now()).await?;
         Ok(Json(JobDetail::of(
@@ -472,7 +473,7 @@ impl JobHuntServer {
         &self,
         Parameters(p): Parameters<VerifyJobParams>,
         context: RequestContext<RoleServer>,
-    ) -> ToolResult<VerificationReport> {
+    ) -> Result<Json<VerificationReport>, ToolError> {
         let opportunity = self.app.resolve(&p.id).await?;
         let mode = if p.force {
             VerifyMode::Force
@@ -499,7 +500,7 @@ impl JobHuntServer {
             open_world_hint = false
         )
     )]
-    async fn get_profile(&self) -> ToolResult<ProfileView> {
+    async fn get_profile(&self) -> Result<Json<ProfileView>, ToolError> {
         Ok(Json(self.app.profile_view().await?))
     }
 
@@ -521,7 +522,7 @@ impl JobHuntServer {
     async fn update_preferences(
         &self,
         Parameters(p): Parameters<UpdatePreferencesParams>,
-    ) -> ToolResult<PreferenceUpdateResult> {
+    ) -> Result<Json<PreferenceUpdateResult>, ToolError> {
         let update = PreferenceUpdate {
             statement: p.statement,
             set: p.set,
@@ -547,7 +548,7 @@ impl JobHuntServer {
     async fn save_job(
         &self,
         Parameters(p): Parameters<FeedbackParams>,
-    ) -> ToolResult<FeedbackResult> {
+    ) -> Result<Json<FeedbackResult>, ToolError> {
         self.feedback(&p.id, FeedbackAction::Save, p.reason.as_deref())
             .await
     }
@@ -570,7 +571,7 @@ impl JobHuntServer {
     async fn reject_job(
         &self,
         Parameters(p): Parameters<FeedbackParams>,
-    ) -> ToolResult<FeedbackResult> {
+    ) -> Result<Json<FeedbackResult>, ToolError> {
         self.feedback(&p.id, FeedbackAction::Reject, p.reason.as_deref())
             .await
     }
@@ -591,7 +592,7 @@ impl JobHuntServer {
     async fn mark_applied(
         &self,
         Parameters(p): Parameters<FeedbackParams>,
-    ) -> ToolResult<FeedbackResult> {
+    ) -> Result<Json<FeedbackResult>, ToolError> {
         self.feedback(&p.id, FeedbackAction::Applied, p.reason.as_deref())
             .await
     }
@@ -612,7 +613,7 @@ impl JobHuntServer {
     async fn record_feedback(
         &self,
         Parameters(p): Parameters<RecordFeedbackParams>,
-    ) -> ToolResult<FeedbackResult> {
+    ) -> Result<Json<FeedbackResult>, ToolError> {
         let action = match p.action {
             OtherFeedback::Like => FeedbackAction::Like,
             OtherFeedback::Dislike => FeedbackAction::Dislike,
@@ -636,7 +637,7 @@ impl JobHuntServer {
     async fn get_pipeline(
         &self,
         Parameters(p): Parameters<PipelineParams>,
-    ) -> ToolResult<PipelineView> {
+    ) -> Result<Json<PipelineView>, ToolError> {
         let entries = self.app.pipeline(p.include_rejected).await?;
         Ok(Json(PipelineView::of(&entries)))
     }
@@ -659,7 +660,7 @@ impl JobHuntServer {
     async fn prepare_application_context(
         &self,
         Parameters(p): Parameters<ContextParams>,
-    ) -> ToolResult<ApplicationContext> {
+    ) -> Result<Json<ApplicationContext>, ToolError> {
         let opportunity = self.app.resolve(&p.id).await?;
         let context = self
             .app

@@ -1,5 +1,8 @@
 //! Structured logging setup. Logs go to stderr so they never mix with the
-//! command's output on stdout.
+//! command's output on stdout. For `jobhunt mcp` that is a protocol
+//! requirement: stdout carries only MCP messages.
+
+use std::io::IsTerminal;
 
 use tracing_subscriber::EnvFilter;
 
@@ -42,7 +45,9 @@ pub fn init(verbosity: u8, config: &LoggingConfig, format: LogFormat) -> Result<
     })?;
     let builder = tracing_subscriber::fmt()
         .with_env_filter(filter)
-        .with_writer(std::io::stderr);
+        .with_writer(std::io::stderr)
+        // Colors only for people; an MCP client's log file gets plain text.
+        .with_ansi(std::io::stderr().is_terminal());
     // `try_init` only fails if a subscriber is already installed, which
     // cannot happen in the binary; ignoring it keeps tests robust.
     let _ = match format {

@@ -383,27 +383,34 @@ impl LocalApp {
             let profiles = self.profiles();
             let mut removed = Vec::new();
             for id in &update.remove {
-                removed.push(profiles.remove(id.trim(), now).await?);
+                removed.push(retry_conflicts(|| profiles.remove(id.trim(), now)).await?);
             }
             let statement = match statement {
-                Some(text) => Some(profiles.add_statement(text, &RuleParser, now).await?),
+                Some(text) => {
+                    Some(retry_conflicts(|| profiles.add_statement(text, &RuleParser, now)).await?)
+                }
                 None => None,
             };
             let mut set = Vec::new();
             for (value, stance) in values {
-                let data = profiles.load_or_new(now).await?;
-                let existing = data
-                    .preferences
-                    .iter()
-                    .find(|p| p.active && p.value == value && p.stance == stance)
-                    .cloned();
-                match existing {
-                    Some(p) => set.push((p, Vec::new(), true)),
-                    None => {
-                        let (p, replaced) = profiles.set_preference(value, stance, now).await?;
-                        set.push((p, replaced, false));
-                    }
-                }
+                let outcome = retry_conflicts(|| async {
+                    let data = profiles.load_or_new(now).await?;
+                    let existing = data
+                        .preferences
+                        .iter()
+                        .find(|p| p.active && p.value == value && p.stance == stance)
+                        .cloned();
+                    Ok::<_, jobhunt_profile::ProfileError>(match existing {
+                        Some(p) => (p, Vec::new(), true),
+                        None => {
+                            let (p, replaced) =
+                                profiles.set_preference(value.clone(), stance, now).await?;
+                            (p, replaced, false)
+                        }
+                    })
+                })
+                .await?;
+                set.push(outcome);
             }
             let data = profiles.load_or_new(now).await?;
             Ok(PreferenceChanges {
@@ -414,6 +421,28 @@ impl LocalApp {
             })
         })
         .await
+    }
+}
+
+/// Runs a profile change again when another process changed the profile
+/// between reading and writing it (the optimistic revision check failed).
+/// Every change re-reads the profile, so a retry applies it to what is
+/// stored now; after a few lost races the conflict is reported.
+async fn retry_conflicts<T, F, Fut>(mut change: F) -> Result<T, AppError>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T, jobhunt_profile::ProfileError>>,
+{
+    const ATTEMPTS: u32 = 5;
+    let mut attempt = 0;
+    loop {
+        match change().await.map_err(AppError::from) {
+            Err(AppError::Conflict(_)) if attempt + 1 < ATTEMPTS => {
+                attempt += 1;
+                tokio::time::sleep(std::time::Duration::from_millis(25 * u64::from(attempt))).await;
+            }
+            other => return other,
+        }
     }
 }
 

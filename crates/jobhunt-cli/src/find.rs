@@ -180,10 +180,17 @@ async fn shortlist(app: &LocalApp, args: &FindArgs, verbosity: u8) -> anyhow::Re
     };
     let now = jobhunt_app::now();
     let found = app.find(&request, &StderrProgress::search(), now).await?;
-    if let Some(report) = &found.refresh.report {
-        report_problems(report, &found.refresh.warnings);
-        if verbosity > 0 {
-            let _ = render::scan_table(&mut anstream::stderr().lock(), report);
+    match &found.refresh.report {
+        Some(report) => {
+            report_problems(report, &found.refresh.warnings);
+            if verbosity > 0 {
+                let _ = render::scan_table(&mut anstream::stderr().lock(), report);
+            }
+        }
+        None => {
+            for warning in &found.refresh.warnings {
+                eprintln!("warning: {warning}");
+            }
         }
     }
     let results = SearchResults::of(&found, now);

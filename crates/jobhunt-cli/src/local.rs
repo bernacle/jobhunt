@@ -13,9 +13,7 @@ use crate::render::plural;
 /// The application over the configured database (created and migrated on
 /// first use).
 pub async fn open(loaded: &LoadedConfig) -> anyhow::Result<LocalApp> {
-    LocalApp::open(loaded.clone())
-        .await
-        .context("could not open the local JobHunt database")
+    Ok(LocalApp::open(loaded.clone()).await?)
 }
 
 /// Runs a command against the application, closing it afterwards.

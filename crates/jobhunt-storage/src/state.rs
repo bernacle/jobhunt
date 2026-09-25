@@ -53,8 +53,7 @@ impl SqliteJobStore {
             }
         };
         let mut tx = self
-            .pool
-            .begin()
+            .begin_write()
             .await
             .map_err(query_error("starting an import"))?;
         let mut out = StateImported::default();

@@ -173,6 +173,17 @@ impl SqliteJobStore {
         &self.location
     }
 
+    /// Starts a transaction that writes. It takes SQLite's write lock at
+    /// `BEGIN IMMEDIATE`, where a busy database is waited for (the busy
+    /// timeout), instead of upgrading a read transaction later, which fails
+    /// at once (`SQLITE_BUSY_SNAPSHOT`) if another connection wrote in
+    /// between. Every read-then-write transaction must start here.
+    pub(crate) async fn begin_write(
+        &self,
+    ) -> Result<sqlx::Transaction<'static, Sqlite>, sqlx::Error> {
+        self.pool.begin_with("BEGIN IMMEDIATE").await
+    }
+
     /// Closes all connections, flushing the write-ahead log.
     pub async fn close(self) {
         self.pool.close().await;
@@ -438,8 +449,7 @@ impl JobRepository for SqliteJobStore {
 
     async fn apply_scan(&self, scan: &ScanWrite<'_>) -> Result<ScanResult, StorageError> {
         let mut tx = self
-            .pool
-            .begin()
+            .begin_write()
             .await
             .map_err(query_error("starting a transaction"))?;
         let observed = encode_timestamp(scan.observed_at);
@@ -574,8 +584,7 @@ impl JobRepository for SqliteJobStore {
             return Ok(());
         }
         let mut tx = self
-            .pool
-            .begin()
+            .begin_write()
             .await
             .map_err(query_error("starting a transaction"))?;
         for (job, opportunity) in assignments {

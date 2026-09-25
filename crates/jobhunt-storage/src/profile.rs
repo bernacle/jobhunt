@@ -975,8 +975,7 @@ impl ProfileRepository for SqliteJobStore {
         events: &[ProfileEvent],
     ) -> Result<(), StorageError> {
         let mut tx = self
-            .pool
-            .begin()
+            .begin_write()
             .await
             .map_err(query_error("starting a transaction"))?;
         save_profile_in(&mut tx, data, expected_revision, events).await?;

@@ -100,6 +100,17 @@ impl LocalApp {
             .map_err(|e| AppError::Config(format!("HTTP client: {e}")))
     }
 
+    /// Whether any open job is stored.
+    pub async fn has_open_jobs(&self) -> Result<bool, AppError> {
+        use jobhunt_jobs::{JobQuery, JobRepository, JobStatus};
+        let query = JobQuery {
+            status: Some(JobStatus::Open),
+            limit: Some(1),
+            ..JobQuery::default()
+        };
+        Ok(self.store().count(&query).await? > 0)
+    }
+
     /// Whether stored jobs are fresh enough to answer from, per
     /// configured source (careers pages are resolved only when fetching,
     /// so they don't count here).

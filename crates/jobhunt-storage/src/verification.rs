@@ -132,8 +132,7 @@ impl VerificationRepository for SqliteJobStore {
         observed_at: DateTime<Utc>,
     ) -> Result<UpsertOutcome, StorageError> {
         let mut tx = self
-            .pool
-            .begin()
+            .begin_write()
             .await
             .map_err(query_error("starting a transaction"))?;
         let observation = Observation {
