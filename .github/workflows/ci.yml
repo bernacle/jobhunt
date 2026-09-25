@@ -1,0 +1,193 @@
+# Required quality gates for every pull request and every push to main.
+#
+# Everything here is offline: no job talks to Ashby, Greenhouse, Lever or
+# YC. Live source checks run separately in live.yml and never block merges.
+#
+# The job names (fmt, clippy, test, docs, msrv, ci-passed) are the status
+# check names used by branch protection. Renaming a job means updating the
+# protection rule (see CONTRIBUTING.md and .github/rulesets/main.json).
+#
+# `scripts/check.sh` runs the same commands locally; keep the two in sync.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One group per pull request, so a new push cancels the run for the
+  # commit it replaces. Pushes to main get one group per commit: every
+  # commit that lands on main is verified, none is cancelled.
+  group: >-
+    ${{ github.workflow }}-${{ github.event_name == 'pull_request'
+    && format('pr-{0}', github.event.pull_request.number)
+    || format('{0}-{1}', github.ref, github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUST_BACKTRACE: 1
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Rust (stable + rustfmt)
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --no-self-update
+          rustup default stable
+      - name: Check formatting (cargo fmt --all --check)
+        run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Rust (stable + clippy)
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy --no-self-update
+          rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Lint (cargo clippy, warnings denied)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  test:
+    # Build and test share one job so the workspace is compiled once.
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Rust (stable)
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Fetch dependencies (Cargo.lock must be up to date)
+        run: cargo fetch --locked
+      - name: Build workspace (all targets)
+        run: cargo build --workspace --all-targets --frozen
+      # The remaining steps run with an unreachable HTTP(S) proxy, so a test
+      # that reaches the internet fails every time instead of depending on
+      # a third party. Local mock servers (127.0.0.1) are exempt.
+      - name: Unit tests (model, lifecycle, dedupe, SQLite, migrations, config)
+        run: cargo test --workspace --frozen --no-fail-fast --lib --bins
+        env:
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          ALL_PROXY: http://127.0.0.1:9
+          NO_PROXY: localhost,127.0.0.1,::1
+      - name: Integration tests (fixtures, local HTTP, multi-source end to end)
+        run: cargo test --workspace --frozen --no-fail-fast --test '*'
+        env:
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          ALL_PROXY: http://127.0.0.1:9
+          NO_PROXY: localhost,127.0.0.1,::1
+      - name: Doc tests
+        run: cargo test --workspace --frozen --no-fail-fast --doc
+        env:
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          ALL_PROXY: http://127.0.0.1:9
+          NO_PROXY: localhost,127.0.0.1,::1
+
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Rust (stable)
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build rustdoc (warnings denied)
+        run: cargo doc --workspace --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  msrv:
+    # Type-checks every target (lib, bin, tests) on the declared minimum
+    # Rust version with the committed Cargo.lock. That catches both our own
+    # use of newer language/std features and a dependency update that raised
+    # its rust-version above ours. Tests run on stable in `test`; running
+    # them twice would double CI time for no extra protection.
+    name: msrv
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Read rust-version from Cargo.toml
+        id: msrv
+        run: |
+          version=$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml)
+          if [[ -z "$version" ]]; then
+            echo "::error file=Cargo.toml::no workspace rust-version found"
+            exit 1
+          fi
+          echo "Declared MSRV: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Install Rust ${{ steps.msrv.outputs.version }}
+        run: |
+          rustup toolchain install "${{ steps.msrv.outputs.version }}" --profile minimal --no-self-update
+          rustup default "${{ steps.msrv.outputs.version }}"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Check workspace on MSRV (cargo check --all-targets)
+        run: cargo check --workspace --all-targets --locked
+
+  ci-passed:
+    # A single check that is green only when every job above succeeded.
+    # Require this one (or all of the above) in branch protection.
+    name: ci-passed
+    if: always()
+    needs: [fmt, clippy, test, docs, msrv]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify all required jobs succeeded
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          failed=$(echo "$RESULTS" | jq -r '[to_entries[] | select(.value.result != "success") | .key] | join(", ")')
+          if [[ -n "$failed" ]]; then
+            echo "::error::required jobs did not succeed: $failed"
+            exit 1
+          fi

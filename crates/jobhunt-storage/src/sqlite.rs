@@ -1425,6 +1425,79 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn not_modified_and_failed_scans_change_no_state_or_history() {
+        let store = store().await;
+        let source = SourceKey::new("ashby", "ramp").unwrap();
+        let open = posting("ramp", "1", "Engineer");
+        let closed = posting("ramp", "2", "Designer");
+        let elsewhere = posting("linear", "1", "Engineer");
+        scan(&store, "ramp", &[open.clone(), closed.clone()], at(0), true).await;
+        scan(&store, "ramp", std::slice::from_ref(&open), at(1), true).await;
+        scan(
+            &store,
+            "linear",
+            std::slice::from_ref(&elsewhere),
+            at(1),
+            true,
+        )
+        .await;
+        let events = || async {
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM job_events")
+                .fetch_one(&store.pool)
+                .await
+                .unwrap()
+        };
+        let events_before = events().await;
+        let open_before = store.get(open.id()).await.unwrap().unwrap();
+        let closed_before = store.get(closed.id()).await.unwrap().unwrap();
+        assert_eq!(closed_before.status, JobStatus::Closed);
+
+        let run = store.begin_run(at(5)).await.unwrap();
+        for (minute, body) in [
+            (5, ScanBody::NotModified),
+            (6, ScanBody::Failed { error: "HTTP 503" }),
+        ] {
+            store
+                .apply_scan(&ScanWrite {
+                    run,
+                    source: &source,
+                    started_at: at(minute),
+                    observed_at: at(minute),
+                    counts: IngestCounts::default(),
+                    body,
+                })
+                .await
+                .unwrap();
+        }
+
+        // Only the open job of this source is marked seen, by the 304.
+        let open_after = store.get(open.id()).await.unwrap().unwrap();
+        assert_eq!(open_after.status, JobStatus::Open);
+        assert_eq!(open_after.last_seen_at, at(5));
+        assert_eq!(open_after.posting, open_before.posting);
+        assert_eq!(
+            open_after.content_updated_at,
+            open_before.content_updated_at
+        );
+        // A closed job is not reopened or touched by a 304.
+        assert_eq!(
+            store.get(closed.id()).await.unwrap().unwrap(),
+            closed_before
+        );
+        // Other sources are untouched.
+        assert_eq!(
+            store
+                .get(elsewhere.id())
+                .await
+                .unwrap()
+                .unwrap()
+                .last_seen_at,
+            at(1)
+        );
+        assert_eq!(events().await, events_before, "no history rows added");
+    }
+
+    #[tokio::test]
     async fn scans_are_recorded_and_feed_the_next_fetch() {
         let store = store().await;
         let source = SourceKey::new("ashby", "ramp").unwrap();
