@@ -109,13 +109,21 @@ fn converts_a_job_with_mixed_location_options() {
     let comp = job.compensation.as_ref().unwrap();
     assert_eq!(comp.summary.as_deref(), Some("$190K - $215K"));
     assert_eq!(comp.components[0].kind, CompensationKind::Salary);
-    assert_eq!(comp.components[0].currency.as_deref(), Some("USD"));
+    assert_eq!(
+        comp.components[0].currency, None,
+        "“$” alone does not say which dollar; the summary keeps it"
+    );
     assert_eq!(
         (comp.components[0].min, comp.components[0].max),
         (Some(190_000.0), Some(215_000.0))
     );
     assert_eq!(comp.components[0].interval, None, "YC does not state it");
     assert_eq!(job.posted_at, None, "only relative dates are published");
+    assert_eq!(
+        job.work_authorization.as_deref(),
+        Some("US citizen/visa only"),
+        "Work at a Startup's first-party visa field"
+    );
 
     let text = job.description_text.as_deref().unwrap();
     assert!(text.starts_with("About the Role\n\nPine Park Health brings doctors and nurses"));

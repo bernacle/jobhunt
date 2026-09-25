@@ -277,6 +277,7 @@ pub fn to_posting(raw: AshbyPosting, context: &BoardContext) -> Result<JobPostin
             raw.compensation,
             raw.should_display_compensation_on_job_postings,
         ),
+        work_authorization: None,
         description_text: clean_block_opt(raw.description_plain.as_deref()),
         description_html: clean_block_opt(raw.description_html.as_deref()),
         posted_at: raw

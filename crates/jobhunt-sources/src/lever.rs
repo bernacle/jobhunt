@@ -298,6 +298,7 @@ pub fn to_posting(raw: LeverPosting, context: &SiteContext) -> Result<JobPosting
         workplace_type: raw.workplace_type.as_deref().and_then(workplace_type),
         is_remote: None,
         compensation: raw.salary_range.and_then(|r| compensation(r, record)),
+        work_authorization: None,
         description_text,
         description_html,
         posted_at: epoch_millis(raw.created_at),

@@ -376,6 +376,7 @@ mod tests {
                 summary: Some("$180K – $250K • Offers Equity".into()),
                 components: vec![],
             }),
+            work_authorization: None,
             description_text: None,
             description_html: None,
             posted_at: Some(Utc.with_ymd_and_hms(2026, 9, 15, 18, 5, 31).unwrap()),

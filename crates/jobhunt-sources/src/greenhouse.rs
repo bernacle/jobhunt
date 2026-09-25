@@ -305,6 +305,7 @@ pub fn to_posting(
             .and_then(|v| workplace_type(&v)),
         is_remote: None,
         compensation: compensation(&raw.pay_input_ranges, record),
+        work_authorization: None,
         description_text,
         description_html,
         posted_at: rfc3339(raw.first_published.as_deref(), "first_published", record),
