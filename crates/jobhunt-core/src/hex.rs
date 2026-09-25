@@ -16,8 +16,9 @@ pub(crate) fn decode<const N: usize>(input: &str) -> Option<[u8; N]> {
         return None;
     }
     let mut out = [0u8; N];
-    for (slot, pair) in out.iter_mut().zip(raw.chunks_exact(2)) {
-        *slot = (nibble(pair[0])? << 4) | nibble(pair[1])?;
+    let (pairs, _) = raw.as_chunks::<2>();
+    for (slot, [high, low]) in out.iter_mut().zip(pairs) {
+        *slot = (nibble(*high)? << 4) | nibble(*low)?;
     }
     Some(out)
 }
