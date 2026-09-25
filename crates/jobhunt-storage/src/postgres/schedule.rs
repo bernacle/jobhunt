@@ -287,7 +287,7 @@ impl PgStore {
                 })
             })
             .collect::<Result<Vec<_>, StorageError>>()?;
-        out.sort_by(|a, b| a.key.to_string().cmp(&b.key.to_string()));
+        out.sort_by_key(|a| a.key.to_string());
         Ok(out)
     }
 
