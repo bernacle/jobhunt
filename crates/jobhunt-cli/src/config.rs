@@ -24,6 +24,7 @@ pub struct AppConfig {
     pub storage: StorageConfig,
     pub logging: LoggingConfig,
     pub discovery: DiscoveryConfig,
+    pub verification: VerificationConfig,
     pub sources: SourcesConfig,
 }
 
@@ -106,6 +107,45 @@ impl DiscoveryConfig {
 
     pub fn validator_max_age(&self) -> chrono::Duration {
         chrono::Duration::hours(i64::from(self.revalidate_after_hours))
+    }
+}
+
+/// When a verification is recent enough to rely on (see
+/// `jobhunt_jobs::verification::FreshnessPolicy`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct VerificationConfig {
+    /// Minutes an attempt is reused by `jobhunt verify` instead of asking
+    /// the source again (`--force` always asks).
+    pub reuse_minutes: u32,
+    /// Hours a successful verification counts as fresh.
+    pub fresh_hours: u32,
+    /// Hours after which a verification is stale and the job is not
+    /// recommended until verified again.
+    pub stale_hours: u32,
+    /// Source records verified at the same time.
+    pub concurrency: usize,
+}
+
+impl Default for VerificationConfig {
+    fn default() -> Self {
+        Self {
+            reuse_minutes: 15,
+            fresh_hours: 24,
+            stale_hours: 72,
+            concurrency: 4,
+        }
+    }
+}
+
+impl VerificationConfig {
+    pub fn policy(&self) -> jobhunt_jobs::verification::FreshnessPolicy {
+        let fresh = chrono::Duration::hours(i64::from(self.fresh_hours));
+        jobhunt_jobs::verification::FreshnessPolicy {
+            reuse_within: chrono::Duration::minutes(i64::from(self.reuse_minutes)),
+            fresh_for: fresh,
+            stale_after: chrono::Duration::hours(i64::from(self.stale_hours)).max(fresh),
+        }
     }
 }
 
@@ -344,7 +384,28 @@ mod tests {
         );
         assert_eq!(loaded.config.sources.careers.len(), 1);
         assert_eq!(loaded.config.discovery, DiscoveryConfig::default());
+        assert_eq!(loaded.config.verification, VerificationConfig::default());
         assert_eq!(loaded.config.logging, LoggingConfig::default());
+    }
+
+    #[test]
+    fn verification_policy_from_config() {
+        let config: AppConfig = toml::from_str(
+            "[verification]\nreuse_minutes = 5\nfresh_hours = 12\nstale_hours = 1\n",
+        )
+        .unwrap();
+        let policy = config.verification.policy();
+        assert_eq!(policy.reuse_within, chrono::Duration::minutes(5));
+        assert_eq!(policy.fresh_for, chrono::Duration::hours(12));
+        assert_eq!(
+            policy.stale_after,
+            chrono::Duration::hours(12),
+            "never before fresh ends"
+        );
+        assert_eq!(
+            AppConfig::default().verification.policy(),
+            jobhunt_jobs::verification::FreshnessPolicy::default()
+        );
     }
 
     #[test]

@@ -1,35 +1,44 @@
-//! Eligibility and first-party verification: can this user take this job,
-//! and is what JobHunt knows about it the company's own, current word?
+//! Eligibility: can this person work this job, from where they are, on
+//! the terms the posting states? And what is known versus unknown?
 //!
-//! The job side ([`facts`]) reads a stored job's locations, remote
-//! metadata, work-authorization field, employment type, pay and description
-//! into facts that each carry their [`facts::Evidence`]. The user side
-//! ([`user`]) reads the profile's preferences: where the user lives, work
-//! modes, time zones, relocation, sponsorship, pay minimums and roles.
-//! [`assess`](mod@assess) checks one against the other and answers each dimension with
-//! a [`assess::Fit`] (yes, likely, unknown, unlikely, no) and a one-line
-//! summary ("Brazil eligible: remote in Latin America", "Remote, but the
-//! United States only", "Compensation unknown"). [`verify`](mod@verify) says whether
-//! the job's records come from the company's own board and how recently
-//! they were seen there.
+//! * [`job`] reads a stored job into [`job::JobRequirements`]: the ways it
+//!   can be done (remote in a scope, offices, contractor paths), places it
+//!   allows or rules out, work authorization, sponsorship, engagement,
+//!   time zones, relocation, and the conflicts between its statements,
+//!   each with its [`job::Evidence`].
+//! * [`profile`] reads the person's facts from the profile domain.
+//! * [`geo`] and [`zones`] normalize places and time zones: ISO country
+//!   codes, the documented region definitions, UTC offsets.
+//! * [`rules`] are the deterministic rules, one function each, in order.
+//! * [`decision`] is the result: eligible, conditional, uncertain or
+//!   ineligible, with traceable [`decision::Reason`]s.
+//! * [`evaluate`](mod@evaluate) runs the rules per job and per opportunity, and puts the
+//!   verification trust gate next to the decision.
+//! * [`cache`] stores decisions under a key of everything they depend on.
+//! * [`describe`] states a job's requirements as short facts for display.
 //!
-//! Nothing is inferred from silence. A remote flag with no place is
-//! "unknown", not "anywhere"; "$" is a currency only when the job's places
-//! settle which dollar; pay is compared only in the same currency. The
-//! geography ([`geo`]) and time zones ([`zones`]) are small tables: a place
-//! JobHunt does not know stays unrecognized rather than guessed.
-//!
-//! Assessments are computed on demand and not stored: they depend on both
-//! the job and the profile, and either can change at any time.
+//! Nothing is inferred from silence: "Remote" is not "anywhere", "no
+//! sponsorship" is not "no international applicants", a missing profile
+//! fact is unknown, and every conclusion names the words it rests on. This
+//! is a compatibility signal from published restrictions and what the
+//! person stated, not legal advice about work authorization. Whether a job
+//! is desirable (pay, role, ranking) is not decided here.
 
-pub mod assess;
-pub mod facts;
+pub mod cache;
+pub mod decision;
+pub mod describe;
+pub mod evaluate;
 pub mod geo;
-pub mod user;
-pub mod verify;
+pub mod job;
+pub mod profile;
+pub mod rules;
 pub mod zones;
 
-pub use assess::{Assessment, Check, Dimension, Fit, assess, assess_record};
-pub use facts::{Evidence, JobFacts, job_facts};
-pub use user::UserConstraints;
-pub use verify::{Freshness, Verification, verify};
+pub use cache::{CacheKey, EligibilityRepository, cached_assess};
+pub use decision::{
+    ConflictNote, Eligibility, EligibilityDecision, EvidenceRef, OptionDecision, ProfileFact,
+    RULES_VERSION, Reason, RuleId, Verdict,
+};
+pub use evaluate::{Assessment, assess, evaluate, evaluate_record, evaluate_sources};
+pub use job::{JobRequirements, requirements};
+pub use profile::ProfileFacts;

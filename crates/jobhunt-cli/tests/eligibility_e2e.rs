@@ -135,7 +135,7 @@ async fn checks_jobs_against_the_profile() {
 
     // Without a profile there is nothing to check against.
     let out = env.ok(&["find", "--offline", "-n", "50"]);
-    assert!(!out.contains("eligible"), "{out}");
+    assert!(!out.contains("ELIGIBLE"), "{out}");
     let output = env.run(&["find", "--offline", "--eligible"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("need a career profile"));
@@ -152,29 +152,32 @@ async fn checks_jobs_against_the_profile() {
 
     let out = env.ok(&["find", "--offline", "-n", "50"]);
     for expected in [
-        "✓ yes: Germany eligible: remote in Europe",
-        "✗ no: Remote, but the United States only",
-        "✗ no: Work mode: hybrid, but you require remote",
+        "✓ ELIGIBLE: Germany is within the listed Europe region",
+        "✗ INELIGIBLE: The listing limits remote work to Canada or the United States; you live in Germany",
+        "✗ INELIGIBLE: This option is hybrid; you require remote work",
     ] {
         assert!(out.contains(expected), "missing {expected:?} in:\n{out}");
     }
     let eligible = env.ok(&["find", "--offline", "--eligible", "-n", "50"]);
-    assert!(eligible.contains("Germany eligible"), "{eligible}");
+    assert!(eligible.contains("Germany is within"), "{eligible}");
     assert!(!eligible.contains("✗"), "{eligible}");
-    assert!(eligible.contains("Showing 3 matching jobs."), "{eligible}");
+    assert!(!eligible.contains("UNCLEAR"), "{eligible}");
 
-    // One job in full: every answer with the posting's words.
+    // One job in full: every answer with the posting's words, from what is
+    // stored (not verified yet, so not recommended).
     let listed = env.ok(&["find", "--offline", "Fullstack"]);
     let id = job_id(&listed);
     let out = env.ok(&["check", &id]);
     for expected in [
-        "Senior / Staff Fullstack Engineer",
-        "✓ yes: Germany eligible: remote in Europe",
-        "location",
-        "work mode",
+        "Senior / Staff Fullstack Engineer — Linear",
+        "? First-party Ashby listing: not verified yet",
+        "Remote: Europe",
+        "ELIGIBLE",
+        "Not trusted enough to recommend: the listing has not been verified",
+        "✓ Germany is within the listed Europe region",
         "“Europe” (ashby:linear locations)",
-        "Source:",
-        "First-party: the company's own Ashby job board, seen",
+        "your location: Berlin, Germany (preference)",
+        "✓ The position is remote, as you require",
     ] {
         assert!(out.contains(expected), "missing {expected:?} in:\n{out}");
     }
@@ -185,12 +188,18 @@ async fn checks_jobs_against_the_profile() {
     // Living elsewhere changes the answer, with the reason.
     env.ok(&["preferences", "set", "location", "São Paulo, Brazil"]);
     let out = env.ok(&["check", &id]);
-    assert!(out.contains("✗ no: Remote, but Europe only"), "{out}");
+    assert!(out.contains("INELIGIBLE"), "{out}");
+    assert!(
+        out.contains("The listing limits remote work to Europe; you live in Brazil"),
+        "{out}"
+    );
+    // North America is in the description but not the listing: unclear,
+    // with both statements.
     env.ok(&["preferences", "set", "location", "Toronto"]);
     let out = env.ok(&["check", &id]);
-    assert!(out.contains("✗ no: Remote, but Europe only"), "{out}");
+    assert!(out.contains("UNCLEAR"), "{out}");
     assert!(
-        out.contains("The description also mentions North America"),
+        out.contains("The location fields exclude Canada but the description includes it"),
         "{out}"
     );
     assert!(

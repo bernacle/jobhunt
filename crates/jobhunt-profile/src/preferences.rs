@@ -157,6 +157,24 @@ impl WorkMode {
     }
 }
 
+/// How the user can be engaged: as an employee (directly or through an
+/// employer of record) or as an independent contractor (including B2B).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Engagement {
+    Employee,
+    Contractor,
+}
+
+impl Engagement {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Employee => "employee",
+            Self::Contractor => "contractor",
+        }
+    }
+}
+
 /// Kinds of company and team.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -350,6 +368,15 @@ pub enum PreferenceValue {
     Sponsorship {
         needed: bool,
     },
+    /// A country (or union, "the EU") the user may already work in without
+    /// sponsorship, as they wrote it.
+    WorkAuthorization {
+        place: String,
+    },
+    /// Being hired as an employee or as a contractor.
+    Engagement {
+        engagement: Engagement,
+    },
     Company {
         company: CompanyTrait,
     },
@@ -395,7 +422,9 @@ impl PreferenceValue {
             | Self::Region { .. }
             | Self::Timezone { .. }
             | Self::Relocation { .. }
-            | Self::Sponsorship { .. } => PreferenceCategory::Location,
+            | Self::Sponsorship { .. }
+            | Self::WorkAuthorization { .. }
+            | Self::Engagement { .. } => PreferenceCategory::Location,
             Self::Company { .. } => PreferenceCategory::Company,
             Self::Domain { .. } => PreferenceCategory::Domain,
             Self::WorkStyle { .. } => PreferenceCategory::WorkStyle,
@@ -420,6 +449,10 @@ impl PreferenceValue {
             Self::Timezone { zone } => format!("timezone:{}", search_key(zone)),
             Self::Relocation { .. } => "relocation".to_owned(),
             Self::Sponsorship { .. } => "sponsorship".to_owned(),
+            Self::WorkAuthorization { place } => {
+                format!("work_authorization:{}", search_key(place))
+            }
+            Self::Engagement { engagement } => format!("engagement:{}", engagement.as_str()),
             Self::Company { company } => format!("company:{}", company.as_str()),
             Self::Domain { domain } => format!("domain:{}", search_key(domain)),
             Self::WorkStyle { aspect } => format!("work_style:{}", aspect.as_str()),
@@ -469,6 +502,15 @@ impl fmt::Display for PreferenceValue {
             Self::Relocation { willing: false } => write!(f, "not willing to relocate"),
             Self::Sponsorship { needed: true } => write!(f, "needs visa sponsorship"),
             Self::Sponsorship { needed: false } => write!(f, "does not need visa sponsorship"),
+            Self::WorkAuthorization { place } => write!(f, "authorized to work in {place}"),
+            Self::Engagement { engagement } => write!(
+                f,
+                "hired as {}",
+                match engagement {
+                    Engagement::Employee => "an employee",
+                    Engagement::Contractor => "a contractor",
+                }
+            ),
             Self::Company { company } => write!(f, "{}", company.label()),
             Self::Domain { domain } => write!(f, "{domain}"),
             Self::WorkStyle { aspect } => write!(f, "{}", aspect.label()),
@@ -605,6 +647,8 @@ pub struct LocationView<'a> {
     pub timezones: Vec<&'a Preference>,
     pub relocation: Option<&'a Preference>,
     pub sponsorship: Option<&'a Preference>,
+    pub authorizations: Vec<&'a Preference>,
+    pub engagements: Vec<&'a Preference>,
 }
 
 /// Typed read access over the active preferences.
@@ -678,6 +722,8 @@ impl<'a> PreferencesView<'a> {
                 PreferenceValue::Timezone { .. } => view.timezones.push(p),
                 PreferenceValue::Relocation { .. } => view.relocation = Some(p),
                 PreferenceValue::Sponsorship { .. } => view.sponsorship = Some(p),
+                PreferenceValue::WorkAuthorization { .. } => view.authorizations.push(p),
+                PreferenceValue::Engagement { .. } => view.engagements.push(p),
                 _ => {}
             }
         }
@@ -759,6 +805,27 @@ mod tests {
         );
         assert!(
             serde_json::from_str::<PreferenceValue>(r#"{"type":"company","company":"x"}"#).is_err()
+        );
+    }
+
+    #[test]
+    fn authorization_and_engagement_values() {
+        let auth = PreferenceValue::WorkAuthorization {
+            place: "Portugal".into(),
+        };
+        assert_eq!(auth.key(), "work_authorization:portugal");
+        assert_eq!(auth.to_string(), "authorized to work in Portugal");
+        assert_eq!(auth.category(), PreferenceCategory::Location);
+        let contractor = PreferenceValue::Engagement {
+            engagement: Engagement::Contractor,
+        };
+        assert_eq!(contractor.key(), "engagement:contractor");
+        assert_eq!(contractor.to_string(), "hired as a contractor");
+        let json = serde_json::to_string(&contractor).unwrap();
+        assert_eq!(json, r#"{"type":"engagement","engagement":"contractor"}"#);
+        assert_eq!(
+            serde_json::from_str::<PreferenceValue>(&json).unwrap(),
+            contractor
         );
     }
 

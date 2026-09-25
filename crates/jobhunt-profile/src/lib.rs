@@ -55,7 +55,7 @@ pub use model::{
     Verification,
 };
 pub use preferences::{
-    Arrangement, Certainty, CompanyTrait, CompensationBound, PayPeriod, Preference,
+    Arrangement, Certainty, CompanyTrait, CompensationBound, Engagement, PayPeriod, Preference,
     PreferenceCategory, PreferenceOrigin, PreferenceStatement, PreferenceValue, PreferencesView,
     Stance, StatementReading, WorkAspect, WorkMode,
 };

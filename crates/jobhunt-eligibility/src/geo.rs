@@ -172,6 +172,49 @@ pub static COUNTRIES: &[Country] = &[
     country!("TW", "Taiwan", [], (480, 480)),
     country!("AU", "Australia", ["australian"], (480, 600), "AUD"),
     country!("NZ", "New Zealand", ["aotearoa"], (720, 720), "NZD"),
+    country!("BZ", "Belize", [], (-360, -360), "BZD"),
+    country!("SV", "El Salvador", ["salvadoran"], (-360, -360)),
+    country!("HN", "Honduras", [], (-360, -360)),
+    country!("NI", "Nicaragua", [], (-360, -360)),
+    country!("CU", "Cuba", ["cuban"], (-300, -300)),
+    country!("JM", "Jamaica", ["jamaican"], (-300, -300), "JMD"),
+    country!("TT", "Trinidad and Tobago", [], (-240, -240), "TTD"),
+    country!("PR", "Puerto Rico", [], (-240, -240)),
+    country!("GY", "Guyana", [], (-240, -240), "GYD"),
+    country!("SR", "Suriname", [], (-180, -180)),
+    country!("LI", "Liechtenstein", [], (60, 60)),
+    country!("BA", "Bosnia and Herzegovina", ["bosnia"], (60, 60)),
+    country!("AL", "Albania", [], (60, 60)),
+    country!("MK", "North Macedonia", ["macedonia"], (60, 60)),
+    country!("ME", "Montenegro", [], (60, 60)),
+    country!("MD", "Moldova", [], (120, 120)),
+    country!("BY", "Belarus", [], (180, 180)),
+    country!("RU", "Russia", ["russian federation"], (120, 720)),
+    country!("IR", "Iran", [], (210, 210)),
+    country!("SY", "Syria", [], (120, 120)),
+    country!("KP", "North Korea", ["dprk"], (540, 540)),
+    country!("QA", "Qatar", [], (180, 180)),
+    country!("KW", "Kuwait", [], (180, 180)),
+    country!("BH", "Bahrain", [], (180, 180)),
+    country!("OM", "Oman", [], (240, 240)),
+    country!("JO", "Jordan", [], (180, 180)),
+    country!("LB", "Lebanon", [], (120, 120)),
+    country!("TN", "Tunisia", [], (60, 60)),
+    country!("DZ", "Algeria", [], (60, 60)),
+    country!("ET", "Ethiopia", [], (180, 180)),
+    country!("UG", "Uganda", [], (180, 180)),
+    country!("TZ", "Tanzania", [], (180, 180)),
+    country!("RW", "Rwanda", [], (120, 120)),
+    country!("SN", "Senegal", [], (0, 0)),
+    country!(
+        "CI",
+        "Côte d'Ivoire",
+        ["ivory coast", "cote d ivoire"],
+        (0, 0)
+    ),
+    country!("CM", "Cameroon", [], (60, 60)),
+    country!("NP", "Nepal", [], (345, 345)),
+    country!("KH", "Cambodia", [], (420, 420)),
 ];
 
 pub fn country(code: &str) -> Option<&'static Country> {
@@ -179,15 +222,22 @@ pub fn country(code: &str) -> Option<&'static Country> {
 }
 
 /// Business regions job postings name.
+///
+/// Membership is defined in one place, [`Region::contains`], from the
+/// tables below; see the README ("Region definitions") for the product
+/// definitions and the reasoning behind every "maybe".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Region {
     NorthAmerica,
     LatinAmerica,
     SouthAmerica,
     CentralAmerica,
+    Caribbean,
     Americas,
     Europe,
     EuropeanUnion,
+    /// European Economic Area: the EU plus Iceland, Liechtenstein, Norway.
+    Eea,
     Nordics,
     Dach,
     Emea,
@@ -202,34 +252,54 @@ pub enum Region {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Membership {
     Yes,
-    /// Postings disagree (Mexico in "North America", Turkey in "Europe").
+    /// Usage disagrees (Mexico in "North America", the UK in "EU" as
+    /// postings loosely use it); an answer built on it is uncertain.
     Maybe,
     No,
 }
 
+// Building blocks, as ISO 3166-1 alpha-2 codes.
 const EU: &[&str] = &[
     "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV",
     "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE",
 ];
-const EUROPE_EXTRA: &[&str] = &["GB", "CH", "NO", "IS", "RS", "UA"];
-const SOUTH_AMERICA: &[&str] = &["BR", "AR", "CL", "CO", "PE", "UY", "PY", "BO", "EC", "VE"];
-const CENTRAL_AMERICA: &[&str] = &["CR", "GT", "PA"];
-const MIDDLE_EAST: &[&str] = &["IL", "AE", "SA", "TR", "EG"];
-const AFRICA: &[&str] = &["ZA", "NG", "KE", "GH", "MA", "EG"];
-const ASIA: &[&str] = &[
-    "IN", "PK", "BD", "LK", "SG", "MY", "ID", "PH", "VN", "TH", "JP", "KR", "CN", "HK", "TW",
+/// EEA members outside the EU.
+const EEA_EXTRA: &[&str] = &["IS", "LI", "NO"];
+/// Other European countries: in "Europe", not in the EU or EEA.
+const EUROPE_OTHER: &[&str] = &["GB", "CH", "RS", "UA", "BA", "AL", "MK", "ME", "MD"];
+/// Transcontinental or disputed as "Europe".
+const EUROPE_MAYBE: &[&str] = &["TR", "RU", "BY"];
+const SOUTH_AMERICA: &[&str] = &[
+    "AR", "BO", "BR", "CL", "CO", "EC", "GY", "PY", "PE", "SR", "UY", "VE",
 ];
+const CENTRAL_AMERICA: &[&str] = &["BZ", "CR", "SV", "GT", "HN", "NI", "PA"];
+const CARIBBEAN: &[&str] = &["CU", "DO", "JM", "TT", "PR"];
+/// Americas countries whose inclusion in "Latin America" usage disagrees
+/// on (not Spanish- or Portuguese-speaking).
+const LATAM_MAYBE: &[&str] = &["BZ", "GY", "SR", "JM", "TT"];
+const MIDDLE_EAST: &[&str] = &[
+    "AE", "SA", "IL", "QA", "KW", "BH", "OM", "JO", "LB", "SY", "IR",
+];
+const MIDDLE_EAST_MAYBE: &[&str] = &["TR", "EG"];
+const AFRICA: &[&str] = &[
+    "ZA", "NG", "KE", "GH", "MA", "EG", "TN", "DZ", "ET", "UG", "TZ", "RW", "SN", "CI", "CM",
+];
+const EAST_ASIA: &[&str] = &["CN", "JP", "KR", "KP", "HK", "TW"];
+const SOUTHEAST_ASIA: &[&str] = &["SG", "MY", "ID", "PH", "VN", "TH", "KH"];
+const SOUTH_ASIA: &[&str] = &["IN", "PK", "BD", "LK", "NP"];
 const OCEANIA: &[&str] = &["AU", "NZ"];
 
 impl Region {
-    pub const ALL: [Region; 15] = [
+    pub const ALL: [Region; 17] = [
         Self::NorthAmerica,
         Self::LatinAmerica,
         Self::SouthAmerica,
         Self::CentralAmerica,
+        Self::Caribbean,
         Self::Americas,
         Self::Europe,
         Self::EuropeanUnion,
+        Self::Eea,
         Self::Nordics,
         Self::Dach,
         Self::Emea,
@@ -246,9 +316,11 @@ impl Region {
             Self::LatinAmerica => "Latin America",
             Self::SouthAmerica => "South America",
             Self::CentralAmerica => "Central America",
+            Self::Caribbean => "the Caribbean",
             Self::Americas => "the Americas",
             Self::Europe => "Europe",
             Self::EuropeanUnion => "the EU",
+            Self::Eea => "the EEA",
             Self::Nordics => "the Nordics",
             Self::Dach => "DACH",
             Self::Emea => "EMEA",
@@ -257,6 +329,29 @@ impl Region {
             Self::Apac => "APAC",
             Self::Asia => "Asia",
             Self::Oceania => "Oceania",
+        }
+    }
+
+    /// Stable identifier (`latam`, `eu`, `emea`, …).
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::NorthAmerica => "north_america",
+            Self::LatinAmerica => "latam",
+            Self::SouthAmerica => "south_america",
+            Self::CentralAmerica => "central_america",
+            Self::Caribbean => "caribbean",
+            Self::Americas => "americas",
+            Self::Europe => "europe",
+            Self::EuropeanUnion => "eu",
+            Self::Eea => "eea",
+            Self::Nordics => "nordics",
+            Self::Dach => "dach",
+            Self::Emea => "emea",
+            Self::MiddleEast => "middle_east",
+            Self::Africa => "africa",
+            Self::Apac => "apac",
+            Self::Asia => "asia",
+            Self::Oceania => "oceania",
         }
     }
 
@@ -281,9 +376,11 @@ impl Region {
             ],
             Self::SouthAmerica => &["south america", "south american"],
             Self::CentralAmerica => &["central america"],
+            Self::Caribbean => &["caribbean", "the caribbean"],
             Self::Americas => &["americas", "the americas", "amer"],
             Self::Europe => &["europe", "european", "eu uk", "uk eu"],
-            Self::EuropeanUnion => &["eu", "european union", "eea", "eu eea"],
+            Self::EuropeanUnion => &["eu", "european union"],
+            Self::Eea => &["eea", "european economic area", "eu eea"],
             Self::Nordics => &["nordics", "nordic", "scandinavia", "scandinavian"],
             Self::Dach => &["dach"],
             Self::Emea => &["emea"],
@@ -295,57 +392,74 @@ impl Region {
         }
     }
 
+    /// The region's members: certain ones and disputed ones. Every
+    /// membership decision in JobHunt comes from here.
+    fn members(self) -> (Vec<&'static str>, Vec<&'static str>) {
+        let cat = |lists: &[&[&'static str]]| -> Vec<&'static str> {
+            lists.iter().flat_map(|l| l.iter().copied()).collect()
+        };
+        match self {
+            Self::NorthAmerica => (vec!["US", "CA"], vec!["MX"]),
+            Self::CentralAmerica => (cat(&[CENTRAL_AMERICA]), vec!["MX"]),
+            Self::SouthAmerica => (cat(&[SOUTH_AMERICA]), vec![]),
+            Self::Caribbean => (cat(&[CARIBBEAN]), vec![]),
+            Self::LatinAmerica => {
+                let yes = cat(&[&["MX"], CENTRAL_AMERICA, SOUTH_AMERICA, CARIBBEAN])
+                    .into_iter()
+                    .filter(|c| !LATAM_MAYBE.contains(c))
+                    .collect();
+                (yes, cat(&[LATAM_MAYBE]))
+            }
+            Self::Americas => (
+                cat(&[
+                    &["US", "CA", "MX"],
+                    CENTRAL_AMERICA,
+                    SOUTH_AMERICA,
+                    CARIBBEAN,
+                ]),
+                vec![],
+            ),
+            Self::Europe => (cat(&[EU, EEA_EXTRA, EUROPE_OTHER]), cat(&[EUROPE_MAYBE])),
+            // "EU" in postings is often used loosely for Europe.
+            Self::EuropeanUnion => (cat(&[EU]), cat(&[EEA_EXTRA, EUROPE_OTHER])),
+            Self::Eea => (cat(&[EU, EEA_EXTRA]), vec![]),
+            Self::Nordics => (vec!["SE", "NO", "DK", "FI", "IS"], vec![]),
+            Self::Dach => (vec!["DE", "AT", "CH"], vec!["LI"]),
+            Self::MiddleEast => (cat(&[MIDDLE_EAST]), cat(&[MIDDLE_EAST_MAYBE])),
+            Self::Africa => (cat(&[AFRICA]), vec![]),
+            Self::Emea => (
+                cat(&[
+                    EU,
+                    EEA_EXTRA,
+                    EUROPE_OTHER,
+                    EUROPE_MAYBE,
+                    MIDDLE_EAST,
+                    MIDDLE_EAST_MAYBE,
+                    AFRICA,
+                ]),
+                vec![],
+            ),
+            Self::Asia => (
+                cat(&[EAST_ASIA, SOUTHEAST_ASIA, SOUTH_ASIA]),
+                cat(&[MIDDLE_EAST, &["TR"]]),
+            ),
+            Self::Apac => (
+                cat(&[EAST_ASIA, SOUTHEAST_ASIA, OCEANIA, &["IN"]]),
+                vec!["PK", "BD", "LK", "NP"],
+            ),
+            Self::Oceania => (cat(&[OCEANIA]), vec![]),
+        }
+    }
+
     /// Whether the region includes `country`.
     pub fn contains(self, country: &Country) -> Membership {
-        let c = country.code;
-        let any = |list: &[&str]| list.contains(&c);
-        let yes = |b: bool| if b { Membership::Yes } else { Membership::No };
-        match self {
-            Self::NorthAmerica => match c {
-                "US" | "CA" => Membership::Yes,
-                "MX" => Membership::Maybe,
-                _ => Membership::No,
-            },
-            Self::LatinAmerica => {
-                yes(c == "MX" || c == "DO" || any(SOUTH_AMERICA) || any(CENTRAL_AMERICA))
-            }
-            Self::SouthAmerica => yes(any(SOUTH_AMERICA)),
-            Self::CentralAmerica => match c {
-                _ if any(CENTRAL_AMERICA) => Membership::Yes,
-                "MX" => Membership::Maybe,
-                _ => Membership::No,
-            },
-            Self::Americas => yes(matches!(c, "US" | "CA" | "MX" | "DO")
-                || any(SOUTH_AMERICA)
-                || any(CENTRAL_AMERICA)),
-            Self::Europe => match c {
-                _ if any(EU) || any(EUROPE_EXTRA) => Membership::Yes,
-                "TR" | "CY" => Membership::Maybe,
-                _ => Membership::No,
-            },
-            Self::EuropeanUnion => match c {
-                _ if any(EU) => Membership::Yes,
-                // "EU" in postings often loosely means Europe.
-                _ if any(EUROPE_EXTRA) => Membership::Maybe,
-                _ => Membership::No,
-            },
-            Self::Nordics => yes(matches!(c, "SE" | "NO" | "DK" | "FI" | "IS")),
-            Self::Dach => yes(matches!(c, "DE" | "AT" | "CH")),
-            Self::Emea => match c {
-                _ if any(EU) || any(EUROPE_EXTRA) || any(MIDDLE_EAST) || any(AFRICA) => {
-                    Membership::Yes
-                }
-                _ => Membership::No,
-            },
-            Self::MiddleEast => yes(any(MIDDLE_EAST)),
-            Self::Africa => yes(any(AFRICA)),
-            Self::Apac => match c {
-                _ if any(ASIA) || any(OCEANIA) => Membership::Yes,
-                "PK" | "BD" | "LK" => Membership::Maybe,
-                _ => Membership::No,
-            },
-            Self::Asia => yes(any(ASIA)),
-            Self::Oceania => yes(any(OCEANIA)),
+        let (yes, maybe) = self.members();
+        if yes.contains(&country.code) {
+            Membership::Yes
+        } else if maybe.contains(&country.code) {
+            Membership::Maybe
+        } else {
+            Membership::No
         }
     }
 
@@ -569,6 +683,29 @@ static CITIES: &[City] = cities!(
     ("EG", "Cairo"),
 );
 
+/// Standard-time UTC offset of a city in a country that spans several
+/// zones; `None` means the country's own range applies (one zone, or not
+/// listed).
+pub fn city_offset(name: &str) -> Option<i16> {
+    Some(match name {
+        "San Francisco" | "Seattle" | "Los Angeles" | "San Jose" | "Palo Alto"
+        | "Mountain View" | "Menlo Park" | "Oakland" | "Berkeley" | "Sunnyvale" | "San Mateo"
+        | "San Diego" | "Portland" | "Vancouver" => -480,
+        "Denver" | "Boulder" | "Salt Lake City" | "Phoenix" | "Calgary" => -420,
+        "Austin" | "Chicago" | "Dallas" | "Houston" | "Minneapolis" | "Nashville"
+        | "Mexico City" | "Guadalajara" | "Monterrey" => -360,
+        "New York" | "Boston" | "Miami" | "Atlanta" | "Washington, D.C." | "Philadelphia"
+        | "Pittsburgh" | "Raleigh" | "Detroit" | "Baltimore" | "Toronto" | "Montreal"
+        | "Ottawa" | "Waterloo" => -300,
+        "São Paulo" | "Rio de Janeiro" | "Belo Horizonte" | "Porto Alegre" | "Curitiba"
+        | "Florianópolis" | "Recife" | "Brasília" | "Campinas" => -180,
+        "Sydney" | "Melbourne" | "Brisbane" => 600,
+        "Perth" => 480,
+        "Jakarta" => 420,
+        _ => return None,
+    })
+}
+
 /// What a place names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Area {
@@ -625,9 +762,22 @@ impl Area {
         match self {
             Self::Worldwide => None,
             Self::Region(r) => Some(r.utc_offsets()),
-            Self::Country(c)
-            | Self::Subdivision { country: c, .. }
-            | Self::City { country: c, .. } => Some(c.utc_offsets),
+            Self::City { name, country } => {
+                Some(city_offset(name).map_or(country.utc_offsets, |o| (o, o)))
+            }
+            Self::Country(c) | Self::Subdivision { country: c, .. } => Some(c.utc_offsets),
+        }
+    }
+
+    /// Stable identifier: `worldwide`, `region:latam`, `country:BR`,
+    /// `city:BR:São Paulo`, `subdivision:US:California`.
+    pub fn code(&self) -> String {
+        match self {
+            Self::Worldwide => "worldwide".into(),
+            Self::Region(r) => format!("region:{}", r.code()),
+            Self::Country(c) => format!("country:{}", c.code),
+            Self::Subdivision { country, name } => format!("subdivision:{}:{name}", country.code),
+            Self::City { name, country } => format!("city:{}:{name}", country.code),
         }
     }
 }
@@ -799,8 +949,10 @@ pub fn lookup_code(text: &str, after_city: bool) -> Option<Area> {
         "USA" => country("US").map(Area::Country),
         _ => country(&code).map(Area::Country),
     };
-    if code == "EU" {
-        return Some(Area::Region(Region::EuropeanUnion));
+    match code.as_str() {
+        "EU" => return Some(Area::Region(Region::EuropeanUnion)),
+        "EEA" => return Some(Area::Region(Region::Eea)),
+        _ => {}
     }
     if after_city {
         subdivision().or_else(by_country)

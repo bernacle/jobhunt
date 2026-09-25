@@ -6,7 +6,7 @@ use std::io::{self, Write};
 use anstyle::{AnsiColor, Style};
 use chrono::{DateTime, Utc};
 use jobhunt_core::text::search_key;
-use jobhunt_eligibility::Assessment;
+use jobhunt_eligibility::EligibilityDecision;
 use jobhunt_jobs::{
     Compensation, CompensationKind, DiscoveryReport, EmploymentType, JobId, JobRecord,
     OpportunityId, PayInterval, ScanKind, WorkplaceType,
@@ -37,7 +37,7 @@ pub fn jobs(
     out: &mut impl Write,
     records: &[JobRecord],
     also_listed: &HashMap<OpportunityId, Vec<JobRecord>>,
-    verdicts: &HashMap<JobId, Assessment>,
+    verdicts: &HashMap<JobId, EligibilityDecision>,
     now: DateTime<Utc>,
 ) -> io::Result<()> {
     let width = records.len().to_string().len();

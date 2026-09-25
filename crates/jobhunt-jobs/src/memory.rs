@@ -11,11 +11,13 @@ use jobhunt_core::SourceKey;
 
 use crate::identity::{IdentityEntry, evidence_keys};
 use crate::lifecycle::{Action, Closing, StoredJob, plan_scan};
+use crate::model::JobPosting;
 use crate::model::{CANONICAL_REVISION, JobId, JobRecord, JobStatus, OpportunityId};
 use crate::repository::{
     JobEvent, JobEventKind, JobQuery, JobRepository, LastListing, RunId, RunSummary, ScanBody,
     ScanResult, ScanWrite, StorageError,
 };
+use crate::verification::{VerificationRecord, VerificationRepository};
 
 #[derive(Debug, Clone)]
 pub struct ScanRow {
@@ -33,6 +35,7 @@ struct State {
     jobs: HashMap<JobId, (StoredJob, JobRecord)>,
     history: HashMap<JobId, Vec<JobEvent>>,
     scans: Vec<ScanRow>,
+    verifications: Vec<VerificationRecord>,
 }
 
 #[derive(Default)]
@@ -304,5 +307,80 @@ impl JobRepository for MemoryRepository {
             ..query.clone()
         };
         Ok(self.search(&query).await?.len() as u64)
+    }
+}
+
+#[async_trait]
+impl VerificationRepository for MemoryRepository {
+    async fn save_verification(&self, record: &VerificationRecord) -> Result<(), StorageError> {
+        self.lock().verifications.push(record.clone());
+        Ok(())
+    }
+
+    async fn verification_history(
+        &self,
+        job: JobId,
+    ) -> Result<Vec<VerificationRecord>, StorageError> {
+        let mut out: Vec<VerificationRecord> = self
+            .lock()
+            .verifications
+            .iter()
+            .filter(|v| v.job_id == job)
+            .cloned()
+            .collect();
+        out.sort_by(|a, b| b.attempted_at.cmp(&a.attempted_at));
+        Ok(out)
+    }
+
+    async fn latest_verification(
+        &self,
+        job: JobId,
+    ) -> Result<Option<VerificationRecord>, StorageError> {
+        Ok(self.verification_history(job).await?.into_iter().next())
+    }
+
+    async fn latest_successful_verification(
+        &self,
+        job: JobId,
+    ) -> Result<Option<VerificationRecord>, StorageError> {
+        Ok(self
+            .verification_history(job)
+            .await?
+            .into_iter()
+            .find(VerificationRecord::succeeded))
+    }
+
+    async fn record_observation(
+        &self,
+        posting: &JobPosting,
+        observed_at: DateTime<Utc>,
+    ) -> Result<jobhunt_core::UpsertOutcome, StorageError> {
+        let postings = [posting.clone()];
+        let scan = ScanWrite {
+            run: RunId(0),
+            source: &posting.provenance.source,
+            started_at: observed_at,
+            observed_at,
+            counts: jobhunt_core::IngestCounts::default(),
+            body: ScanBody::Listing {
+                postings: &postings,
+                complete: false,
+                close_missing: false,
+                closing_withheld: None,
+                retain: &[],
+                validator: None,
+            },
+        };
+        let result = self.apply_scan(&scan).await?;
+        let mut state = self.lock();
+        // An observation is not a scan: no scan row, no run.
+        state.scans.pop();
+        if let Some(events) = state.history.get_mut(&posting.id())
+            && let Some(last) = events.last_mut()
+            && last.run == Some(RunId(0))
+        {
+            last.run = None;
+        }
+        Ok(result.outcomes[0])
     }
 }

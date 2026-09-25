@@ -9,6 +9,9 @@
 //!   which backend is in use.
 //! * [`discovery`]: the pipeline that runs sources, validates and
 //!   de-duplicates their output, and persists it through the repository.
+//! * [`verification`]: asking one job's authoritative source whether it is
+//!   still open, who stands behind it and what it publishes now; records of
+//!   every attempt, freshness and the trust view of an opportunity.
 
 pub mod discovery;
 pub mod identity;
@@ -17,6 +20,7 @@ pub mod lifecycle;
 mod memory;
 pub mod model;
 pub mod repository;
+pub mod verification;
 
 pub use discovery::{
     Closing, DedupeStats, Discovery, DiscoveryReport, JobSource, ScanKind, ScanStats, SourceReport,

@@ -194,6 +194,10 @@ pub enum SourceError {
     },
     #[error("{url} responded with HTTP {status}")]
     Status { url: String, status: u16 },
+    /// The request (or reading its response) took longer than allowed,
+    /// including retries.
+    #[error("request to {url} timed out")]
+    Timeout { url: String },
     #[error("{what} was not found ({url} responded with HTTP 404)")]
     NotFound { url: String, what: String },
     #[error("could not decode the response from {url}")]

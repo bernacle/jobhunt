@@ -278,7 +278,20 @@ impl JobRepository for SqliteJobStore {
                 retain,
                 validator,
             } => {
-                apply_listing(&mut tx, scan, postings, *close_missing, retain, &mut result).await?;
+                let observation = Observation {
+                    source: scan.source,
+                    observed_at: scan.observed_at,
+                    run: Some(scan.run),
+                };
+                apply_listing(
+                    &mut tx,
+                    &observation,
+                    postings,
+                    *close_missing,
+                    retain,
+                    &mut result,
+                )
+                .await?;
                 for outcome in &result.outcomes {
                     counts.record(*outcome);
                 }
@@ -480,10 +493,18 @@ impl JobRepository for SqliteJobStore {
     }
 }
 
+/// Who saw postings, when, and in which discovery run (none for a
+/// verification).
+pub(crate) struct Observation<'a> {
+    pub source: &'a SourceKey,
+    pub observed_at: DateTime<Utc>,
+    pub run: Option<RunId>,
+}
+
 /// Applies a listing inside the scan's transaction.
-async fn apply_listing(
+pub(crate) async fn apply_listing(
     tx: &mut SqliteConnection,
-    scan: &ScanWrite<'_>,
+    scan: &Observation<'_>,
     postings: &[JobPosting],
     close_missing: bool,
     retain: &[JobId],
@@ -679,7 +700,7 @@ async fn replace_evidence(
 
 async fn insert_event(
     tx: &mut SqliteConnection,
-    scan: &ScanWrite<'_>,
+    scan: &Observation<'_>,
     job_id: &str,
     kind: JobEventKind,
     changed_fields: &[&str],
@@ -699,7 +720,7 @@ async fn insert_event(
          VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(job_id)
-    .bind(scan.run.0)
+    .bind(scan.run.map(|r| r.0))
     .bind(kind.as_str())
     .bind(encode_timestamp(scan.observed_at))
     .bind(changed)
@@ -1177,8 +1198,10 @@ mod tests {
             tables(&store).await,
             vec![
                 "discovery_runs",
+                "eligibility_decisions",
                 "job_events",
                 "job_evidence",
+                "job_verifications",
                 "jobs",
                 "profile_claims",
                 "profile_documents",

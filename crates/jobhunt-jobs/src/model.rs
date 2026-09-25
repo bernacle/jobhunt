@@ -92,6 +92,20 @@ impl FromStr for JobId {
     }
 }
 
+impl Serialize for JobId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for JobId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
+    }
+}
+
 /// Identifier of a logical opportunity: one real job that may be listed by
 /// several sources. Rendered as `opp_<32 hex chars>`.
 ///
@@ -132,6 +146,20 @@ impl FromStr for OpportunityId {
         hex.parse()
             .map(Self)
             .map_err(|_| ParseIdError(s.to_owned()))
+    }
+}
+
+impl Serialize for OpportunityId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> Deserialize<'de> for OpportunityId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
     }
 }
 
