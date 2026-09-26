@@ -8,8 +8,10 @@ import {
   inAbout,
   placeLine,
   sourceLabel,
+  sourceMark,
   unscopedRemote,
   verificationLine,
+  verificationMark,
 } from "./format";
 
 const now = new Date("2026-09-25T12:00:00Z");
@@ -71,5 +73,19 @@ describe("format", () => {
   it("names a source readably", () => {
     expect(sourceLabel("greenhouse:stripe")).toBe("Greenhouse · stripe");
     expect(sourceLabel("lever")).toBe("Lever");
+  });
+
+  it("earns a verification check only when current and trusted", () => {
+    const v = { state: "verified_active" as const, trusted: true, source: "greenhouse:acme" };
+    expect(verificationMark({ ...v, freshness: "fresh" })).toBe("fresh");
+    expect(verificationMark({ ...v, freshness: "aging" })).toBe("aging");
+    expect(verificationMark({ ...v, freshness: "stale" })).toBeNull();
+    expect(verificationMark({ ...v, trusted: false })).toBeNull();
+    expect(verificationMark({ ...v, state: "could_not_verify" })).toBeNull();
+    // A source record borrows the mark only if the verification rests on it.
+    expect(sourceMark({ source: "greenhouse:acme", status: "open" }, { ...v, freshness: "fresh" })).toBe("fresh");
+    expect(sourceMark({ source: "greenhouse:acme", status: "open" }, { ...v, freshness: "stale" })).toBeNull();
+    expect(sourceMark({ source: "otherboard:all", status: "open" }, { ...v, freshness: "fresh" })).toBeNull();
+    expect(sourceMark({ source: "greenhouse:acme", status: "closed" }, { ...v, freshness: "fresh" })).toBeNull();
   });
 });

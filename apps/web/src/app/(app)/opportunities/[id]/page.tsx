@@ -16,12 +16,14 @@ import {
   PayFact,
   PlaceFact,
   TierLabel,
+  VerificationGlyph,
   VerifiedCheck,
 } from "@/components/trust";
+import { CheckedLine, Provenance } from "@/components/provenance";
 import { FactRows, Label, Notice, Raised, textLinkClass } from "@/components/ui";
 import { ApiError, api, load } from "@/lib/api";
-import type { ApplicationContext, Fact, JobDetail, SourceRecordView } from "@/lib/api-types";
-import { STAGE_LABEL, ago, authorityLabel, sentence, sourceLabel, unscopedRemote, verificationLine } from "@/lib/format";
+import type { ApplicationContext, Fact, JobDetail } from "@/lib/api-types";
+import { STAGE_LABEL, ago, sentence, unscopedRemote, verificationLine, verificationMark } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Opportunity" };
 
@@ -87,28 +89,6 @@ function AsideSection({ id, title, caption, children }: { id: string; title: str
   );
 }
 
-/** One line of the aside: a glyph, a fact, and when (in mono). */
-function Checked({ glyph, when, children }: { glyph: ReactNode; when?: ReactNode; children: ReactNode }) {
-  return (
-    <li className="grid grid-cols-[14px_minmax(0,1fr)] gap-1.5 text-[13px] leading-[1.45] text-fg-body">
-      <span className="text-[12px]">{glyph}</span>
-      <span className="min-w-0">
-        {children}
-        {when && <span className="mt-0.5 block font-mono text-mono-s text-fg-muted">{when}</span>}
-      </span>
-    </li>
-  );
-}
-
-function SourceGlyph({ source }: { source: SourceRecordView }) {
-  if (source.verification === "verified_active" && source.status === "open") return <VerifiedCheck />;
-  return (
-    <span aria-hidden="true" className="text-fg-muted">
-      ·
-    </span>
-  );
-}
-
 function Evidence({ context }: { context: ApplicationContext }) {
   const facts: { fact: Fact; about: string }[] = [...context.relevant_experience, ...context.relevant_projects].flatMap((group) =>
     group.facts.slice(0, 2).map((fact) => ({ fact, about: group.label })),
@@ -121,7 +101,7 @@ function Evidence({ context }: { context: ApplicationContext }) {
       ) : (
         <ul role="list" className="flex flex-col gap-3">
           {shown.map(({ fact, about }) => (
-            <Checked
+            <CheckedLine
               key={fact.claim_id}
               glyph={
                 fact.usable_because === "quoted_from_resume" ? (
@@ -135,7 +115,7 @@ function Evidence({ context }: { context: ApplicationContext }) {
               when={`${about} · ${USABLE[fact.usable_because] ?? fact.usable_because}`}
             >
               {fact.text}
-            </Checked>
+            </CheckedLine>
           ))}
         </ul>
       )}
@@ -175,7 +155,8 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
   const listing = job.apply_url ?? job.url;
   const pay = job.compensation;
   const sources = job.sources ?? [];
-  const verified = job.verification.state === "verified_active" && job.verification.trusted;
+  // One judgement of how current the listing is, for every check on the page.
+  const mark = verificationMark(job.verification);
 
   return (
     <article aria-labelledby="title" className="max-lg:pb-24">
@@ -277,7 +258,7 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
                 <p className="mt-1.5 font-mono text-mono-s text-fg-muted">
                   {pay.verified ? (
                     <>
-                      <VerifiedCheck /> Checked at the source {ago(pay.verified_at, now)}
+                      <VerificationGlyph mark={mark} /> Checked at the source {ago(pay.verified_at, now)}
                     </>
                   ) : (
                     "From the listing when Narrow found it; not confirmed at the source"
@@ -354,68 +335,26 @@ export default async function OpportunityPage({ params }: { params: Promise<{ id
         <aside aria-label="About this listing" className="flex min-w-0 flex-col gap-9">
           <AsideSection id="verification" title="Verification">
             <ul role="list" className="flex flex-col gap-2.5">
-              <Checked
-                glyph={
-                  verified && job.verification.freshness !== "stale" ? (
-                    <VerifiedCheck aging={job.verification.freshness === "aging"} />
-                  ) : (
-                    <span aria-hidden="true" className="text-fg-muted">
-                      ·
-                    </span>
-                  )
-                }
+              <CheckedLine
+                glyph={<VerificationGlyph mark={mark} />}
                 when={job.verification.verified_at ? `Last verified ${ago(job.verification.verified_at, now)}` : undefined}
               >
                 {verificationLine(job.verification, now)}
-              </Checked>
+              </CheckedLine>
               {pay.status === "published" && pay.ranges.length > 0 && (
-                <Checked
-                  glyph={
-                    pay.verified ? (
-                      <VerifiedCheck />
-                    ) : (
-                      <span aria-hidden="true" className="text-fg-muted">
-                        ·
-                      </span>
-                    )
-                  }
+                <CheckedLine
+                  glyph={<VerificationGlyph mark={pay.verified ? mark : null} />}
                   when={pay.verified_at ? `Checked ${ago(pay.verified_at, now)}` : undefined}
                 >
                   {pay.verified ? "Pay confirmed at the source" : "Pay as listed, not confirmed at the source"}
-                </Checked>
+                </CheckedLine>
               )}
             </ul>
           </AsideSection>
 
           {sources.length > 0 && (
             <AsideSection id="provenance" title="Provenance">
-              <ul role="list" className="flex flex-col gap-3">
-                {sources.map((s) => (
-                  <Checked
-                    key={s.job_id}
-                    glyph={<SourceGlyph source={s} />}
-                    when={
-                      <>
-                        {s.status === "open" ? "listed" : "closed"} · first seen {ago(s.first_seen_at, now)}
-                        {s.last_success_at && <> · verified {ago(s.last_success_at, now)}</>}
-                      </>
-                    }
-                  >
-                    <a href={s.url} target="_blank" rel="noopener noreferrer" className={textLinkClass}>
-                      {sourceLabel(s.source)}
-                      <span className="sr-only"> (opens a new tab)</span>
-                    </a>
-                    <span className="block text-fg-secondary">Published by {authorityLabel(s.authority)}</span>
-                    {s.last_attempt?.failure && (
-                      <ul role="list" className="mt-1">
-                        <Consideration kind="caution" size="sm">
-                          Last check failed: {s.last_attempt.failure}
-                        </Consideration>
-                      </ul>
-                    )}
-                  </Checked>
-                ))}
-              </ul>
+              <Provenance sources={sources} verification={job.verification} now={now} />
             </AsideSection>
           )}
 

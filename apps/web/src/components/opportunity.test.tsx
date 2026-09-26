@@ -7,7 +7,7 @@ import type { FeedbackResult } from "@/lib/api-types";
 
 import { feedItem, feedbackResult } from "../../test/fixtures";
 import { violations } from "../../test/axe";
-import { OpportunityLead, OpportunityPeer } from "./opportunity";
+import { OpportunityLead, OpportunityPeer, TodayFeed } from "./opportunity";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
@@ -198,5 +198,28 @@ describe("OpportunityPeer", () => {
     expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Not now", "Not for me", "I applied", "Save"]);
     expect(container.textContent).not.toMatch(/\d+\s?%/);
     expect(await violations(container)).toEqual([]);
+  });
+});
+
+describe("TodayFeed", () => {
+  const a = feedItem({ id: "opp_a", title: "Staff Engineer A", company: "Acme" });
+  const b = feedItem({ id: "opp_b", title: "Backend Engineer B", company: "Beta" });
+  const c = feedItem({ id: "opp_c", title: "Platform Engineer C", company: "Cove" });
+
+  it("keeps each lead's outcome with its own opportunity when a refresh picks a different lead", async () => {
+    const act = actions();
+    const { rerender } = render(<TodayFeed items={[a, b]} actions={act} now={now} />);
+    const list = screen.getByRole("list", { name: "Recommendations" });
+    await userEvent.click(within(within(list).getAllByRole("article")[0]!).getByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Saved");
+
+    // A refreshed feed: A is gone, B now leads.
+    rerender(<TodayFeed items={[b, c]} actions={act} now={now} />);
+    const lead = screen.getAllByRole("article")[0]!;
+    expect(within(lead).getByRole("heading", { level: 2, name: "Backend Engineer B" })).toBeInTheDocument();
+    // B is undecided: its actions are there, and A's "Saved" didn't carry over.
+    expect(within(lead).getByRole("button", { name: "Save" })).toBeEnabled();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Staff Engineer A/)).not.toBeInTheDocument();
   });
 });

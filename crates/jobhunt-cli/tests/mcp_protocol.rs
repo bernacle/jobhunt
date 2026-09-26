@@ -43,7 +43,9 @@ async fn handshake_tools_errors_and_clean_shutdown_with_logs_on_stderr() {
 
     let init = mcp.initialize().await;
     assert_eq!(init["protocolVersion"], "2025-06-18");
+    // The protocol name stays `jobhunt` (clients key on it); people see Narrow.
     assert_eq!(init["serverInfo"]["name"], "jobhunt");
+    assert_eq!(init["serverInfo"]["title"], "Narrow");
     assert!(init["capabilities"]["tools"].is_object());
     assert!(
         init["instructions"]

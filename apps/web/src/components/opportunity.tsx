@@ -8,7 +8,7 @@ import type { FeedItem } from "@/lib/api-types";
 import { DecisionBrief } from "./decision-brief";
 import { FeedbackActions, type FeedbackActionsProps, type Outcome, OutcomeLine } from "./feedback-actions";
 import { CompanyTile, EligibilityFact, FactRow, PayFact, PlaceFact, TierLabel, VerificationStamp } from "./trust";
-import { Raised } from "./ui";
+import { Label, Raised } from "./ui";
 
 type Props = { item: FeedItem; actions: FeedbackActionsProps["actions"]; now?: Date };
 
@@ -146,5 +146,28 @@ export function OpportunityPeer({ item, actions, now }: Props) {
         <FeedbackActions id={item.id} title={item.title} company={item.company} actions={actions} onDone={setOutcome} variant="peer" />
       </div>
     </article>
+  );
+}
+
+/**
+ * Today's list: the lead, then its peers. Every opportunity keeps its own
+ * state (a folded outcome) under its own id, so when a refreshed feed puts
+ * a different opportunity first, nothing from the old lead carries over.
+ */
+export function TodayFeed({ items, actions, now }: { items: FeedItem[]; actions: FeedbackActionsProps["actions"]; now?: Date }) {
+  const [lead, ...peers] = items;
+  if (!lead) return null;
+  return (
+    <ol aria-label="Recommendations">
+      <li key={lead.id}>
+        <OpportunityLead key={lead.id} item={lead} actions={actions} now={now} />
+      </li>
+      {peers.map((item, i) => (
+        <li key={item.id} className={i === 0 ? "mt-11 max-sm:mt-8" : undefined}>
+          {i === 0 && <Label className="mb-1">Also worth a look</Label>}
+          <OpportunityPeer key={item.id} item={item} actions={actions} now={now} />
+        </li>
+      ))}
+    </ol>
   );
 }

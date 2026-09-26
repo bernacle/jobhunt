@@ -374,7 +374,8 @@ async fn protected_resource(State(state): State<ApiState>) -> Result<Response, A
         "authorization_servers": issuer,
         "bearer_methods_supported": ["header"],
         "scopes_supported": scopes,
-        "resource_name": "JobHunt",
+        // Shown to people by MCP clients when they sign in.
+        "resource_name": "Narrow",
     }))
     .into_response())
 }

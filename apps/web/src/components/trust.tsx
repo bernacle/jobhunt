@@ -1,7 +1,16 @@
 import type { ReactNode } from "react";
 
 import type { CompensationView, EligibilityBrief, FitTier, VerificationBrief } from "@/lib/api-types";
-import { TIER_LABEL, compensationLine, eligibilityFact, placeLine, unscopedRemote, verificationLine } from "@/lib/format";
+import {
+  TIER_LABEL,
+  type VerificationMark,
+  compensationLine,
+  eligibilityFact,
+  placeLine,
+  unscopedRemote,
+  verificationLine,
+  verificationMark,
+} from "@/lib/format";
 
 /*
  * Verification and uncertainty are part of the brand. Facts carry a source
@@ -42,6 +51,16 @@ export function VerifiedCheck({ aging = false }: { aging?: boolean }) {
   );
 }
 
+/** The mark a verification earned: mint check, grey check, or a plain dot. */
+export function VerificationGlyph({ mark }: { mark: VerificationMark }) {
+  if (mark) return <VerifiedCheck aging={mark === "aging"} />;
+  return (
+    <span aria-hidden="true" className="text-fg-muted">
+      ·
+    </span>
+  );
+}
+
 /** A value read or estimated, not confirmed: less ink, dotted underline. */
 export function Inferred({ children }: { children: ReactNode }) {
   return <span className="nr-inferred">{children}</span>;
@@ -53,13 +72,12 @@ export function Inferred({ children }: { children: ReactNode }) {
  * unverified listings lose the check.
  */
 export function VerificationStamp({ verification, now, className = "" }: { verification: VerificationBrief; now?: Date; className?: string }) {
-  const verified = verification.state === "verified_active" && verification.trusted;
-  const freshness = verification.freshness ?? "fresh";
+  const mark = verificationMark(verification);
   return (
     <p className={`font-mono text-mono-s text-fg-muted ${className}`}>
-      {verified && freshness !== "stale" && (
+      {mark && (
         <>
-          <VerifiedCheck aging={freshness === "aging"} />{" "}
+          <VerifiedCheck aging={mark === "aging"} />{" "}
         </>
       )}
       {verificationLine(verification, now)}

@@ -74,6 +74,28 @@ export function verificationLine(v: VerificationBrief, now: Date = new Date()): 
   }
 }
 
+/**
+ * The check a verification earns, from the API's own trust and freshness:
+ * the mint check only for a current, trusted verification; the grey check
+ * when it is aging; none when it is stale, untrusted, closed or missing.
+ */
+export type VerificationMark = "fresh" | "aging" | null;
+
+export function verificationMark(v: VerificationBrief): VerificationMark {
+  if (v.state !== "verified_active" || !v.trusted) return null;
+  const freshness = v.freshness ?? "fresh";
+  return freshness === "stale" ? null : freshness;
+}
+
+/**
+ * The check one source record earns: the listing's own mark, and only for
+ * the open record the listing's verification rests on. Other records never
+ * borrow it, however "verified" their own last state reads.
+ */
+export function sourceMark(record: { source: string; status: string }, v: VerificationBrief): VerificationMark {
+  return record.status === "open" && v.source === record.source ? verificationMark(v) : null;
+}
+
 function lower(text: string | null | undefined): string {
   if (!text) return "";
   return text.charAt(0).toLowerCase() + text.slice(1);

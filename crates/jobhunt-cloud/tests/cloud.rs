@@ -336,6 +336,8 @@ async fn health_readiness_and_resource_metadata() {
         .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(meta["resource"], format!("{}/mcp", server.base));
+    // The display name MCP clients show when asking to sign in.
+    assert_eq!(meta["resource_name"], "Narrow");
     assert_eq!(
         meta["authorization_servers"][0],
         format!("{}/", server.provider.as_ref().unwrap().uri())
