@@ -1299,6 +1299,13 @@
         "title": {
           "type": "string"
         },
+        "unknowns": {
+          "description": "The lines of `consider` about what the posting doesn't say\n(unknowns, not cautions); the others are caveats.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "verification": {
           "$ref": "#/$defs/VerificationBrief"
         },
@@ -3395,6 +3402,13 @@
         },
         "title": {
           "type": "string"
+        },
+        "unknowns": {
+          "description": "The lines of `consider` about what the posting doesn't say\n(unknowns, not cautions); the others are caveats.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "verification": {
           "$ref": "#/$defs/VerificationBrief"

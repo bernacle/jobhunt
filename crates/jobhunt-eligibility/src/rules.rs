@@ -272,7 +272,7 @@ pub fn presence(ctx: &Context<'_>) -> Vec<Reason> {
     let Some(office) = *area else {
         return vec![reason(
             Verdict::Unknown,
-            format!("The {how} location “{raw}” isn't one JobHunt recognizes"),
+            format!("The {how} location “{raw}” isn't one Narrow recognizes"),
         )];
     };
     let Some(me) = &ctx.profile.location else {
@@ -291,7 +291,7 @@ pub fn presence(ctx: &Context<'_>) -> Vec<Reason> {
         return vec![
             reason(
                 Verdict::Unknown,
-                format!("JobHunt doesn't recognize your location “{}”", me.raw),
+                format!("Narrow doesn't recognize your location “{}”", me.raw),
             )
             .fact(ProfileFact::location(me)),
         ];
@@ -424,7 +424,7 @@ pub fn geography(ctx: &Context<'_>) -> Vec<Reason> {
             Reason::new(
                 RuleId::RemoteScope,
                 Verdict::Unknown,
-                "Your location isn't known, so JobHunt can't tell whether this includes you",
+                "Your location isn't known, so Narrow can't tell whether this includes you",
             )
             .fact(ProfileFact::missing("location"))
         });
@@ -435,7 +435,7 @@ pub fn geography(ctx: &Context<'_>) -> Vec<Reason> {
             Reason::new(
                 RuleId::RemoteScope,
                 Verdict::Unknown,
-                format!("JobHunt doesn't recognize your location “{}”", me.raw),
+                format!("Narrow doesn't recognize your location “{}”", me.raw),
             )
             .fact(ProfileFact::location(me)),
         );
@@ -500,7 +500,7 @@ pub fn geography(ctx: &Context<'_>) -> Vec<Reason> {
                     RuleId::Ambiguity,
                     Verdict::Unknown,
                     format!(
-                        "The location fields exclude {} but the description includes it; JobHunt can't tell which applies to this role",
+                        "The location fields exclude {} but the description includes it; Narrow can't tell which applies to this role",
                         me.country().map(country_name).unwrap_or_default()
                     ),
                 );
@@ -1266,7 +1266,7 @@ pub fn ambiguity(ctx: &Context<'_>) -> Vec<Reason> {
                 RuleId::Ambiguity,
                 Verdict::NotApplicable,
                 format!(
-                    "The listing also names {}, which JobHunt doesn't recognize",
+                    "The listing also names {}, which Narrow doesn't recognize",
                     join(&texts, "and")
                 ),
             )

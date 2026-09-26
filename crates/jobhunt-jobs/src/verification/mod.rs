@@ -407,7 +407,7 @@ fn build_record(
             out.failure = Some(error.failure());
             if let ObserveError::NotSupported { .. } = error {
                 out.unknowns
-                    .push("JobHunt cannot verify listings from this source".into());
+                    .push("Narrow cannot verify listings from this source".into());
             } else {
                 out.unknowns
                     .push("whether the listing is still open (the source did not answer)".into());

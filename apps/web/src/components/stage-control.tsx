@@ -45,30 +45,36 @@ export function StageControl({
   change: (id: string, action: FeedbackKind, reason?: string) => Promise<ActionResult<FeedbackResult>>;
 }) {
   const [pending, startTransition] = useTransition();
+  const [running, setRunning] = useState<FeedbackKind | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [asking, setAsking] = useState(false);
+  const [asking, setAsking] = useState<Move | null>(null);
   const moves = MOVES[stage] ?? [];
 
   const run = (action: FeedbackKind, reason?: string) => {
     setError(null);
+    setRunning(action);
     startTransition(async () => {
       const result = await change(id, action, reason);
       if (!result.ok) {
         if (result.code === "unauthenticated") sessionExpired();
         else setError(`${result.title}. ${result.message}`);
       }
+      setRunning(null);
     });
   };
 
   return (
     <div>
-      <div className="flex flex-wrap gap-2" aria-busy={pending}>
+      <div className="flex flex-wrap gap-1.5 lg:justify-end" aria-busy={pending}>
         {moves.map((m) => (
           <Button
             key={m.action}
-            variant={m.primary ? "primary" : "quiet"}
+            size="sm"
+            variant={m.primary ? "secondary" : "ghost"}
+            className="max-sm:h-11"
             disabled={pending}
-            onClick={() => (m.asksWhy ? setAsking(true) : run(m.action))}
+            loading={pending && running === m.action}
+            onClick={() => (m.asksWhy ? setAsking(m) : run(m.action))}
           >
             {m.label}
             <span className="sr-only"> — {title}</span>
@@ -76,17 +82,28 @@ export function StageControl({
         ))}
       </div>
       {error && (
-        <p role="alert" className="mt-1 text-sm text-negative">
+        <p role="alert" className="mt-1 text-[13px] text-danger">
           {error}
         </p>
       )}
       <RejectDialog
-        open={asking}
+        open={asking !== null}
         title={title}
         company={company}
-        onCancel={() => setAsking(false)}
+        heading={asking?.label ?? "Not for me"}
+        confirmLabel={asking?.label ?? "Not for me"}
+        notNowHint={false}
+        description={
+          <>
+            <span className="text-fg-body">
+              {title} · {company}
+            </span>
+            . What happened? It&apos;s kept as you wrote it, and helps Narrow rank what comes next.
+          </>
+        }
+        onCancel={() => setAsking(null)}
         onConfirm={(reason) => {
-          setAsking(false);
+          setAsking(null);
           run("reject", reason);
         }}
       />

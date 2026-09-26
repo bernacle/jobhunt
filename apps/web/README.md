@@ -1,6 +1,7 @@
-# JobHunt web
+# Narrow web
 
-The web app of JobHunt Cloud: **Today**, **Applications**, **Preferences**,
+The web app of **Narrow** ([narrow.fyi](https://narrow.fyi)), served by JobHunt
+Cloud: **Today**, **Applications**, **Preferences**,
 **Profile** and Settings. It is deliberately small. A good visit is short:
 open Today, see the two to five opportunities that are new and worth your
 time, understand why each one is there and what to watch out for, decide,
@@ -52,28 +53,53 @@ browser ──(HTML, server actions; one encrypted HttpOnly cookie)──▶ Nex
   minutes while visible, and on "Check again". Nothing polls in a hidden
   tab.
 
-## Design direction
+## Design: Quiet Material v2
 
-Calm, editorial, high-signal: typography and spacing over decoration, the
-opportunity first, then why it may matter, then what to consider, then the
-actions. Tiers are words ("Strong fit", "Worth reviewing"), never
-percentages. Uncertainty is always shown (unverified listings, conditional
-eligibility, unpublished pay). No gradients, no AI iconography, no metric
-walls.
+Narrow should feel precise, calm and selective: premium through restraint.
+Hierarchy comes from type size, ink, spacing and hairline rules, not
+containers. At most one raised surface per screen (Today's lead, the
+decision brief); everything else sits on the ground. Tiers are words
+("Strong fit", "Worth reviewing"), never percentages or scores.
 
-Every visual decision is a token in [`src/app/globals.css`](src/app/globals.css)
-(colors for light and dark, the serif and sans stacks), mapped into
-Tailwind's theme; components use only the semantic names (`bg-surface`,
-`text-muted`, `border-line`, `text-caution`, …). BRU-305 can replace the
-brand (type, color, logo) there without touching components. System font
-stacks keep the app image- and font-download-free.
+- **Tokens** ([`src/app/globals.css`](src/app/globals.css)): every colour,
+  type size, radius, shadow and easing, each role defined once as
+  `light-dark(light, dark)` and mapped into Tailwind's theme. Components use
+  only the semantic names (`bg-ground`, `bg-raised`, `text-fg-muted`,
+  `border-line-subtle`, `text-title-l`, `text-mono-s`, …); the default
+  palette is switched off. Dark is the design's first theme; the theme
+  follows the system, and Settings → Appearance can pin dark or light (a
+  `narrow_theme` cookie read by the server, so there is no flash).
+- **Colour is information.** Primary actions are ink, not accent. Mint
+  (`accent`, `verified`) marks first-party verification, focus and live
+  status only; sand (`warning`) marks a real caution. Radii stay at 4, 6 and
+  8px; borders are 1px.
+- **Type**: Instrument Sans for everything a person reads
+  (`@fontsource-variable/instrument-sans`, width axis for display), Geist
+  Mono (`geist`) only for machine-measured facts: times, ages, counts, ids.
+  Both are self-hosted from npm; the build downloads nothing.
+- **Trust and uncertainty** ([`src/components/trust.tsx`](src/components/trust.tsx)):
+  a verified fact gets the check; an inferred or unresolved one (conditional
+  eligibility, "Remote" without a region) less ink and a dotted underline;
+  an unknown is said plainly in muted ink; a caution gets a sand square,
+  an unknown a hollow one. Meaning never rests on colour alone.
+- **Components** are Narrow concepts: `Wordmark`/`BrandMark`, the shell
+  (`nav.tsx`), `OpportunityLead`/`OpportunityPeer`, `DecisionBrief`,
+  `FactRow`, `VerificationStamp`, `Consideration`, `EligibilityDetail`,
+  `TasteTable` (explicit vs learned), `StageTabs`, and the primitives in
+  `ui.tsx` (`Button`, `Raised`, `Notice`, `EmptyState`, `Skeleton`, …).
 
 Accessibility is part of the components: landmarks and a skip link, one
 `h1` per page, labelled forms, `aria-live` status for every action's
-outcome, a native modal `<dialog>` for "Not for me" (focus moves in,
-Escape closes), visible focus rings, reduced motion respected, and AA
-contrast in both themes. Automated checks (axe) run in the component tests
-and in the browser tests; they don't replace a manual review.
+outcome, a native modal `<dialog>` for "Not for me" (a bottom sheet on
+phones), real tabs with arrow keys on Applications, a 1.5px mint focus ring
+(an outline, so it survives forced colours), 44px targets on phones,
+reduced motion respected, and AA contrast in both themes. Automated checks
+(axe) run in the component tests and in the browser tests, in both themes;
+they don't replace a manual review.
+
+Internal names stay `jobhunt` (the crates, the `jobhunt` command, the API,
+environment variables, the `jh_session` cookie, `jh_pat_` tokens): the
+rename is of the product people see, not of protocols.
 
 ## Configuration
 
@@ -127,7 +153,7 @@ npm run e2e           # Playwright against the real stack (needs `npm run build`
   (understood, uncertain, not interpreted), learned vs stated taste,
   claim review, and axe checks on each.
 - **End-to-end** (`e2e/*.spec.ts`, Chromium, desktop and a phone):
-  sign in, upload a resume, state preferences, Today (a short list, only
+  sign in, upload a resume, state preferences, Today (a lead and peers, only
   strong fits and jobs worth reviewing, verified pay and listing,
   stable across reloads, no infinite list), the full brief, reject with a
   reason from the keyboard, save, applied, Applications (stage changes),
@@ -136,4 +162,6 @@ npm run e2e           # Playwright against the real stack (needs `npm run build`
   for a strong job published later and found by the real discovery and
   verification workers, never twice), sign out and back in with everything
   kept, finishing Today to "caught up", signed-out redirects, a tampered
-  cookie, no horizontal scrolling on a phone, and axe on every page.
+  cookie, no horizontal scrolling and 44px actions on a phone, Narrow (never
+  JobHunt) on every page, both themes and the theme setting, and axe on
+  every page.

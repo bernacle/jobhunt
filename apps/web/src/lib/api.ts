@@ -71,7 +71,7 @@ async function call<T>(method: string, path: string, body?: Body): Promise<T> {
       signal: AbortSignal.timeout(90_000),
     });
   } catch {
-    throw new ApiError("cloud_unavailable", 503, "JobHunt Cloud could not be reached");
+    throw new ApiError("cloud_unavailable", 503, "The Narrow API could not be reached");
   }
   if (response.status === 204) return undefined as T;
   const text = await response.text();

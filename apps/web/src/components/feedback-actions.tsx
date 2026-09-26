@@ -9,7 +9,7 @@ import type { FeedbackResult } from "@/lib/api-types";
 import { sessionExpired } from "@/lib/navigation";
 
 import { RejectDialog } from "./reject-dialog";
-import { Button } from "./ui";
+import { Button, textLinkClass } from "./ui";
 
 export interface FeedbackActionsProps {
   id: string;
@@ -24,11 +24,17 @@ export interface FeedbackActionsProps {
   onDone?: (outcome: Outcome) => void;
   /** Hide "Not now" (it only means something on Today). */
   canPutAside?: boolean;
+  /**
+   * `lead`: Today's lead (full-size buttons). `peer`: the denser peers.
+   * `detail`: the opportunity page's action bar. On phones every variant
+   * becomes a 2×2 grid of 44px targets.
+   */
+  variant?: "lead" | "peer" | "detail";
 }
 
 export type Outcome = { kind: "saved" | "applied" | "aside" | "rejected"; result: FeedbackResult };
 
-type Pending = "saved" | "applied" | "aside" | "rejected" | null;
+type Pending = Outcome["kind"] | null;
 
 const PENDING_LABEL: Record<Exclude<Pending, null>, string> = {
   saved: "Saving…",
@@ -38,11 +44,13 @@ const PENDING_LABEL: Record<Exclude<Pending, null>, string> = {
 };
 
 /**
- * Save, Not for me (with an optional reason), Applied and Not now. The
- * card reacts at once; if the API refuses, it goes back to how it was and
- * says why. Nothing is assumed done until the API confirms it.
+ * Save, I applied, Not for me (with an optional reason) and Not now. "Not
+ * for me" is negative feedback that may shape what Narrow learns; "Not
+ * now" only puts the role aside and teaches nothing. Nothing is assumed
+ * done until the API confirms it; if it refuses, the buttons come back
+ * and the reason is said.
  */
-export function FeedbackActions({ id, title, company, actions, onDone, canPutAside = true }: FeedbackActionsProps) {
+export function FeedbackActions({ id, title, company, actions, onDone, canPutAside = true, variant = "lead" }: FeedbackActionsProps) {
   const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState(false);
@@ -65,34 +73,63 @@ export function FeedbackActions({ id, title, company, actions, onDone, canPutAsi
   };
 
   const busy = pending !== null;
+  const size = variant === "lead" ? "md" : "sm";
+  // Phones: a 2×2 grid of full-width, 44px targets; primary bottom right.
+  const touch = "max-sm:h-11 max-sm:w-full max-sm:text-[13px]";
+  const quiet = variant === "peer" ? "ghost" : "secondary";
   return (
-    <div>
-      <div className="flex flex-wrap items-center gap-2" aria-busy={busy}>
-        <Button variant="primary" disabled={busy} onClick={() => run("saved", () => actions.feedback(id, "save"))}>
-          Save
-        </Button>
-        <Button variant="secondary" disabled={busy} onClick={() => setRejecting(true)}>
-          Not for me
-        </Button>
-        <Button variant="quiet" disabled={busy} onClick={() => run("applied", () => actions.feedback(id, "applied"))}>
-          I applied
-        </Button>
+    <div className={variant === "detail" ? "" : "max-sm:w-full"}>
+      <div className="flex flex-wrap items-center gap-2 max-sm:grid max-sm:grid-cols-2" aria-busy={busy}>
         {canPutAside && (
           <Button
-            variant="quiet"
+            variant="ghost"
+            size={size}
+            className={touch}
             disabled={busy}
+            loading={pending === "aside"}
             onClick={() => run("aside", () => actions.putAside(id))}
-            title="Hide it for now. JobHunt learns nothing from this."
+            title="Puts it aside. Doesn't change what Narrow has learned."
           >
             Not now
           </Button>
         )}
+        <Button
+          variant={variant === "peer" ? "ghost" : "secondary"}
+          size={size}
+          className={touch}
+          disabled={busy}
+          loading={pending === "rejected"}
+          onClick={() => setRejecting(true)}
+          title="Removes it and tells Narrow what doesn't fit."
+        >
+          Not for me
+        </Button>
+        <Button
+          variant={quiet}
+          size={size}
+          className={touch}
+          disabled={busy}
+          loading={pending === "applied"}
+          onClick={() => run("applied", () => actions.feedback(id, "applied"))}
+        >
+          I applied
+        </Button>
+        <Button
+          variant={variant === "peer" ? "secondary" : "primary"}
+          size={size}
+          className={touch}
+          disabled={busy}
+          loading={pending === "saved"}
+          onClick={() => run("saved", () => actions.feedback(id, "save"))}
+        >
+          Save
+        </Button>
       </div>
-      <p aria-live="polite" className="mt-2 min-h-5 text-sm text-muted">
+      <p aria-live="polite" className="sr-only">
         {pending ? PENDING_LABEL[pending] : ""}
       </p>
       {error && (
-        <p role="alert" className="text-sm text-negative">
+        <p role="alert" className="mt-2 text-[13px] text-danger">
           {error}
         </p>
       )}
@@ -110,7 +147,7 @@ export function FeedbackActions({ id, title, company, actions, onDone, canPutAsi
   );
 }
 
-/** What the card says once an action went through. */
+/** What an opportunity says once an action went through. */
 export function OutcomeLine({ outcome }: { outcome: Outcome }) {
   const learned = outcome.result.interpretation?.read_as ?? [];
   switch (outcome.kind) {
@@ -118,7 +155,7 @@ export function OutcomeLine({ outcome }: { outcome: Outcome }) {
       return (
         <p>
           Saved. It&apos;s in{" "}
-          <Link href="/applications" className="underline">
+          <Link href="/applications" className={textLinkClass}>
             Applications
           </Link>
           .
@@ -128,22 +165,20 @@ export function OutcomeLine({ outcome }: { outcome: Outcome }) {
       return (
         <p>
           Marked as applied. Track it in{" "}
-          <Link href="/applications" className="underline">
+          <Link href="/applications" className={textLinkClass}>
             Applications
           </Link>
           .
         </p>
       );
     case "aside":
-      return <p>Put aside. It comes back only if it changes in a way that matters.</p>;
+      return <p>Put aside. It comes back only if it changes in a way that matters. Nothing was learned from it.</p>;
     case "rejected":
       return (
         <p>
           Won&apos;t be recommended again.
-          {learned.length > 0 && <> JobHunt read your reason as: {learned.join("; ")}.</>}
-          {outcome.result.interpretation && !outcome.result.interpretation.understood && (
-            <> Your reason is kept as written.</>
-          )}
+          {learned.length > 0 && <> Narrow read your reason as: {learned.join("; ")}.</>}
+          {outcome.result.interpretation && !outcome.result.interpretation.understood && <> Your reason is kept as written.</>}
         </p>
       );
   }

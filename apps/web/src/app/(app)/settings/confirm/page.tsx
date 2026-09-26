@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { Notice, PageHeader } from "@/components/ui";
+import { Notice, PageHeader, textLinkClass } from "@/components/ui";
 import { ApiError, api, load } from "@/lib/api";
 import { describeError } from "@/lib/errors";
 
@@ -31,10 +31,10 @@ export default async function ConfirmEmail({ searchParams }: { searchParams: Pro
         </Notice>
       ) : (
         <Notice tone="success" role="status">
-          JobHunt will email you when strong new matches appear — and only then.
+          Narrow will email you when strong new matches appear, and only then.
         </Notice>
       )}
-      <Link href="/settings#notifications" className="mt-6 inline-block underline">
+      <Link href="/settings#notifications" className={`mt-6 inline-block text-[14px] ${textLinkClass}`}>
         Notification settings
       </Link>
     </div>

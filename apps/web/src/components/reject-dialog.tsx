@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 
-import { Button } from "./ui";
+import { Button, helpClass, labelClass, textareaClass } from "./ui";
 
 /** Starting points, not categories: the text stays the person's own. */
 export const REASON_SUGGESTIONS = [
@@ -17,7 +17,8 @@ export const REASON_SUGGESTIONS = [
 /**
  * "Not for me": asks why, optionally, in the person's own words. Quick
  * suggestions only add words to the text box; nothing restricts what can
- * be said, and nothing is sent until they confirm.
+ * be said, and nothing is sent until they confirm. A native modal dialog
+ * (focus moves in, Escape closes); a bottom sheet on phones.
  */
 export function RejectDialog({
   open,
@@ -25,16 +26,26 @@ export function RejectDialog({
   company,
   onCancel,
   onConfirm,
+  heading = "Not for me",
+  description,
+  confirmLabel = "Mark not for me",
+  notNowHint = true,
 }: {
   open: boolean;
   title: string;
   company: string;
   onCancel: () => void;
   onConfirm: (reason: string) => void;
+  heading?: string;
+  description?: ReactNode;
+  confirmLabel?: string;
+  /** Point to "Not now" for someone who only wants it out of the way. */
+  notNowHint?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [reason, setReason] = useState("");
   const headingId = useId();
+  const descriptionId = useId();
   const fieldId = useId();
   const helpId = useId();
 
@@ -60,61 +71,78 @@ export function RejectDialog({
     <dialog
       ref={dialog}
       aria-labelledby={headingId}
+      aria-describedby={descriptionId}
       onClose={onCancel}
       onCancel={(e) => {
         e.preventDefault();
         onCancel();
       }}
-      className="m-auto w-[min(34rem,calc(100vw-2rem))] rounded-xl border border-line bg-surface p-0 text-ink shadow-xl"
+      className={
+        "m-auto w-[min(30rem,calc(100vw-2rem))] rounded-lg bg-overlay p-0 text-fg shadow-overlay open:animate-[nr-rise_240ms_var(--nr-ease-out)] " +
+        "max-sm:mb-0 max-sm:w-full max-sm:max-w-full max-sm:rounded-b-none"
+      }
     >
       <form
         method="dialog"
-        className="p-5 sm:p-6"
         onSubmit={(e) => {
           e.preventDefault();
           onConfirm(reason);
         }}
       >
-        <h2 id={headingId} className="font-serif text-xl">
-          Why isn&apos;t this for you?
-        </h2>
-        <p className="mt-1 text-sm text-muted">
-          {title} · {company}
-        </p>
-        <label htmlFor={fieldId} className="mt-4 block text-sm font-medium">
-          Your reason <span className="font-normal text-muted">(optional)</span>
-        </label>
-        <textarea
-          id={fieldId}
-          aria-describedby={helpId}
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          rows={3}
-          maxLength={500}
-          className="mt-1.5 w-full rounded-md border border-line-strong bg-canvas px-3 py-2 text-[0.95rem]"
-          placeholder="e.g. too much on-call, and the company is too large"
-        />
-        <p id={helpId} className="mt-1.5 text-xs text-muted">
-          Kept word for word. A reason teaches JobHunt what to avoid; without one, it learns only a little.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Quick suggestions">
-          {REASON_SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => add(s)}
-              className="rounded-full border border-line-strong px-3 py-1 text-sm text-muted hover:bg-sunken hover:text-ink"
-            >
-              {s}
-            </button>
-          ))}
+        <div className="flex items-baseline justify-between gap-4 px-5 pt-5">
+          <h2 id={headingId} className="text-[18px] font-semibold tracking-[-0.015em]">
+            {heading}
+          </h2>
+          <kbd aria-hidden="true" className="font-mono text-mono-xs text-fg-muted max-sm:hidden">
+            esc
+          </kbd>
         </div>
-        <div className="mt-6 flex flex-wrap justify-end gap-2">
-          <Button variant="quiet" onClick={onCancel}>
+        <p id={descriptionId} className="px-5 pt-2 text-[14px] leading-normal text-pretty text-fg-secondary">
+          {description ?? (
+            <>
+              <span className="text-fg-body">
+                {title} · {company}
+              </span>{" "}
+              won&apos;t be recommended again. What didn&apos;t fit? Narrow weighs it in future rankings.
+            </>
+          )}
+        </p>
+        <div className="px-5 pt-4 pb-5">
+          <label htmlFor={fieldId} className={labelClass}>
+            What didn&apos;t fit? <span className="text-fg-muted">(optional)</span>
+          </label>
+          <textarea
+            id={fieldId}
+            aria-describedby={helpId}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            maxLength={500}
+            className={textareaClass}
+            placeholder="e.g. too much on-call, and the company is too large"
+          />
+          <p id={helpId} className={helpClass}>
+            Kept word for word. A reason teaches Narrow what to avoid; without one, it learns only a little.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Quick suggestions">
+            {REASON_SUGGESTIONS.map((s) => (
+              <Button key={s} size="sm" variant="secondary" className="max-sm:h-9" onClick={() => add(s)}>
+                {s}
+              </Button>
+            ))}
+          </div>
+          {notNowHint && (
+            <p className="mt-4 text-[12.5px] leading-normal text-fg-muted">
+              Just want it out of the way today? Use Not now instead. It won&apos;t change what Narrow has learned.
+            </p>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-line-subtle px-5 py-3.5 max-sm:grid max-sm:grid-cols-[1fr_1.4fr] max-sm:pb-7">
+          <Button variant="ghost" className="max-sm:h-11" onClick={onCancel}>
             Cancel
           </Button>
-          <Button type="submit" variant="danger">
-            Not for me
+          <Button type="submit" variant="primary" className="max-sm:h-11">
+            {confirmLabel}
           </Button>
         </div>
       </form>

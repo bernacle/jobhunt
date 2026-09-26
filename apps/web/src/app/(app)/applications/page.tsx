@@ -3,44 +3,65 @@ import Link from "next/link";
 
 import { changeStage } from "@/app/actions";
 import { StageControl } from "@/components/stage-control";
-import { PageHeader } from "@/components/ui";
+import { StageTabs } from "@/components/stage-tabs";
+import { EmptyState, LinkButton, PageHeader, StatusText } from "@/components/ui";
 import { api, loadOrNoProfile } from "@/lib/api";
 import type { PipelineEntryView, PipelineStage } from "@/lib/api-types";
-import { STAGE_LABEL, ago } from "@/lib/format";
+import { ago } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Applications" };
 
-const GROUPS: { stage: PipelineStage; title: string; empty?: string }[] = [
-  { stage: "offer", title: "Offers" },
-  { stage: "interviewing", title: "Interviewing" },
-  { stage: "applied", title: "Applied" },
-  { stage: "saved", title: "Saved", empty: "Nothing saved. Save opportunities from Today to keep them here." },
+type Status = Parameters<typeof StatusText>[0]["status"];
+
+// The real stages of the pipeline, furthest first. Nothing is invented to
+// look like a CRM.
+const GROUPS: { stage: PipelineStage; tab: string; title: string; status: Status }[] = [
+  { stage: "offer", tab: "offer", title: "Offer", status: "offer" },
+  { stage: "interviewing", tab: "interview", title: "Interview", status: "active" },
+  { stage: "applied", tab: "applied", title: "Applied", status: "waiting" },
+  { stage: "saved", tab: "saved", title: "Saved", status: "waiting" },
 ];
 
 function Row({ entry, now }: { entry: PipelineEntryView; now: Date }) {
+  const closed = entry.listing_closed;
   return (
-    <li className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0">
-        <p className="font-medium">
-          <Link href={`/opportunities/${entry.id}`} className="hover:underline">
-            {entry.title}
-          </Link>
-        </p>
-        <p className="text-sm text-muted">
-          {entry.company} · {STAGE_LABEL[entry.stage]}
-          {entry.since && <> {ago(entry.since, now)}</>}
-          {entry.listing_closed && <span className="text-caution"> · listing closed</span>}
-        </p>
-        {entry.last_reason && (
-          <p className="mt-1 text-sm text-muted">
-            Your note: <q>{entry.last_reason}</q>
-          </p>
-        )}
-      </div>
-      <div className="shrink-0">
+    <li
+      className={`grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1 border-b border-line-subtle px-3 py-3 text-row transition-colors duration-[120ms] hover:bg-ground-hover max-sm:px-0 max-sm:hover:bg-transparent lg:min-h-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_72px_300px] lg:items-center lg:py-2 ${
+        closed ? "text-fg-muted" : "text-fg"
+      }`}
+    >
+      <p className="col-span-2 min-w-0 lg:col-span-1 lg:truncate">
+        <Link href={`/opportunities/${entry.id}`} className="font-semibold hover:text-fg-body">
+          {entry.title}
+        </Link>{" "}
+        <span className="text-fg-muted">· {entry.company}</span>
+      </p>
+      <p className={`min-w-0 lg:truncate ${closed ? "text-fg-muted" : "text-fg-body"}`}>
+        {closed ? "Listing closed" : entry.last_reason ? <q>{entry.last_reason}</q> : "Listing still open"}
+      </p>
+      <span className="font-mono text-mono-s text-fg-muted">{entry.since ? ago(entry.since, now) : ""}</span>
+      <div className="col-span-2 mt-1.5 lg:col-span-1 lg:mt-0">
         <StageControl id={entry.id} title={entry.title} company={entry.company} stage={entry.stage} change={changeStage} />
       </div>
     </li>
+  );
+}
+
+function Group({ title, status, entries, now, id }: { title: string; status: Status; entries: PipelineEntryView[]; now: Date; id: string }) {
+  return (
+    <section aria-labelledby={`${id}-heading`} className="mt-7">
+      <div className="flex items-center gap-2.5 border-b border-line-subtle px-3 pb-2.5 max-sm:px-0">
+        <h2 id={`${id}-heading`}>
+          <StatusText status={status}>{title}</StatusText>
+        </h2>
+        <span className="font-mono text-mono-xs text-fg-muted">{entries.length}</span>
+      </div>
+      <ul role="list">
+        {entries.map((e) => (
+          <Row key={e.id} entry={e} now={now} />
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -50,40 +71,45 @@ export default async function ApplicationsPage() {
   const entries = pipeline === "no_profile" ? [] : pipeline.entries;
   const active = entries.filter((e) => e.stage !== "rejected");
   const rejected = entries.filter((e) => e.stage === "rejected");
+  const groups = GROUPS.map((g) => ({ ...g, entries: active.filter((e) => e.stage === g.stage) }));
   return (
     <div>
-      <PageHeader title="Applications">
-        What you saved and where each application stands. Not a CRM: just the stage and what changed.
-      </PageHeader>
-      {active.length === 0 && (
-        <p className="mb-8 rounded-xl border border-line bg-surface px-5 py-6 text-muted">
-          Nothing here yet. When something on{" "}
-          <Link href="/today" className="underline">
-            Today
-          </Link>{" "}
-          is worth keeping, save it or mark it applied.
-        </p>
+      <PageHeader title="Applications" count={active.length} />
+      {active.length === 0 ? (
+        <EmptyState
+          title="Nothing in progress yet."
+          action={
+            <LinkButton href="/today" className="max-sm:h-11">
+              Go to Today
+            </LinkButton>
+          }
+        >
+          Roles you save or mark as applied from Today appear here with their stage, and you can see when a listing closes. There is no
+          quota: a few good applications beat many.
+        </EmptyState>
+      ) : (
+        <StageTabs
+          tabs={[
+            { id: "all", label: "All", count: active.length },
+            ...[...groups].reverse().map((g) => ({ id: g.tab, label: g.title, count: g.entries.length })),
+          ]}
+          groups={groups
+            .filter((g) => g.entries.length > 0)
+            .map((g) => ({
+              stage: g.tab,
+              node: <Group id={g.tab} title={g.title} status={g.status} entries={g.entries} now={now} />,
+            }))}
+        />
       )}
-      {GROUPS.map((group) => {
-        const rows = active.filter((e) => e.stage === group.stage);
-        if (rows.length === 0) return null;
-        return (
-          <section key={group.stage} aria-labelledby={`${group.stage}-heading`} className="mb-8">
-            <h2 id={`${group.stage}-heading`} className="font-serif text-xl">
-              {group.title} <span className="text-base text-muted">({rows.length})</span>
-            </h2>
-            <ul className="mt-2 divide-y divide-line border-y border-line">
-              {rows.map((e) => (
-                <Row key={e.id} entry={e} now={now} />
-              ))}
-            </ul>
-          </section>
-        );
-      })}
       {rejected.length > 0 && (
-        <details className="mt-10">
-          <summary className="cursor-pointer text-sm text-muted">Not for me ({rejected.length})</summary>
-          <ul className="mt-2 divide-y divide-line border-y border-line">
+        <details className="group mt-10">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-ui-m text-fg-secondary hover:text-fg">
+            <span aria-hidden="true" className="text-fg-muted transition-transform duration-[120ms] group-open:rotate-90">
+              ›
+            </span>
+            Not for me ({rejected.length})
+          </summary>
+          <ul role="list" className="mt-2 border-t border-line-subtle">
             {rejected.map((e) => (
               <Row key={e.id} entry={e} now={now} />
             ))}

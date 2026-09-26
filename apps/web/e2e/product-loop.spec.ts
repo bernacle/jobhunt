@@ -45,14 +45,21 @@ test.describe.serial("the product loop", () => {
     await expect(page.getByText("Maybe", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Site Reliability Engineer")).toHaveCount(0);
     await expect(page.getByText("Marketing Manager")).toHaveCount(0);
+    // One raised lead with visible section labels; denser peers after it.
+    await expect(cards.first().getByText("Why it may be worth your time")).toBeVisible();
+    await expect(cards.first().getByText("Things to consider")).toBeVisible();
+    await expect(page.getByText("Also worth a look")).toBeVisible();
     // Why, what to consider, pay and verification on every card.
     for (let i = 0; i < count; i++) {
       const card = cards.nth(i);
-      await expect(card.getByText("Why this may be worth your time")).toBeVisible();
-      await expect(card.getByText("Things to consider")).toBeVisible();
-      await expect(card.getByRole("definition").filter({ hasText: /USD [0-9,]+ – [0-9,]+ per year/ })).toBeVisible();
+      await expect(card.getByText("Why it may be worth your time")).toHaveCount(1);
+      await expect(card.getByText("Things to consider")).toHaveCount(1);
+      await expect(card.getByText(/USD [0-9,]+ – [0-9,]+ per year/)).toBeVisible();
       await expect(card.getByText(/Verified .* on the employer's job board/)).toBeVisible();
+      await expect(card.getByRole("button")).toHaveText(["Not now", "Not for me", "I applied", "Save"]);
     }
+    // Tiers are words, never scores.
+    await expect(page.locator("main")).not.toContainText(/\d+\s?%/);
     // No infinite scroll: the page ends.
     await expect(page.getByText("That's everything new worth your time.")).toBeVisible();
     await expectAccessible(page);
@@ -69,11 +76,13 @@ test.describe.serial("the product loop", () => {
     const title = (await first.getByRole("heading", { level: 2 }).textContent()) ?? "";
     await first.getByRole("link", { name: title, exact: true }).click();
     await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
-    for (const section of ["Pay", "Can you take it?", "Is it real and open?", "The role"]) {
+    await expect(page.getByText("Decision brief")).toBeVisible();
+    for (const section of ["Eligibility", "Compensation", "Location and employment", "Full description", "Verification", "Provenance"]) {
       await expect(page.getByRole("heading", { level: 2, name: section })).toBeVisible();
     }
     await expect(page.getByText(/A compatibility signal/)).toBeVisible();
-    await expect(page.getByRole("link", { name: /greenhouse:/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Greenhouse · / })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Today" })).toBeVisible();
     await expectAccessible(page);
   });
 
@@ -88,15 +97,15 @@ test.describe.serial("the product loop", () => {
     const firstCard = cards.nth(0);
     await firstCard.getByRole("button", { name: "Not for me" }).focus();
     await page.keyboard.press("Enter");
-    const dialog = page.getByRole("dialog", { name: "Why isn't this for you?" });
+    const dialog = page.getByRole("dialog", { name: "Not for me" });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByLabel(/Your reason/)).toBeFocused();
+    await expect(dialog.getByLabel(/What didn't fit/)).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
     await firstCard.getByRole("button", { name: "Not for me" }).click();
-    await dialog.getByLabel(/Your reason/).fill("On-call heavy");
+    await dialog.getByLabel(/What didn't fit/).fill("On-call heavy");
     await dialog.getByRole("button", { name: "Too corporate" }).click();
-    await dialog.getByRole("button", { name: "Not for me" }).click();
+    await dialog.getByRole("button", { name: "Mark not for me" }).click();
     await expect(cards.nth(0).getByRole("status")).toContainText("Won't be recommended again");
 
     await cards.nth(1).getByRole("button", { name: "Save" }).click();
@@ -118,7 +127,12 @@ test.describe.serial("the product loop", () => {
     await expect(page.getByRole("region", { name: /Saved/ }).getByRole("link", { name: saved, exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: rejected, exact: true })).toBeHidden();
     await appliedSection.getByRole("button", { name: new RegExp(`^Interviewing — ${applied.replace(/[()]/g, "\\$&")}`) }).click();
-    await expect(page.getByRole("region", { name: /Interviewing/ }).getByRole("link", { name: applied, exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: /Interview/ }).getByRole("link", { name: applied, exact: true })).toBeVisible();
+    // The stage tabs narrow the list to one stage.
+    await page.getByRole("tab", { name: /^Saved/ }).click();
+    await expect(page.getByRole("tabpanel").getByRole("link", { name: saved, exact: true })).toBeVisible();
+    await expect(page.getByRole("tabpanel").getByRole("link", { name: applied, exact: true })).toBeHidden();
+    await page.getByRole("tab", { name: /^All/ }).click();
     await page.getByText(/Not for me \(1\)/).click();
     await expect(page.getByRole("link", { name: rejected, exact: true })).toBeVisible();
     await expect(page.getByText("On-call heavy; too corporate")).toBeVisible();
@@ -127,19 +141,28 @@ test.describe.serial("the product loop", () => {
 
   test("Preferences keep what was said apart from what was learned", async ({ page }) => {
     await signIn(page, name, "/preferences");
-    const stated = page.getByRole("region", { name: "You told JobHunt" });
-    await expect(stated.getByText("Want: backend roles")).toBeVisible();
-    await expect(stated.getByText("Must: at least USD 120,000 per year")).toBeVisible();
-    const learned = page.getByRole("region", { name: "Learned from your feedback" });
-    await expect(learned.getByText("Learned, not stated")).toBeVisible();
-    await expect(learned.getByText(/You tend to pass on large companies/)).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: /You told us/ })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: /We've learned.*Ranking only/ })).toBeVisible();
+    const roles = page.getByRole("row", { name: /^Roles/ });
+    await expect(roles.getByRole("cell").first().getByText("Want: backend roles")).toBeVisible();
+    const pay = page.getByRole("row", { name: /^Pay/ });
+    await expect(pay.getByRole("cell").first().getByText("Must: at least USD 120,000 per year")).toBeVisible();
+    const company = page.getByRole("row", { name: /^Company and team/ });
+    await expect(company.getByRole("cell").nth(1).getByText(/You tend to pass on large companies/)).toBeVisible();
+    // A structured preference, the same model the API and assistants use.
+    await page.getByLabel("About").selectOption("domain");
+    await page.getByLabel("Rule").selectOption("avoid");
+    await page.getByLabel("Value").fill("adtech");
+    await page.getByRole("button", { name: "Add preference" }).click();
+    await expect(page.getByText("Saved.")).toBeVisible();
+    await expect(page.getByRole("row", { name: /^Domains and products/ }).getByText("Avoid: adtech")).toBeVisible();
     await expect(page.getByRole("region", { name: "In your words" }).getByText(STATEMENT)).toBeVisible();
     await expectAccessible(page);
   });
 
   test("Profile shows the model and takes claim decisions", async ({ page }) => {
     await signIn(page, name, "/profile");
-    await expect(page.getByText(/Current: ana_lima\.md/)).toBeVisible();
+    await expect(page.getByRole("region", { name: "Sources" }).getByText(/^ana_lima\.md\s*current$/)).toBeVisible();
     await expect(page.getByRole("heading", { name: "Experience" })).toBeVisible();
     const review = page.getByRole("region", { name: "Needs your review" });
     const before = await review.getByText(/claims? needs? your review/).textContent();
@@ -155,7 +178,7 @@ test.describe.serial("the product loop", () => {
     await page.getByRole("button", { name: "Use this address" }).click();
     await expect(page.getByText(/sent a confirmation link/)).toBeVisible();
     const confirmation = sentEmails().find((m) => m.message.to === "e2e-ana@example.com");
-    expect(confirmation?.message.subject).toBe("Confirm your email for JobHunt notifications");
+    expect(confirmation?.message.subject).toBe("Confirm your email for Narrow notifications");
     const link = /http:\/\/127\.0\.0\.1:3100\/settings\/confirm\?token=\w+/.exec(confirmation!.message.text)![0];
     await page.goto(link);
     await expect(page.getByRole("heading", { name: "Email confirmed" })).toBeVisible();
@@ -202,7 +225,7 @@ test.describe.serial("the product loop", () => {
     const titles = await page.getByRole("list", { name: "Recommendations" }).getByRole("heading", { level: 2 }).allTextContents();
     for (const title of [rejected, saved, applied]) expect(titles).not.toContain(title);
     await page.goto("/applications");
-    await expect(page.getByRole("region", { name: /Interviewing/ }).getByRole("link", { name: applied, exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: /Interview/ }).getByRole("link", { name: applied, exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: /Saved/ }).getByRole("link", { name: saved, exact: true })).toBeVisible();
   });
 

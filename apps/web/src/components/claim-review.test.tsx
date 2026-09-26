@@ -12,7 +12,7 @@ const claims: UnresolvedClaim[] = [
     id: "clm_1",
     kind: "domain",
     text: "Worked in payments at Acme Payments",
-    why: "inferred by JobHunt; confirm or reject",
+    why: "inferred by Narrow; confirm or reject",
     about: "Staff Software Engineer at Acme Payments",
     about_id: "exp_1",
     provenance: "inferred",
@@ -40,10 +40,10 @@ describe("ClaimReview", () => {
     const { container } = render(<ClaimReview claims={claims} total={2} decide={vi.fn(async () => ok)} />);
     expect(screen.getByText("2 claims need your review.")).toBeInTheDocument();
     const first = screen.getByText("Worked in payments at Acme Payments").closest("li")!;
-    expect(within(first).getByText(/Concluded by JobHunt/)).toBeInTheDocument();
+    expect(within(first).getByText("Inferred by Narrow")).toBeInTheDocument();
     expect(within(first).getByText("Acme Payments")).toBeInTheDocument();
     expect(within(first).getByText("Experience · ana_lima.md")).toBeInTheDocument();
-    expect(within(first).getByText(/Inferred by JobHunt; confirm or reject/)).toBeInTheDocument();
+    expect(within(first).getByText(/Inferred by Narrow; confirm or reject/)).toBeInTheDocument();
     expect(await violations(container)).toEqual([]);
   });
 

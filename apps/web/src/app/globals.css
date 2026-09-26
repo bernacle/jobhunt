@@ -1,113 +1,321 @@
 @import "tailwindcss";
 
 /*
- * Design tokens: the one place colors, type and spacing are decided.
- * BRU-305 (brand and design system) replaces these values; components use
- * only the semantic names below (bg-surface, text-muted, border-line, …).
- * Contrast: every text/background pair here meets WCAG AA (4.5:1) in both
- * themes; `muted` on `canvas` and `surface` is ≥ 5.5:1.
+ * Quiet Material v2, Narrow's visual system: the one place colors, type,
+ * radii, elevation and motion are decided. Components use only the
+ * semantic names mapped into Tailwind below (bg-ground, text-fg-muted,
+ * border-line-subtle, text-title-l, …), never raw values.
+ *
+ * Hierarchy comes from type size, ink and spacing, not containers. At most
+ * one raised surface per screen (Today's lead, the decision brief). Colour
+ * is information: neutrals carry nearly everything; mint marks trust and
+ * focus, sand a real caution. Nothing above 8px radius; borders are 1px.
+ *
+ * Each role is defined once, as light-dark(light, dark). The theme follows
+ * the system; `data-theme="light" | "dark"` on <html> (Settings →
+ * Appearance) pins it. Every text/background pair meets WCAG AA in both.
  */
 :root {
-  --canvas: #f7f5f0;
-  --surface: #ffffff;
-  --sunken: #efece5;
-  --ink: #1d1c1a;
-  --muted: #5c574f;
-  --faint: #6f6a61;
-  --line: #e2ddd3;
-  --line-strong: #c9c2b5;
-  --accent: #245347;
-  --accent-ink: #ffffff;
-  --accent-soft: #e5efe9;
-  --caution: #7a4d00;
-  --caution-soft: #fbf1dc;
-  --negative: #9a2a2a;
-  --negative-soft: #f9e6e3;
-  --focus: #1f5fbf;
-  --learned: #f1eee6;
+  color-scheme: light dark;
+
+  /* Surfaces */
+  --nr-bg: light-dark(#f7f7f8, #0c0d0e);
+  --nr-bg-hover: light-dark(#f0f1f2, #101113);
+  --nr-surface-raised: light-dark(#ffffff, #121315);
+  --nr-surface-overlay: light-dark(#ffffff, #17181b);
+  --nr-surface-inset: light-dark(#f0f1f2, #0a0b0c);
+  --nr-surface-selected: light-dark(#e9eaec, #17181b);
+  --nr-overlay-hover: light-dark(#f0f1f2, #1d1f22);
+  /* Borders, always 1px */
+  --nr-border-subtle: light-dark(rgb(18 19 21 / 7%), rgb(255 255 255 / 6%));
+  --nr-border-default: light-dark(rgb(18 19 21 / 12%), rgb(255 255 255 / 10%));
+  --nr-border-strong: light-dark(rgb(18 19 21 / 20%), rgb(255 255 255 / 16%));
+  --nr-border-raised: light-dark(rgb(18 19 21 / 8%), rgb(255 255 255 / 7%));
+  /* Ink */
+  --nr-fg-primary: light-dark(#121315, #eceef0);
+  --nr-fg-body: light-dark(#25272b, #dfe1e4);
+  --nr-fg-secondary: light-dark(#50545a, #a3a7ad);
+  --nr-fg-muted: light-dark(#666b72, #878c92);
+  --nr-fg-disabled: light-dark(#a3a7ad, #5f636a);
+  --nr-fg-inverse: light-dark(#ffffff, #0c0d0e);
+  /* Accent (trust, focus) and status */
+  --nr-accent: light-dark(#3a7564, #8cc7b2);
+  --nr-accent-hover: light-dark(#28574a, #a8d7c6);
+  --nr-accent-subtle: light-dark(#e0f1ea, rgb(140 199 178 / 10%));
+  --nr-focus: light-dark(#4f9480, #8cc7b2);
+  --nr-success: light-dark(#4a6b36, #a6c48f);
+  --nr-warning: light-dark(#7a6232, #cbb58e);
+  --nr-warning-subtle: light-dark(#f4ecdd, rgb(203 181 142 / 8%));
+  --nr-danger: light-dark(#9a4239, #e0948c);
+  --nr-danger-subtle: light-dark(#f8e3e0, rgb(224 148 140 / 10%));
+  --nr-info: light-dark(#3f5f8f, #9fb5d4);
+  /* Trust and uncertainty */
+  --nr-verified: light-dark(#3a7564, #8cc7b2);
+  --nr-verified-aging: light-dark(#666b72, #878c92);
+  --nr-uncertain: light-dark(#50545a, #a3a7ad);
+  --nr-uncertain-line: light-dark(#8f949a, #787d83);
+  --nr-missing: light-dark(#666b72, #878c92);
+  /* Primary action: ink, not accent */
+  --nr-action-primary: light-dark(#121315, #eceef0);
+  --nr-action-primary-hover: light-dark(#25272b, #ffffff);
+  --nr-action-primary-pressed: light-dark(#2e3035, #c9ccd0);
+  /* Elevation: raised is barely there; overlays carry the one real shadow */
+  --nr-shadow-raised: 0 1px 2px light-dark(rgb(18 19 21 / 4%), transparent),
+    inset 0 1px 0 light-dark(transparent, rgb(255 255 255 / 3%));
+  --nr-shadow-overlay: 0 0 0 1px light-dark(rgb(18 19 21 / 8%), rgb(255 255 255 / 8%)),
+    0 12px 32px -8px light-dark(rgb(18 19 21 / 16%), rgb(0 0 0 / 60%));
+  --nr-scrim: light-dark(rgb(18 19 21 / 32%), rgb(6 7 8 / 64%));
+  /* Brand mark: always ink on ground */
+  --nr-mark: var(--nr-fg-primary);
+
+  /* Motion: ease-out, no springs */
+  --nr-ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --nr-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --canvas: #141311;
-    --surface: #1c1b18;
-    --sunken: #23211e;
-    --ink: #ece8e0;
-    --muted: #b1aa9e;
-    --faint: #a39c90;
-    --line: #34312c;
-    --line-strong: #4a463f;
-    --accent: #8cc7b2;
-    --accent-ink: #10231d;
-    --accent-soft: #1f2f29;
-    --caution: #e8bf6f;
-    --caution-soft: #2d2415;
-    --negative: #f0a19a;
-    --negative-soft: #331c1a;
-    --focus: #8ab4ff;
-    --learned: #211f1b;
-    color-scheme: dark;
+@theme inline {
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --color-ground: var(--nr-bg);
+  --color-ground-hover: var(--nr-bg-hover);
+  --color-raised: var(--nr-surface-raised);
+  --color-overlay: var(--nr-surface-overlay);
+  --color-inset: var(--nr-surface-inset);
+  --color-selected: var(--nr-surface-selected);
+  --color-overlay-hover: var(--nr-overlay-hover);
+
+  --color-line-subtle: var(--nr-border-subtle);
+  --color-line: var(--nr-border-default);
+  --color-line-strong: var(--nr-border-strong);
+  --color-line-raised: var(--nr-border-raised);
+
+  --color-fg: var(--nr-fg-primary);
+  --color-fg-body: var(--nr-fg-body);
+  --color-fg-secondary: var(--nr-fg-secondary);
+  --color-fg-muted: var(--nr-fg-muted);
+  --color-fg-disabled: var(--nr-fg-disabled);
+  --color-fg-inverse: var(--nr-fg-inverse);
+
+  --color-accent: var(--nr-accent);
+  --color-accent-hover: var(--nr-accent-hover);
+  --color-accent-subtle: var(--nr-accent-subtle);
+  --color-success: var(--nr-success);
+  --color-warning: var(--nr-warning);
+  --color-warning-subtle: var(--nr-warning-subtle);
+  --color-danger: var(--nr-danger);
+  --color-danger-subtle: var(--nr-danger-subtle);
+  --color-info: var(--nr-info);
+  --color-verified: var(--nr-verified);
+  --color-verified-aging: var(--nr-verified-aging);
+  --color-uncertain: var(--nr-uncertain);
+  --color-uncertain-line: var(--nr-uncertain-line);
+  --color-missing: var(--nr-missing);
+
+  --color-action: var(--nr-action-primary);
+  --color-action-hover: var(--nr-action-primary-hover);
+  --color-action-pressed: var(--nr-action-primary-pressed);
+
+  /* One sans for what a person reads, one mono for what a machine measured. */
+  --font-sans: "Instrument Sans Variable", "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Type scale: size, line height, tracking and weight together. */
+  --text-display-xl: 64px;
+  --text-display-xl--line-height: 1.02;
+  --text-display-xl--letter-spacing: -0.035em;
+  --text-display-xl--font-weight: 600;
+  --text-display-l: 48px;
+  --text-display-l--line-height: 1.05;
+  --text-display-l--letter-spacing: -0.03em;
+  --text-display-l--font-weight: 600;
+  /* Opportunity title, caught up */
+  --text-display-m: 34px;
+  --text-display-m--line-height: 1.12;
+  --text-display-m--letter-spacing: -0.025em;
+  --text-display-m--font-weight: 600;
+  /* Page titles */
+  --text-heading-l: 28px;
+  --text-heading-l--line-height: 1.15;
+  --text-heading-l--letter-spacing: -0.02em;
+  --text-heading-l--font-weight: 600;
+  /* Section and dialog titles */
+  --text-heading-m: 20px;
+  --text-heading-m--line-height: 1.3;
+  --text-heading-m--letter-spacing: -0.015em;
+  --text-heading-m--font-weight: 600;
+  /* The lead recommendation's role */
+  --text-title-l: 26px;
+  --text-title-l--line-height: 1.2;
+  --text-title-l--letter-spacing: -0.02em;
+  --text-title-l--font-weight: 600;
+  /* Peer roles, row and group titles */
+  --text-title-m: 16px;
+  --text-title-m--line-height: 1.3;
+  --text-title-m--letter-spacing: -0.01em;
+  --text-title-m--font-weight: 600;
+  /* The decision brief's verdict */
+  --text-lede: 19px;
+  --text-lede--line-height: 1.5;
+  --text-lede--letter-spacing: -0.01em;
+  --text-lede--font-weight: 500;
+  /* Detail reasoning */
+  --text-body-l: 16px;
+  --text-body-l--line-height: 1.65;
+  /* Card reasoning */
+  --text-body-m: 15px;
+  --text-body-m--line-height: 1.6;
+  /* Considerations, facts, forms */
+  --text-body-s: 14px;
+  --text-body-s--line-height: 1.5;
+  /* Rows, peer reasoning */
+  --text-row: 13.5px;
+  --text-row--line-height: 1.5;
+  /* Buttons, nav, tabs, inputs */
+  --text-ui-m: 13px;
+  --text-ui-m--line-height: 1.4;
+  --text-ui-m--font-weight: 500;
+  /* Small buttons, company line */
+  --text-ui-s: 12.5px;
+  --text-ui-s--line-height: 1.4;
+  --text-ui-s--font-weight: 500;
+  /* Section labels */
+  --text-label: 12px;
+  --text-label--line-height: 1.3;
+  --text-label--font-weight: 500;
+  /* Help text, notes */
+  --text-caption: 12px;
+  --text-caption--line-height: 1.5;
+  /* Timestamps, ages, counts (Geist Mono) */
+  --text-mono-s: 11.5px;
+  --text-mono-s--line-height: 1.4;
+  --text-mono-xs: 11px;
+  --text-mono-xs--line-height: 1.4;
+  --text-mono-xs--letter-spacing: 0.01em;
+
+  --shadow-raised: var(--nr-shadow-raised);
+  --shadow-overlay: var(--nr-shadow-overlay);
+
+  --ease-out: var(--nr-ease-out);
+  --ease-in-out: var(--nr-ease-in-out);
+}
+
+@layer base {
+  html {
+    background: var(--nr-bg);
+    color: var(--nr-fg-primary);
+    -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  ::selection {
+    background: var(--nr-accent-subtle);
+  }
+
+  /* Focus: a 1.5px mint ring, keyboard only. An outline (not a shadow) so
+   * it also shows in forced-colors mode. */
+  :focus {
+    outline: none;
+  }
+
+  :focus-visible {
+    outline: 1.5px solid var(--nr-focus);
+    outline-offset: 2px;
+  }
+
+  dialog::backdrop {
+    background: var(--nr-scrim);
   }
 }
 
-@theme inline {
-  --color-canvas: var(--canvas);
-  --color-surface: var(--surface);
-  --color-sunken: var(--sunken);
-  --color-ink: var(--ink);
-  --color-muted: var(--muted);
-  --color-faint: var(--faint);
-  --color-line: var(--line);
-  --color-line-strong: var(--line-strong);
-  --color-accent: var(--accent);
-  --color-accent-ink: var(--accent-ink);
-  --color-accent-soft: var(--accent-soft);
-  --color-caution: var(--caution);
-  --color-caution-soft: var(--caution-soft);
-  --color-negative: var(--negative);
-  --color-negative-soft: var(--negative-soft);
-  --color-learned: var(--learned);
-  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Charter, "Bitstream Charter", Georgia, ui-serif, serif;
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+@utility nr-tnum {
+  font-variant-numeric: tabular-nums;
 }
 
-html {
-  background: var(--canvas);
-  color: var(--ink);
-  -webkit-text-size-adjust: 100%;
-  text-rendering: optimizeLegibility;
-}
-
-body {
-  font-family: var(--font-sans);
-  line-height: 1.55;
-}
-
-:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-::selection {
-  background: var(--accent-soft);
-}
-
-a {
+/* An inferred or unresolved value: less ink and a dotted underline, never
+ * a warning colour. */
+@utility nr-inferred {
+  color: var(--nr-uncertain);
+  text-decoration: underline dotted var(--nr-uncertain-line);
+  text-decoration-thickness: 1px;
   text-underline-offset: 3px;
+}
+
+/* Native select, with a quiet chevron that reads in both themes. */
+@utility nr-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23878c92' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+  background-size: 10px 6px;
+}
+
+@utility nr-skeleton {
+  animation: nr-pulse 1.6s var(--nr-ease-in-out) infinite;
+}
+
+@keyframes nr-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes nr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes nr-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes nr-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
-}
-
-dialog::backdrop {
-  background: rgb(20 19 17 / 45%);
 }

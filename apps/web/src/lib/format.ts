@@ -50,7 +50,7 @@ const AUTHORITY: Record<string, string> = {
   employer_configured_ats: "the employer's job board",
   trusted_source: "a trusted source",
   secondary_source: "a secondary source",
-  unknown: "a source JobHunt couldn't trace to the employer",
+  unknown: "a source Narrow couldn't trace to the employer",
 };
 
 export function authorityLabel(authority: string | null | undefined): string {
@@ -102,6 +102,46 @@ export function compensationLine(c: CompensationView): { text: string; known: bo
   }
   if (c.status === "published" && c.summary) return { text: c.summary, known: true };
   return { text: c.status === "not_published" ? "Pay not published" : "Pay unknown", known: false };
+}
+
+/**
+ * Eligibility as a short fact, with how settled it is. Only `eligible` is
+ * resolved; a condition or an unclear reading must never look confirmed.
+ */
+export type EligibilityKind = "resolved" | "conditional" | "unclear" | "ineligible" | "unchecked";
+
+export function eligibilityFact(e: EligibilityBrief): { label: string; detail: string; kind: EligibilityKind } {
+  const detail = lower(e.headline);
+  switch (e.status) {
+    case "eligible":
+      return { label: "Eligible", detail, kind: "resolved" };
+    case "conditional":
+      return { label: "Eligible on a condition", detail, kind: "conditional" };
+    case "uncertain":
+      return { label: "Eligibility unclear", detail, kind: "unclear" };
+    case "ineligible":
+      return { label: "Probably not eligible", detail, kind: "ineligible" };
+    default:
+      return { label: "Eligibility not checked yet", detail: "", kind: "unchecked" };
+  }
+}
+
+/**
+ * "Remote" with nothing saying where from: the listing doesn't settle
+ * where you can work from, so it must not read as resolved.
+ */
+export function unscopedRemote(locations: string[] | undefined, workplace?: string | null): boolean {
+  const places = (locations ?? []).map((l) => l.trim().toLowerCase()).filter(Boolean);
+  if (places.length === 0) return workplace === "remote";
+  return places.every((p) => p === "remote");
+}
+
+/** `greenhouse:stripe` → "Greenhouse · stripe". */
+export function sourceLabel(source: string | null | undefined): string {
+  if (!source) return "";
+  const [kind, instance] = source.split(":", 2);
+  const name = kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : source;
+  return instance ? `${name} · ${instance}` : name;
 }
 
 export function placeLine(locations: string[] | undefined, workplace?: string | null): string {

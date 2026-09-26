@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 
 import { tellPreferences, uploadResume } from "@/app/actions";
 import { StatementForm } from "@/components/preferences";
@@ -7,6 +8,28 @@ import { LinkButton, PageHeader } from "@/components/ui";
 import { api, loadOrNoProfile } from "@/lib/api";
 
 export const metadata: Metadata = { title: "Welcome" };
+
+function Step({ n, title, done, description, children }: { n: number; title: string; done?: boolean; description: string; children: ReactNode }) {
+  return (
+    <li className="grid gap-x-6 border-t border-line-subtle py-7 sm:grid-cols-[40px_minmax(0,1fr)]">
+      <span aria-hidden="true" className="pt-1 font-mono text-mono-s text-fg-muted">
+        {String(n).padStart(2, "0")}
+      </span>
+      <div className="min-w-0">
+        <h2 id={`step-${n}`} className="flex items-baseline gap-3 text-title-m">
+          {title}
+          {done && (
+            <span className="text-[12px] font-medium text-accent">
+              <span aria-hidden="true">✓ </span>Done
+            </span>
+          )}
+        </h2>
+        <p className="mt-1 mb-4 text-[13px] text-fg-muted">{description}</p>
+        {children}
+      </div>
+    </li>
+  );
+}
 
 /**
  * Onboarding, in three steps: a resume, a sentence about what you want,
@@ -17,40 +40,24 @@ export default async function Welcome() {
   const hasProfile = profile !== "no_profile";
   const hasPreferences = hasProfile && profile.preferences.length > 0;
   return (
-    <div>
-      <PageHeader title="Let's find the few jobs worth your time">
-        Two quick steps. JobHunt does the searching from there.
-      </PageHeader>
-      <ol className="space-y-10">
-        <li aria-labelledby="step-1">
-          <h2 id="step-1" className="font-serif text-xl">
-            1. Your resume {hasProfile && <span className="text-base text-accent">— done</span>}
-          </h2>
-          <p className="mb-4 mt-1 text-sm text-muted">So JobHunt knows what you&apos;ve done and which jobs you can take.</p>
+    <div className="max-w-[640px]">
+      <PageHeader title="Let's find the few jobs worth your time">Two quick steps. Narrow does the searching from there.</PageHeader>
+      <ol>
+        <Step n={1} title="Your resume" done={hasProfile} description="So Narrow knows what you've done and which jobs you can take.">
           <ResumeUpload action={uploadResume} hasResume={hasProfile} />
-        </li>
-        <li aria-labelledby="step-2">
-          <h2 id="step-2" className="font-serif text-xl">
-            2. What you want {hasPreferences && <span className="text-base text-accent">— done</span>}
-          </h2>
-          <p className="mb-4 mt-1 text-sm text-muted">A sentence is enough. You can refine it any time.</p>
+        </Step>
+        <Step n={2} title="What you want" done={hasPreferences} description="A sentence is enough. You can refine it any time in Preferences.">
           <StatementForm action={tellPreferences} />
-        </li>
-        <li aria-labelledby="step-3">
-          <h2 id="step-3" className="font-serif text-xl">
-            3. See what&apos;s worth your time
-          </h2>
-          <p className="mb-4 mt-1 text-sm text-muted">
-            JobHunt checks job boards continuously and shows only the few openings that fit.
-          </p>
+        </Step>
+        <Step n={3} title="See what's worth your time" description="Narrow keeps checking job boards and shows only the few openings that fit.">
           {hasProfile ? (
-            <LinkButton href="/today" variant="primary">
+            <LinkButton href="/today" variant="primary" className="max-sm:h-11">
               Go to Today
             </LinkButton>
           ) : (
-            <p className="text-sm text-muted">Import a resume first.</p>
+            <p className="text-[14px] text-fg-muted">Import a resume first.</p>
           )}
-        </li>
+        </Step>
       </ol>
     </div>
   );
