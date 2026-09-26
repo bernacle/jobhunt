@@ -1,35 +1,177 @@
-import type { CompensationView, EligibilityBrief, VerificationBrief } from "@/lib/api-types";
-import { compensationLine, eligibilityLine, verificationLine } from "@/lib/format";
+import type { ReactNode } from "react";
+
+import type { CompensationView, EligibilityBrief, FitTier, VerificationBrief } from "@/lib/api-types";
+import { TIER_LABEL, compensationLine, eligibilityFact, placeLine, unscopedRemote, verificationLine } from "@/lib/format";
+
+/*
+ * Verification and uncertainty are part of the brand. Facts carry a source
+ * and a time. A verified fact gets the mint check; an inferred or
+ * unresolved one gets less ink and a dotted underline (never a warning
+ * colour); an unknown is stated plainly in muted ink; only a real caution
+ * gets sand. Meaning never rests on colour alone: shapes and words differ.
+ */
+
+/** The coarse fit tier, in words. Never a percentage or a score. */
+export function TierLabel({ tier, className = "" }: { tier: FitTier; className?: string }) {
+  return (
+    <span className={`text-label whitespace-nowrap ${tier === "strong_fit" ? "text-fg" : "text-fg-secondary"} ${className}`}>
+      {TIER_LABEL[tier]}
+    </span>
+  );
+}
+
+/** The company's initial, as a quiet tile (never a logo we don't have). */
+export function CompanyTile({ name }: { name: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="grid size-7 shrink-0 place-items-center rounded-sm border border-line-subtle bg-overlay-hover text-[12px] font-semibold text-fg-secondary"
+    >
+      {(name.trim()[0] ?? "?").toUpperCase()}
+    </span>
+  );
+}
+
+/** First-party verified: the one place the mint check appears. */
+export function VerifiedCheck({ aging = false }: { aging?: boolean }) {
+  return (
+    <span className={aging ? "text-verified-aging" : "text-verified"}>
+      <span aria-hidden="true">✓</span>
+      <span className="sr-only"> verified</span>
+    </span>
+  );
+}
+
+/** A value read or estimated, not confirmed: less ink, dotted underline. */
+export function Inferred({ children }: { children: ReactNode }) {
+  return <span className="nr-inferred">{children}</span>;
+}
 
 /**
- * Pay, eligibility and verification, in plain sentences. Visible but
- * quiet: conditions and unknowns are marked, everything else is text.
+ * How current the listing is, in mono: "✓ Verified 18 min ago on the
+ * employer's job board". Aging checks lose the mint; stale, failed and
+ * unverified listings lose the check.
  */
-export function TrustLines({
-  compensation,
-  eligibility,
-  verification,
-  now,
-}: {
-  compensation: CompensationView;
-  eligibility: EligibilityBrief;
-  verification: VerificationBrief;
-  now?: Date;
-}) {
-  const pay = compensationLine(compensation);
-  const elig = eligibilityLine(eligibility);
-  const verified = verificationLine(verification, now);
+export function VerificationStamp({ verification, now, className = "" }: { verification: VerificationBrief; now?: Date; className?: string }) {
+  const verified = verification.state === "verified_active" && verification.trusted;
+  const freshness = verification.freshness ?? "fresh";
   return (
-    <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-[auto_1fr]">
-      <dt className="text-muted">Pay</dt>
-      <dd className={pay.known ? "" : "text-muted"}>
-        {pay.text}
-        {pay.known && compensation.verified && <span className="text-muted"> · verified</span>}
-      </dd>
-      <dt className="text-muted">Eligibility</dt>
-      <dd className={elig.attention ? "text-caution" : ""}>{elig.text}</dd>
-      <dt className="text-muted">Listing</dt>
-      <dd className={verification.trusted ? "" : "text-caution"}>{verified}</dd>
-    </dl>
+    <p className={`font-mono text-mono-s text-fg-muted ${className}`}>
+      {verified && freshness !== "stale" && (
+        <>
+          <VerifiedCheck aging={freshness === "aging"} />{" "}
+        </>
+      )}
+      {verificationLine(verification, now)}
+    </p>
+  );
+}
+
+/** Eligibility as a fact: only a pass reads as settled. */
+export function EligibilityFact({ eligibility }: { eligibility: EligibilityBrief }) {
+  const fact = eligibilityFact(eligibility);
+  const detail = fact.detail && <span className="text-fg-secondary"> · {fact.detail}</span>;
+  switch (fact.kind) {
+    case "resolved":
+      return (
+        <span>
+          {fact.label}
+          {detail}
+        </span>
+      );
+    case "conditional":
+    case "unclear":
+      return (
+        <span>
+          <Inferred>{fact.label}</Inferred>
+          {detail}
+        </span>
+      );
+    case "ineligible":
+      return (
+        <span className="text-warning">
+          {fact.label}
+          {fact.detail && <> · {fact.detail}</>}
+        </span>
+      );
+    default:
+      return <span className="text-missing">{fact.label}</span>;
+  }
+}
+
+/** Pay: verified at the source, as listed, or plainly not published. */
+export function PayFact({ compensation }: { compensation: CompensationView }) {
+  const pay = compensationLine(compensation);
+  if (!pay.known) return <span className="text-missing">{pay.text}</span>;
+  if (compensation.status === "published" && compensation.ranges.length > 0 && compensation.verified) {
+    return (
+      <span className="nr-tnum">
+        {pay.text} <VerifiedCheck />
+      </span>
+    );
+  }
+  return <span className="nr-tnum text-fg-secondary">{pay.text}</span>;
+}
+
+/** Where: "Remote" without a scope stays visibly unresolved. */
+export function PlaceFact({ locations, workplace }: { locations?: string[]; workplace?: string | null }) {
+  if (unscopedRemote(locations, workplace)) return <Inferred>Remote · region not stated</Inferred>;
+  const place = placeLine(locations, workplace);
+  return place ? <span>{place}</span> : <span className="text-missing">Location not stated</span>;
+}
+
+/**
+ * A row of short facts divided by hairlines. On phones the facts stack,
+ * one per line, so none is cut off mid-sentence.
+ */
+export function FactRow({ items, className = "", size = "md" }: { items: ReactNode[]; className?: string; size?: "md" | "sm" }) {
+  const list = items.filter(Boolean);
+  if (list.length === 0) return null;
+  return (
+    <ul
+      role="list"
+      className={`flex flex-wrap items-baseline gap-y-1.5 text-fg nr-tnum max-sm:flex-col max-sm:gap-y-1 ${
+        size === "md" ? "text-[14px]" : "text-[13.5px]"
+      } ${className}`}
+    >
+      {list.map((item, i) => (
+        <li key={i} className="flex items-baseline">
+          {i > 0 && <span aria-hidden="true" className="mx-3.5 h-3.5 w-px self-center bg-fg/12 max-sm:hidden" />}
+          {item}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export type ConsiderationKind = "caution" | "unclear" | "missing";
+
+const MARKER: Record<ConsiderationKind, string> = {
+  caution: "bg-warning",
+  unclear: "border border-fg-secondary",
+  missing: "border border-fg-muted",
+};
+
+// Read before the line by screen readers; sighted readers get the shape.
+const SPOKEN: Record<ConsiderationKind, string> = {
+  caution: "Caution: ",
+  unclear: "Unclear: ",
+  missing: "Not stated: ",
+};
+
+/**
+ * One thing to consider. A caution from a source is a sand square; an
+ * unclear reading a hollow square in secondary ink; something the posting
+ * doesn't say a hollow square in muted ink.
+ */
+export function Consideration({ kind, children, size = "md" }: { kind: ConsiderationKind; children: ReactNode; size?: "md" | "sm" }) {
+  return (
+    <li className={`flex gap-2.5 leading-normal ${size === "md" ? "text-[14px]" : "text-[13.5px]"} ${kind === "missing" ? "text-fg-secondary" : "text-fg-body"}`}>
+      <span aria-hidden="true" className={`mt-[0.6em] size-[5px] shrink-0 rounded-[1px] ${MARKER[kind]}`} />
+      <span>
+        <span className="sr-only">{SPOKEN[kind]}</span>
+        {children}
+      </span>
+    </li>
   );
 }

@@ -12,9 +12,10 @@ beforeAll(() => {
 describe("the session cookie", () => {
   it("round-trips, and refuses anything tampered with", async () => {
     const { openSession, sealSession } = await import("./session");
-    const session = { accessToken: "at", refreshToken: "rt", expiresAt: 1_900_000_000, mode: "oidc" as const };
+    const session = { accessToken: "access-token-value", refreshToken: "refresh-token-value", expiresAt: 1_900_000_000, mode: "oidc" as const };
     const sealed = await sealSession(session);
-    expect(sealed).not.toContain("at");
+    expect(sealed).not.toContain("access-token-value");
+    expect(sealed).not.toContain("refresh-token-value");
     expect(await openSession(sealed)).toEqual(session);
     const tampered = `${sealed.slice(0, -4)}AAAA`;
     expect(await openSession(tampered)).toBeNull();

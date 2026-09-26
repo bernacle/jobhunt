@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { feedView } from "../../test/fixtures";
 import { violations } from "../../test/axe";
 import { CaughtUp } from "./caught-up";
-import { FeedSummary } from "./feed-summary";
+import { DiscoveryStatus, FeedSummary } from "./feed-summary";
 
 const now = new Date("2026-09-25T12:00:00Z");
 
@@ -23,6 +23,13 @@ describe("FeedSummary", () => {
   });
 });
 
+describe("DiscoveryStatus", () => {
+  it("says when job boards were last read and will be next", () => {
+    render(<DiscoveryStatus discovery={feedView().discovery} now={now} />);
+    expect(screen.getByText("Checked 20 min ago · next check in about 30 min")).toBeInTheDocument();
+  });
+});
+
 describe("CaughtUp", () => {
   it("says the person is caught up, never '0 jobs found'", async () => {
     const feed = feedView({ items: [], caught_up: true });
@@ -35,7 +42,7 @@ describe("CaughtUp", () => {
     expect(await violations(container)).toEqual([]);
   });
 
-  it("before the first discovery, says JobHunt is still gathering", () => {
+  it("before the first discovery, says Narrow is still gathering", () => {
     const feed = feedView({
       items: [],
       caught_up: true,
@@ -44,7 +51,7 @@ describe("CaughtUp", () => {
       discovery: { mode: "background" },
     });
     render(<CaughtUp feed={feed} now={now} />);
-    expect(screen.getByRole("heading", { name: "JobHunt is still gathering jobs." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Narrow is still gathering jobs." })).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 });

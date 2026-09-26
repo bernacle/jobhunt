@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { ago, compensationLine, eligibilityLine, inAbout, placeLine, verificationLine } from "./format";
+import {
+  ago,
+  compensationLine,
+  eligibilityFact,
+  eligibilityLine,
+  inAbout,
+  placeLine,
+  sourceLabel,
+  unscopedRemote,
+  verificationLine,
+} from "./format";
 
 const now = new Date("2026-09-25T12:00:00Z");
 
@@ -41,5 +51,25 @@ describe("format", () => {
     expect(placeLine(["Lisbon, Portugal"], "hybrid")).toBe("Lisbon, Portugal · hybrid");
     expect(placeLine(["Remote - Worldwide"], "remote")).toBe("Remote - Worldwide");
     expect(placeLine([], "remote")).toBe("remote");
+  });
+
+  it("never reads a condition or an unclear eligibility as settled", () => {
+    expect(eligibilityFact({ status: "eligible", headline: "Remote from anywhere" })).toEqual({ label: "Eligible", detail: "remote from anywhere", kind: "resolved" });
+    expect(eligibilityFact({ status: "conditional", headline: "If you relocate" }).kind).toBe("conditional");
+    expect(eligibilityFact({ status: "uncertain", headline: "The posting doesn't say" }).label).toBe("Eligibility unclear");
+    expect(eligibilityFact({ status: "not_checked", headline: "" }).kind).toBe("unchecked");
+  });
+
+  it("flags remote without a scope", () => {
+    expect(unscopedRemote(["Remote"], "remote")).toBe(true);
+    expect(unscopedRemote([], "remote")).toBe(true);
+    expect(unscopedRemote(["Remote - Worldwide"], "remote")).toBe(false);
+    expect(unscopedRemote(["Remote", "Lisbon, Portugal"], "remote")).toBe(false);
+    expect(unscopedRemote([], "onsite")).toBe(false);
+  });
+
+  it("names a source readably", () => {
+    expect(sourceLabel("greenhouse:stripe")).toBe("Greenhouse · stripe");
+    expect(sourceLabel("lever")).toBe("Lever");
   });
 });

@@ -6,7 +6,7 @@ import type { ActionResult } from "@/app/actions";
 import type { NotificationSettingsView } from "@/lib/api-types";
 import { ago } from "@/lib/format";
 
-import { Button, Notice } from "./ui";
+import { Button, Notice, inlineActionClass, inputClass, labelClass } from "./ui";
 
 type Save = (request: {
   email_enabled?: boolean;
@@ -15,9 +15,13 @@ type Save = (request: {
   resend_confirmation?: boolean;
 }) => Promise<ActionResult<NotificationSettingsView>>;
 
+const choice =
+  "size-4 shrink-0 cursor-pointer accent-[var(--nr-fg-primary)] disabled:cursor-default";
+
 /**
  * Email only when something is probably worth interrupting you for: new
- * strong matches, never "nothing found" and never a digest of maybes.
+ * strong matches, never "nothing found" and never a digest of maybes. No
+ * push alerts, no reminders to come back.
  */
 export function NotificationSettings({
   initial,
@@ -32,7 +36,7 @@ export function NotificationSettings({
   const [email, setEmail] = useState(initial.email ?? suggestedEmail ?? "");
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
-  const ids = { toggle: useId(), email: useId(), help: useId() };
+  const ids = { toggle: useId(), toggleHelp: useId(), email: useId(), help: useId() };
 
   const apply = (request: Parameters<Save>[0], success?: string) => {
     // Toggles and choices show at once; the API's answer replaces them, and
@@ -57,19 +61,20 @@ export function NotificationSettings({
   };
 
   if (!settings.available) {
-    return <Notice title="Email isn't available on this JobHunt service yet.">Everything still shows up on Today.</Notice>;
+    return <Notice title="Email isn't available on this Narrow service yet.">Everything still shows up on Today.</Notice>;
   }
 
   const addressChanged = email.trim() !== (settings.email ?? "");
   return (
-    <div className="space-y-5">
-      <div className="flex items-start gap-3">
+    <div>
+      <div className="flex items-start gap-3 border-t border-line-subtle py-3.5">
         <input
           id={ids.toggle}
           type="checkbox"
-          className="mt-1 size-4 accent-[var(--accent)]"
+          className={`${choice} mt-0.5`}
           checked={settings.email_enabled}
           disabled={pending}
+          aria-describedby={ids.toggleHelp}
           onChange={(e) =>
             apply(
               e.target.checked && addressChanged && email.trim()
@@ -80,49 +85,51 @@ export function NotificationSettings({
           }
         />
         <div>
-          <label htmlFor={ids.toggle} className="font-medium">
+          <label htmlFor={ids.toggle} className="cursor-pointer text-[14px] font-medium">
             Email me about strong new matches
           </label>
-          <p className="text-sm text-muted">
-            Only strong fits you haven&apos;t seen, verified at the employer, at most {settings.max_items} per email. No email
-            when there&apos;s nothing worth it.
+          <p id={ids.toggleHelp} className="mt-0.5 text-[13px] leading-normal text-fg-secondary">
+            Only strong fits you haven&apos;t seen, verified at the employer, at most {settings.max_items} per email. No email when
+            there&apos;s nothing worth it.
           </p>
         </div>
       </div>
 
-      <fieldset className="space-y-1.5" disabled={pending}>
-        <legend className="text-sm font-medium">How often, at most</legend>
-        {[
-          [
-            "immediate",
-            settings.min_interval_hours > 0
-              ? `Soon after a match appears (at most one email every ${settings.min_interval_hours} hours)`
-              : "Soon after a match appears",
-          ],
-          ["daily", "At most once a day"],
-        ].map(([value, label]) => (
-          <label key={value} className="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              name="cadence"
-              value={value}
-              checked={settings.cadence === value}
-              onChange={() => apply({ cadence: value! }, "Saved.")}
-              className="accent-[var(--accent)]"
-            />
-            {label}
-          </label>
-        ))}
+      <fieldset className="border-t border-line-subtle py-3.5" disabled={pending}>
+        <legend className="float-left mb-2 w-full text-[13px] text-fg-muted">How often, at most</legend>
+        <div className="clear-both space-y-1">
+          {[
+            [
+              "immediate",
+              settings.min_interval_hours > 0
+                ? `Soon after a match appears (at most one email every ${settings.min_interval_hours} hours)`
+                : "Soon after a match appears",
+            ],
+            ["daily", "At most once a day"],
+          ].map(([value, label]) => (
+            <label key={value} className="flex min-h-8 cursor-pointer items-center gap-3 text-[14px] max-sm:min-h-11">
+              <input
+                type="radio"
+                name="cadence"
+                value={value}
+                checked={settings.cadence === value}
+                onChange={() => apply({ cadence: value! }, "Saved.")}
+                className={choice}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
       </fieldset>
 
       <form
-        className="space-y-1.5"
+        className="border-t border-line-subtle pt-3.5"
         onSubmit={(e) => {
           e.preventDefault();
           if (email.trim()) apply({ email: email.trim() }, "We sent a confirmation link. Nothing else is sent until you follow it.");
         }}
       >
-        <label htmlFor={ids.email} className="block text-sm font-medium">
+        <label htmlFor={ids.email} className={labelClass}>
           Send to
         </label>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -134,13 +141,13 @@ export function NotificationSettings({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             aria-describedby={ids.help}
-            className="flex-1 rounded-md border border-line-strong bg-surface px-3 py-2"
+            className={inputClass}
           />
-          <Button type="submit" disabled={pending || !addressChanged}>
+          <Button type="submit" disabled={pending || !addressChanged} className="h-9 shrink-0 max-sm:h-11">
             {settings.email ? "Change address" : "Use this address"}
           </Button>
         </div>
-        <p id={ids.help} className="text-sm text-muted">
+        <p id={ids.help} className="mt-1.5 text-caption text-fg-muted">
           {settings.email_status === "confirmed" && "Confirmed."}
           {settings.email_status === "unconfirmed" && (
             <>
@@ -148,7 +155,7 @@ export function NotificationSettings({
               {settings.confirmation_sent_at && ` ${ago(settings.confirmation_sent_at)}`}.{" "}
               <button
                 type="button"
-                className="underline"
+                className={`${inlineActionClass} text-[12px] underline underline-offset-2`}
                 disabled={pending}
                 onClick={() => apply({ resend_confirmation: true }, "Sent again.")}
               >
@@ -160,16 +167,22 @@ export function NotificationSettings({
         </p>
       </form>
 
-      <p aria-live="polite" className={`text-sm ${message?.tone === "error" ? "text-negative" : "text-muted"}`}>
+      <p aria-live="polite" className={`mt-3 text-[13px] ${message?.tone === "error" ? "text-danger" : "text-fg-secondary"}`}>
         {message?.text}
       </p>
+      <p className="mt-1 text-caption text-fg-muted">Narrow doesn&apos;t send push alerts or reminders to come back.</p>
 
       {settings.recent.length > 0 && (
-        <details className="text-sm">
-          <summary className="cursor-pointer text-muted">Recent emails</summary>
-          <ul className="mt-2 space-y-1">
+        <details className="group mt-3 text-[13px]">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 text-fg-secondary hover:text-fg max-sm:min-h-11">
+            <span aria-hidden="true" className="text-fg-muted transition-transform duration-[120ms] group-open:rotate-90">
+              ›
+            </span>
+            Recent emails
+          </summary>
+          <ul className="mt-2 space-y-1 font-mono text-mono-s text-fg-muted">
             {settings.recent.map((d) => (
-              <li key={d.id} className="text-muted">
+              <li key={d.id}>
                 {d.kind === "confirmation" ? "Address confirmation" : `${d.opportunities} ${d.opportunities === 1 ? "match" : "matches"}`} ·{" "}
                 {d.status} · {ago(d.sent_at ?? d.created_at)}
               </li>

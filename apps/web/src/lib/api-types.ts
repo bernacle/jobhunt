@@ -1010,6 +1010,11 @@ export interface FeedItem {
   team?: string | null;
   tier: FitTier;
   title: string;
+  /**
+   * The lines of `consider` about what the posting doesn't say
+   * (unknowns, not cautions); the others are caveats.
+   */
+  unknowns?: string[];
   verification: VerificationBrief;
   /**
    * Why it may be worth the person's time (up to 4; verification and
@@ -2142,6 +2147,11 @@ export interface ShortlistItem {
   team?: string | null;
   tier: FitTier;
   title: string;
+  /**
+   * The lines of `consider` about what the posting doesn't say
+   * (unknowns, not cautions); the others are caveats.
+   */
+  unknowns?: string[];
   verification: VerificationBrief;
   /**
    * Why it may be worth the person's time (up to 4; verification and

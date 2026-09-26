@@ -43,8 +43,15 @@ export function RefreshControls({
   }, [router, staleAfterMs, everyMs]);
 
   return (
-    <Button variant="quiet" onClick={() => startTransition(() => router.refresh())} disabled={pending}>
-      {pending ? "Checking…" : "Check again"}
+    <Button
+      variant="ghost"
+      size="sm"
+      className="-ml-3 max-sm:h-11"
+      onClick={() => startTransition(() => router.refresh())}
+      disabled={pending}
+      loading={pending}
+    >
+      {pending ? "Checking" : "Check again"}
     </Button>
   );
 }

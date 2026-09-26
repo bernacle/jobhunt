@@ -1,11 +1,21 @@
+import { PageHeader, Skeleton, SystemStatus } from "@/components/ui";
+
+/** The shape of Today while it loads: no spinner theatrics. */
 export default function Loading() {
   return (
-    <div aria-busy="true" aria-live="polite">
-      <h1 className="font-serif text-3xl leading-tight tracking-tight sm:text-4xl">Today</h1>
-      <p className="mt-6 text-muted">Looking at what&apos;s new for you…</p>
-      <div className="mt-6 space-y-3" aria-hidden="true">
-        <div className="h-5 w-2/3 rounded bg-sunken" />
-        <div className="h-5 w-1/2 rounded bg-sunken" />
+    <div aria-busy="true">
+      <PageHeader title="Today" />
+      <div className="-mt-5 mb-8 max-sm:-mt-3.5 max-sm:mb-5" aria-live="polite">
+        <SystemStatus>Loading today&apos;s list</SystemStatus>
+      </div>
+      <div className="flex flex-col gap-3">
+        <Skeleton />
+        <Skeleton />
+      </div>
+      <div className="mt-11">
+        <Skeleton variant="row" />
+        <Skeleton variant="row" />
+        <Skeleton variant="row" />
       </div>
     </div>
   );

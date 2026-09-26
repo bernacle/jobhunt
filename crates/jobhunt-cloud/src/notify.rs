@@ -250,7 +250,7 @@ pub fn render_recommendations(
     };
     let mut text = format!("{intro}\n");
     let mut html = format!(
-        "<div style=\"font-family:Georgia,serif;max-width:560px;color:#1c1b19;line-height:1.5\">\
+        "<div style=\"font-family:system-ui,sans-serif;max-width:560px;color:#1c1b19;line-height:1.5\">\
          <p style=\"font-size:16px\">{}</p>",
         escape(&intro)
     );
@@ -299,14 +299,14 @@ pub fn render_recommendations(
         html.push_str("</div>");
     }
     let footer = format!(
-        "You get this because email notifications are on in JobHunt. Turn them off or change \
+        "You get this because email notifications are on in Narrow. Turn them off or change \
          how often: {settings}"
     );
     text.push_str(&format!("\n—\n{footer}\n"));
     html.push_str(&format!(
         "<p style=\"border-top:1px solid #e4e0d8;padding-top:12px;color:#5f5a52;\
          font-family:system-ui,sans-serif;font-size:12px\">You get this because email \
-         notifications are on in JobHunt. <a href=\"{}\">Turn them off or change how often</a>.</p>\
+         notifications are on in Narrow. <a href=\"{}\">Turn them off or change how often</a>.</p>\
          </div>",
         escape(&settings)
     ));
@@ -324,13 +324,13 @@ pub fn render_recommendations(
 pub fn render_confirmation(from: &str, to: &str, web: &Url, token: &str) -> EmailMessage {
     let url = link(web, &format!("/settings/confirm?token={token}"));
     let text = format!(
-        "Confirm this address to get JobHunt notifications about strong new job matches:\n\n\
+        "Confirm this address to get Narrow notifications about strong new job matches:\n\n\
          {url}\n\nThe link works for 48 hours, while you are signed in. If you did not ask for \
          this, ignore it: nothing will be sent.\n"
     );
     let html = format!(
         "<div style=\"font-family:system-ui,sans-serif;max-width:520px;color:#1c1b19;line-height:1.5\">\
-         <p>Confirm this address to get JobHunt notifications about strong new job matches.</p>\
+         <p>Confirm this address to get Narrow notifications about strong new job matches.</p>\
          <p><a href=\"{0}\">Confirm the address</a></p>\
          <p style=\"color:#5f5a52;font-size:13px\">The link works for 48 hours, while you are \
          signed in. If you did not ask for this, ignore it: nothing will be sent.</p></div>",
@@ -339,7 +339,7 @@ pub fn render_confirmation(from: &str, to: &str, web: &Url, token: &str) -> Emai
     EmailMessage {
         from: from.to_owned(),
         to: to.to_owned(),
-        subject: "Confirm your email for JobHunt notifications".into(),
+        subject: "Confirm your email for Narrow notifications".into(),
         text,
         html,
         headers: Vec::new(),

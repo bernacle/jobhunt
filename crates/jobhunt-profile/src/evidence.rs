@@ -287,7 +287,7 @@ impl Standing {
             Self::Usable(UsableBecause::Confirmed) => "confirmed by you",
             Self::Usable(UsableBecause::UserEntered) => "entered by you",
             Self::Usable(UsableBecause::Grounded) => "quoted from your resume",
-            Self::NeedsReview(ReviewReason::Inferred) => "inferred by JobHunt; confirm or reject",
+            Self::NeedsReview(ReviewReason::Inferred) => "inferred by Narrow; confirm or reject",
             Self::NeedsReview(ReviewReason::Uncertain) => {
                 "read from your resume, but the reading is uncertain"
             }

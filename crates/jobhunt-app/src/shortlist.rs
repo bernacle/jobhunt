@@ -415,6 +415,10 @@ pub struct ShortlistItem {
     pub why: Vec<String>,
     /// What to consider: caveats, then unknowns (up to 3).
     pub consider: Vec<String>,
+    /// The lines of `consider` about what the posting doesn't say
+    /// (unknowns, not cautions); the others are caveats.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unknowns: Vec<String>,
     /// How many sources list it.
     pub sources: usize,
     /// The suggested next step, as a CLI command.
@@ -439,15 +443,16 @@ impl ShortlistItem {
             .map(|s| s.summary.as_str())
             .collect();
         let fresh = |line: &&String| !status_lines.contains(&line.as_str());
-        let consider: Vec<String> = r
+        let caveats = r.brief.caveats.iter().filter(fresh).take(2);
+        let unknowns: Vec<String> = r
             .brief
-            .caveats
+            .unknowns
             .iter()
             .filter(fresh)
-            .take(2)
-            .chain(r.brief.unknowns.iter().filter(fresh).take(1))
+            .take(1)
             .cloned()
             .collect();
+        let consider: Vec<String> = caveats.cloned().chain(unknowns.iter().cloned()).collect();
         let next_step = match &r.gate {
             Gate::VerifyFirst { .. } => format!("jobhunt verify {}", short_id(&id)),
             Gate::EligibilityUnclear { .. } => format!("jobhunt check {}", short_id(&id)),
@@ -491,6 +496,7 @@ impl ShortlistItem {
                 .cloned()
                 .collect(),
             consider,
+            unknowns,
             sources: entry.checked.verified.len(),
             next_step,
         }

@@ -10,7 +10,7 @@ export async function GET() {
     return new NextResponse(JSON.stringify(state, null, 2), {
       headers: {
         "content-type": "application/json",
-        "content-disposition": `attachment; filename="jobhunt-${date}.state.json"`,
+        "content-disposition": `attachment; filename="narrow-${date}.state.json"`,
         "cache-control": "no-store",
       },
     });
