@@ -276,12 +276,13 @@ const TERMS: &[(&str, Dimension, &str)] = &[
     ("scale up*", Dimension::CompanyTrait, "scaleup"),
     ("scaleup*", Dimension::CompanyTrait, "scaleup"),
     ("founder*", Dimension::CompanyTrait, "founder_led"),
+    // A company's size is not its teams' size; the explicit company
+    // phrases come first, so the generic "tiny" below can't take them.
+    ("tiny compan*", Dimension::CompanyTrait, "small_company"),
+    ("small compan*", Dimension::CompanyTrait, "small_company"),
     ("tiny team*", Dimension::CompanyTrait, "small_team"),
     ("tiny", Dimension::CompanyTrait, "small_team"),
     ("small team*", Dimension::CompanyTrait, "small_team"),
-    // A company's size is not its teams' size.
-    ("tiny compan*", Dimension::CompanyTrait, "small_company"),
-    ("small compan*", Dimension::CompanyTrait, "small_company"),
     ("big team*", Dimension::CompanyTrait, "large_team"),
     ("large team*", Dimension::CompanyTrait, "large_team"),
     ("consulting", Dimension::CompanyTrait, "consulting"),
@@ -586,10 +587,19 @@ mod tests {
             ["prefer product:interest", "prefer domain:infrastructure"]
         );
         assert_eq!(save("great product"), ["prefer product:interest"]);
-        // A company's size, not a team's.
+        // A company's size, not a team's; a team's, not a company's.
         assert_eq!(
             save("I like small companies"),
             ["prefer company_trait:small_company"]
+        );
+        assert_eq!(
+            save("I like tiny companies"),
+            ["prefer company_trait:small_company"]
+        );
+        assert_eq!(save("tiny team"), ["prefer company_trait:small_team"]);
+        assert_eq!(
+            save("love how tiny it is"),
+            ["prefer company_trait:small_team"]
         );
         assert_eq!(save("strong ownership"), ["prefer work_style:ownership"]);
         assert_eq!(

@@ -861,7 +861,15 @@ fn statements(sentences: &[Sentence], terms: &Terms, dimension: Dimension) -> Ve
         words: ws,
     } in sentences
     {
-        for (value, _) in find_terms(sentence, ws, terms) {
+        let found = if dimension == Dimension::CompanyTrait {
+            affirmed_terms(ws, terms)
+        } else {
+            find_terms(sentence, ws, terms)
+                .into_iter()
+                .map(|(v, _)| v)
+                .collect()
+        };
+        for value in found {
             if !out.iter().any(|f| f.key.value == value) {
                 out.push(Fact {
                     key: TasteKey::new(dimension, value),
@@ -874,30 +882,116 @@ fn statements(sentences: &[Sentence], terms: &Terms, dimension: Dimension) -> Ve
     out
 }
 
-/// "a team of 6 engineers": a small team when the number is small, a
-/// large one when it is large (in between says nothing). A team's size,
-/// never the company's.
+/// Words that, shortly before a phrase, deny it: "you will not be part of
+/// a large team", "we aren't a small company", "no large teams". ("Isn't"
+/// is split into "isn" and "t".)
+const NEGATORS: [&str; 12] = [
+    "not", "no", "never", "without", "nor", "isn", "aren", "wasn", "weren", "don", "doesn", "won",
+];
+
+/// Whether the phrase starting at word `start` is denied by a negator in
+/// the five words before it.
+fn negated(ws: &[Word], start: usize) -> bool {
+    ws[start.saturating_sub(5)..start]
+        .iter()
+        .any(|w| NEGATORS.contains(&w.lower.as_str()))
+}
+
+/// The terms a sentence states, not the ones it denies: a denied company
+/// or team kind is no evidence either way.
+fn affirmed_terms(ws: &[Word], (vocabulary, values): &Terms) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = Vec::new();
+    for (id, ranges) in vocabulary.find_all(ws) {
+        let value = values[id];
+        if !out.contains(&value) && ranges.iter().any(|r| !negated(ws, r.start)) {
+            out.push(value);
+        }
+    }
+    out
+}
+
+/// Words just before "team of N" that make N the company's headcount
+/// ("a global team of 200 people"), not the team someone joins.
+const HEADCOUNT_BEFORE: [&str; 11] = [
+    "global",
+    "entire",
+    "whole",
+    "company",
+    "worldwide",
+    "organization",
+    "organisation",
+    "org",
+    "total",
+    "distributed",
+    "overall",
+];
+/// Words just after N that make it a headcount ("a team of 200 employees").
+const HEADCOUNT_AFTER: [&str; 2] = ["employees", "staff"];
+/// What says a sentence is about the team the person would join.
+static JOINING: LazyLock<Vocabulary> = LazyLock::new(|| {
+    Vocabulary::compile(&[
+        "join*",
+        "part of",
+        "work in",
+        "work on",
+        "be on",
+        "sit on",
+        "sit in",
+        "you ll be on",
+        "your team",
+    ])
+});
+
+/// "You'll join a team of 6 engineers": the size of the team someone would
+/// join. A headcount ("a global team of 200 people", "a team of 200
+/// employees") is the company's, never a team's, so it is skipped. The
+/// team the person joins wins; failing that, a small team mentioned without
+/// saying whose still counts as small ("a small product team of 12"),
+/// while a large one stays unknown: whose it is decides whether it rules
+/// anything out, and the posting didn't say. Denied sizes ("not part of a
+/// team of 200") are no evidence.
 fn team_size(sentences: &[Sentence]) -> Option<Fact> {
+    let fact = |size: &str, evidence: &String| Fact {
+        key: TasteKey::new(Dimension::CompanyTrait, size),
+        evidence: evidence.clone(),
+        source: FactSource::Description,
+    };
+    let mut unattributed_small: Option<Fact> = None;
     for Sentence {
         text: sentence,
         words: ws,
     } in sentences
     {
+        let joining = JOINING.any(ws);
         for range in TEAM_OF.find_all(ws) {
+            if negated(ws, range.start) {
+                continue;
+            }
+            let before = &ws[range.start.saturating_sub(3)..range.start];
+            let headcount = before
+                .iter()
+                .any(|w| HEADCOUNT_BEFORE.contains(&w.lower.as_str()))
+                || ws
+                    .get(range.end)
+                    .is_some_and(|w| HEADCOUNT_AFTER.contains(&w.lower.as_str()));
+            if headcount {
+                continue;
+            }
             let n: Option<u32> = ws.get(range.end - 1).and_then(|w| w.lower.parse().ok());
             let size = match n {
                 Some(2..=25) => "small_team",
                 Some(50..) => "large_team",
                 _ => continue,
             };
-            return Some(Fact {
-                key: TasteKey::new(Dimension::CompanyTrait, size),
-                evidence: sentence.clone(),
-                source: FactSource::Description,
-            });
+            if joining {
+                return Some(fact(size, sentence));
+            }
+            if size == "small_team" && unattributed_small.is_none() {
+                unattributed_small = Some(fact(size, sentence));
+            }
         }
     }
-    None
+    unattributed_small
 }
 
 /// How many postings [`facets_of`] remembers (a few megabytes); past that
@@ -1063,6 +1157,63 @@ pub fn facets(record: &JobRecord) -> JobFacets {
 mod tests {
     use super::*;
     use crate::testing::record;
+
+    fn sizes(description: &str) -> Vec<String> {
+        facets(&record("ashby:acme", "Backend Engineer", description))
+            .company_traits
+            .iter()
+            .map(|f| f.key.value.clone())
+            .filter(|v| v.ends_with("_team") || v.ends_with("_company"))
+            .collect()
+    }
+
+    #[test]
+    fn a_company_headcount_is_not_the_team_someone_joins() {
+        assert_eq!(
+            sizes(
+                "A global team of 200 people across 30 countries. You will join a team of 6 \
+                 engineers."
+            ),
+            ["small_team"],
+            "the team you join, not the company"
+        );
+        assert!(sizes("A global team of 200 people across 30 countries.").is_empty());
+        assert!(sizes("We are a team of 200 employees.").is_empty());
+        assert!(
+            sizes("Our team of 200 engineers builds payments.").is_empty(),
+            "whose 200 it is isn't said: unknown, not large"
+        );
+        assert_eq!(
+            sizes("You'll join a team of 60 engineers on payments."),
+            ["large_team"]
+        );
+        assert_eq!(
+            sizes("We are a small product team of 12 engineers."),
+            ["small_team"]
+        );
+    }
+
+    #[test]
+    fn denied_sizes_are_not_facts() {
+        assert!(sizes("You will not be part of a large team.").is_empty());
+        assert!(sizes("You will not be part of a team of 200 engineers.").is_empty());
+        assert!(sizes("We're not a small company.").is_empty());
+        assert!(sizes("We aren't a small startup.").is_empty());
+        let traits = |d: &str| -> Vec<String> {
+            facets(&record("ashby:acme", "Backend Engineer", d))
+                .company_traits
+                .iter()
+                .map(|f| f.key.value.clone())
+                .collect()
+        };
+        assert!(
+            !traits("This is not a publicly traded company.").contains(&"public_company".into())
+        );
+        assert!(!traits("We are not a Fortune 500 company.").contains(&"large_company".into()));
+        // Stated, they are.
+        assert_eq!(sizes("We're a small company."), ["small_company"]);
+        assert_eq!(sizes("You will be part of a large team."), ["large_team"]);
+    }
 
     #[test]
     fn remembered_facets_follow_the_posting_version() {

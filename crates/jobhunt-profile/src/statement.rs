@@ -1494,6 +1494,22 @@ mod tests {
         );
         let out = read("I want small teams");
         find(&out, "company:small_team");
+        for companies in ["I like tiny companies", "Only small companies, please"] {
+            let out = read(companies);
+            find(&out, "company:small_company");
+            assert!(
+                !out.preferences
+                    .iter()
+                    .any(|p| p.value.key() == "company:small_team"),
+                "{companies}"
+            );
+        }
+        let out = read("I want tiny teams");
+        assert!(
+            !out.preferences
+                .iter()
+                .any(|p| p.value.key() == "company:small_company")
+        );
     }
 
     fn currency(text: &str) -> (Option<String>, Certainty, Option<String>) {

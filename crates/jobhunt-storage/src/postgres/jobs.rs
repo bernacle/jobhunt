@@ -1066,6 +1066,21 @@ impl JobRepository for PgStore {
         Ok(out)
     }
 
+    async fn get_many(&self, ids: &[JobId]) -> Result<HashMap<JobId, JobRecord>, StorageError> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let raw: Vec<String> = ids.iter().map(ToString::to_string).collect();
+        let rows = sqlx::query("SELECT * FROM jobs WHERE id = ANY($1)")
+            .bind(&raw)
+            .fetch_all(self.pool())
+            .await
+            .map_err(query_error("loading jobs"))?;
+        rows.iter()
+            .map(|row| decode_record(row).map(|r| (r.id, r)))
+            .collect()
+    }
+
     async fn opportunity_records_many(
         &self,
         ids: &[OpportunityId],

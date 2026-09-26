@@ -83,7 +83,9 @@ export function ClarifyPreference({ p, clarify }: { p: PreferenceView; clarify: 
         <>
           <p className="mt-1 text-[13px] text-fg-secondary">
             {c.currency
-              ? `Read as ${c.bound === "minimum" ? "a minimum" : "a target"} of ${c.currency} ${amountText(c)}.`
+              ? c.bound === "minimum"
+                ? `For now it's a floor of ${c.currency} ${amountText(c)}: verified pay below it is left out.`
+                : `For now it's a target of ${c.currency} ${amountText(c)}: it changes the order, and leaves nothing out.`
               : `Until you say the currency, ${amountText(c)} isn't compared with any job's pay.`}
           </p>
           <fieldset className="mt-3">
@@ -118,7 +120,9 @@ export function ClarifyPreference({ p, clarify }: { p: PreferenceView; clarify: 
       ) : (
         <>
           <p className="mt-1 text-[13px] text-fg-secondary">
-            Until you answer, it only nudges the order; it never leaves anything out.
+            {p.stance === "required"
+              ? "For now it's a must: a posting that says otherwise is left out, and one that doesn't say is shown as unresolved."
+              : "For now it's a nice-to-have: it changes the order, and leaves nothing out."}
           </p>
           <fieldset className="mt-3">
             <legend className={labelClass}>{c.value === "small_company" ? "Small companies" : "Small teams"}: which size do you mean?</legend>

@@ -453,6 +453,10 @@ mod repository_calls {
             self.count("get");
             self.inner.get(id).await
         }
+        async fn get_many(&self, ids: &[JobId]) -> Result<HashMap<JobId, JobRecord>, StorageError> {
+            self.count("get_many");
+            self.inner.get_many(ids).await
+        }
         async fn opportunity_records(
             &self,
             id: OpportunityId,
@@ -642,7 +646,9 @@ mod repository_calls {
         }
     }
 
-    /// The repository calls one ranking of `jobs` open postings makes.
+    /// The repository calls one ranking of `jobs` open postings makes, for
+    /// someone who has looked at every one, saved every third, and whose
+    /// jobs all have history (a second scan changed their pay).
     async fn calls_ranking(jobs: usize) -> BTreeMap<&'static str, usize> {
         let store = SqliteJobStore::open_in_memory().await.unwrap();
         ProfileService::new(&store)
@@ -666,12 +672,37 @@ mod repository_calls {
             })
             .collect();
         discover(&store, &postings).await;
+        let changed: Vec<JobPosting> = (0..jobs)
+            .map(|i| {
+                posting(
+                    &i.to_string(),
+                    "Backend Engineer",
+                    "Remote - Worldwide",
+                    Some((150_000.0, 180_000.0)),
+                )
+            })
+            .collect();
+        discover(&store, &changed).await;
+        let service = RankingService::new(&store, &RuleReader);
+        for (i, p) in postings.iter().enumerate() {
+            let r = get(&store, p).await;
+            let action = if i % 3 == 0 {
+                FeedbackAction::Save
+            } else {
+                FeedbackAction::Seen
+            };
+            service
+                .record(std::slice::from_ref(&r), action, None, now())
+                .await
+                .unwrap();
+            assert!(!store.history(r.id).await.unwrap().is_empty());
+        }
         let counting = Counting::new(&store);
-        let report = RankingService::new(&counting, &RuleReader)
-            .rank(&RankQuery::default(), now())
-            .await
-            .unwrap();
+        let ranking = RankingService::new(&counting, &RuleReader);
+        let report = ranking.rank(&RankQuery::default(), now()).await.unwrap();
         assert_eq!(report.considered, jobs);
+        let pipeline = ranking.pipeline(false).await.unwrap();
+        assert_eq!(pipeline.len(), jobs.div_ceil(3));
         counting.calls()
     }
 
@@ -690,5 +721,6 @@ mod repository_calls {
         ] {
             assert!(!many.contains_key(per_job), "{per_job} called: {many:?}");
         }
+        assert!(many.contains_key("get_many"), "feedback is read: {many:?}");
     }
 }

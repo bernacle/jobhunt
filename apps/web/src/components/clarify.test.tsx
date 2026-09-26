@@ -62,7 +62,7 @@ describe("ClarifyPreference", () => {
   it("asks whether small teams means the team or the company, and how strongly", async () => {
     const clarify = action();
     render(<ClarifyPreference p={size} clarify={clarify} />);
-    expect(screen.getByText(/it only nudges the order/)).toBeInTheDocument();
+    expect(screen.getByText("For now it's a nice-to-have: it changes the order, and leaves nothing out.")).toBeInTheDocument();
     await userEvent.click(screen.getByLabelText("Both"));
     await userEvent.click(screen.getByLabelText("Must have"));
     await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
@@ -70,5 +70,21 @@ describe("ClarifyPreference", () => {
       { kind: "company", company: "small_team", stance: "require" },
       { kind: "company", company: "small_company", stance: "require" },
     ]);
+  });
+
+  it("says what a must already does, and never that it leaves nothing out", () => {
+    render(<ClarifyPreference p={{ ...size, stance: "required" }} clarify={action()} />);
+    expect(screen.getByText(/For now it's a must: a posting that says otherwise is left out/)).toBeInTheDocument();
+    expect(screen.queryByText(/leaves nothing out/)).not.toBeInTheDocument();
+  });
+
+  it("says a floor with a known currency leaves out pay below it, and a target doesn't", () => {
+    const floor = read({ stance: "required", clarify: { kind: "pay", amount: 140000, period: "year", bound: "minimum", currency: "USD" } });
+    const { unmount } = render(<ClarifyPreference p={floor} clarify={action()} />);
+    expect(screen.getByText("For now it's a floor of USD 140,000 per year: verified pay below it is left out.")).toBeInTheDocument();
+    unmount();
+    const target = read({ clarify: { kind: "pay", amount: 140000, period: "year", bound: "target", currency: "USD" } });
+    render(<ClarifyPreference p={target} clarify={action()} />);
+    expect(screen.getByText(/target of USD 140,000 per year: it changes the order, and leaves nothing out/)).toBeInTheDocument();
   });
 });

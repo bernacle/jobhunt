@@ -295,21 +295,18 @@ where
         &self,
         events: Vec<FeedbackEvent>,
     ) -> Result<BTreeMap<OpportunityId, Vec<FeedbackEvent>>, RankingError> {
-        let mut current: HashMap<JobId, OpportunityId> = HashMap::new();
+        // Where each record is now (duplicates merge), in one call.
+        let jobs: Vec<JobId> = events.iter().map(|e| e.job).collect();
+        let current = if jobs.is_empty() {
+            HashMap::new()
+        } else {
+            self.repo.get_many(&jobs).await?
+        };
         let mut groups: BTreeMap<OpportunityId, Vec<FeedbackEvent>> = BTreeMap::new();
         for event in events {
-            let opportunity = match current.get(&event.job) {
-                Some(o) => *o,
-                None => {
-                    let o = self
-                        .repo
-                        .get(event.job)
-                        .await?
-                        .map_or(event.opportunity, |r| r.opportunity_id);
-                    current.insert(event.job, o);
-                    o
-                }
-            };
+            let opportunity = current
+                .get(&event.job)
+                .map_or(event.opportunity, |r| r.opportunity_id);
             groups.entry(opportunity).or_default().push(event);
         }
         Ok(groups)
@@ -318,9 +315,16 @@ where
     /// Taste learned from every piece of feedback, with its evidence.
     pub async fn taste(&self, person: &Person) -> Result<TasteModel, RankingError> {
         let events = self.feedback().await?;
+        let grouped = self.by_opportunity(events).await?;
+        let ids: Vec<OpportunityId> = grouped.keys().copied().collect();
+        let mut records_of = if ids.is_empty() {
+            HashMap::new()
+        } else {
+            self.repo.opportunity_records_many(&ids).await?
+        };
         let mut opportunities = Vec::new();
-        for (opportunity, events) in self.by_opportunity(events).await? {
-            let records = self.repo.opportunity_records(opportunity).await?;
+        for (opportunity, events) in grouped {
+            let records = records_of.remove(&opportunity).unwrap_or_default();
             let representative = records
                 .iter()
                 .find(|r| r.status == JobStatus::Open)
@@ -512,21 +516,29 @@ where
     /// `rejected`, the ones they turned down), latest action first.
     pub async fn pipeline(&self, rejected: bool) -> Result<Vec<PipelineEntry>, RankingError> {
         let events = self.feedback().await?;
-        let mut out = Vec::new();
-        for (opportunity, events) in self.by_opportunity(events).await? {
-            let state = OpportunityState::of(events);
-            let keep = match state.stage {
+        let kept: Vec<(OpportunityId, OpportunityState)> = self
+            .by_opportunity(events)
+            .await?
+            .into_iter()
+            .map(|(opportunity, events)| (opportunity, OpportunityState::of(events)))
+            .filter(|(_, state)| match state.stage {
                 Stage::Saved | Stage::Applied | Stage::Interviewing | Stage::Offer => true,
                 Stage::Rejected => rejected,
                 Stage::Seen | Stage::Unseen => false,
-            };
+            })
+            .collect();
+        let ids: Vec<OpportunityId> = kept.iter().map(|(o, _)| *o).collect();
+        let mut records_of = if ids.is_empty() {
+            HashMap::new()
+        } else {
+            self.repo.opportunity_records_many(&ids).await?
+        };
+        let mut out = Vec::new();
+        for (opportunity, state) in kept {
             let Some(last) = state.events.last() else {
                 continue;
             };
-            if !keep {
-                continue;
-            }
-            let records = self.repo.opportunity_records(opportunity).await?;
+            let records = records_of.remove(&opportunity).unwrap_or_default();
             let closed =
                 !records.is_empty() && records.iter().all(|r| r.status == JobStatus::Closed);
             out.push(PipelineEntry {

@@ -257,6 +257,10 @@ impl JobRepository for PgUserStore {
         self.shared.histories(ids).await
     }
 
+    async fn get_many(&self, ids: &[JobId]) -> Result<HashMap<JobId, JobRecord>, StorageError> {
+        self.shared.get_many(ids).await
+    }
+
     /// Also kept for the rest of the request: the single lookups that
     /// follow (classifying, checking what is shown) are answered from it.
     async fn opportunity_records_many(

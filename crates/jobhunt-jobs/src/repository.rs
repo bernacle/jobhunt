@@ -221,6 +221,21 @@ pub trait JobRepository: Send + Sync {
     /// The job's history, oldest first.
     async fn history(&self, id: JobId) -> Result<Vec<JobEvent>, StorageError>;
 
+    /// [`JobRepository::get`] of many jobs in one call (unknown ids are
+    /// absent).
+    async fn get_many(&self, ids: &[JobId]) -> Result<HashMap<JobId, JobRecord>, StorageError> {
+        let mut out = HashMap::new();
+        for id in ids {
+            if out.contains_key(id) {
+                continue;
+            }
+            if let Some(record) = self.get(*id).await? {
+                out.insert(*id, record);
+            }
+        }
+        Ok(out)
+    }
+
     /// [`JobRepository::opportunity_records`] of many opportunities in one
     /// call (opportunities without records are absent). Networked backends
     /// answer it with one query; the default asks one by one.

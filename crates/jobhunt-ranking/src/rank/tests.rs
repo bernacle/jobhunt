@@ -931,3 +931,35 @@ fn a_required_small_team_is_decided_by_the_team_never_by_the_company() {
         summaries(&r)
     );
 }
+
+#[test]
+fn a_required_small_team_isnt_ruled_out_by_the_company_headcount() {
+    let person = wanting("small_team", Stance::Required);
+    let posting = "A global team of 200 people across 30 countries. You will join a team of 6 \
+        engineers building backend services in Rust and PostgreSQL.";
+    let r = ranked(
+        &job("Backend Engineer", posting),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(matches!(r.gate, Gate::Recommended), "{:?}", r.gate);
+    assert!(company_weight(&r) > 0.0, "{:?}", summaries(&r));
+    let posting = "You will not be part of a large team: backend services in Rust and PostgreSQL.";
+    let r = ranked(
+        &job("Senior Backend Engineer", posting),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(
+        matches!(r.gate, Gate::Recommended),
+        "a denial rules nothing out: {:?}",
+        r.gate
+    );
+    assert!(
+        has_unknown(&r, "Unresolved: you require small_team"),
+        "{:?}",
+        summaries(&r)
+    );
+}
