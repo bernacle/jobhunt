@@ -222,6 +222,8 @@ test.describe.serial("the product loop", () => {
     await expect(page).toHaveURL(/\/signin\?next=%2Ftoday/);
     await signIn(page, name);
     await expect(page.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
+    // Past the loading skeleton: the feed itself is there.
+    await expect(page.getByRole("list", { name: "Recommendations" }).getByRole("article").first()).toBeVisible();
     const titles = await page.getByRole("list", { name: "Recommendations" }).getByRole("heading", { level: 2 }).allTextContents();
     for (const title of [rejected, saved, applied]) expect(titles).not.toContain(title);
     await page.goto("/applications");
@@ -232,10 +234,13 @@ test.describe.serial("the product loop", () => {
   test("dealing with everything leaves you caught up", async ({ page }) => {
     await signIn(page, name);
     const caughtUp = page.getByRole("heading", { name: "You're caught up." });
+    const list = page.getByRole("list", { name: "Recommendations" });
     for (let round = 0; round < 5; round++) {
-      await expect(page.getByRole("heading", { level: 1, name: "Today" })).toBeVisible();
+      // The loading skeleton has the "Today" heading too: wait for the feed
+      // itself (a list, or caught up) before counting what's on it.
+      await expect(list.or(caughtUp)).toBeVisible();
       if (await caughtUp.isVisible()) break;
-      const cards = page.getByRole("list", { name: "Recommendations" }).getByRole("article");
+      const cards = list.getByRole("article");
       const count = await cards.count();
       for (let i = 0; i < count; i++) {
         await cards.nth(i).getByRole("button", { name: "Not now" }).click();

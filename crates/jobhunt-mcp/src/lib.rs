@@ -904,8 +904,10 @@ impl ServerHandler for JobHuntServer {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(
+                // `jobhunt` is the protocol name clients key on; the title is
+                // what people see.
                 Implementation::new("jobhunt", env!("CARGO_PKG_VERSION"))
-                    .with_title("JobHunt")
+                    .with_title("Narrow")
                     .with_description(self.apps.description()),
             )
             .with_instructions(self.apps.instructions())

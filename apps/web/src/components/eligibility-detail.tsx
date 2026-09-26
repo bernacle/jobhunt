@@ -35,8 +35,10 @@ function ruleLabel(rule: string): string {
  */
 export function EligibilityDetail({ detail }: { detail: Detail }) {
   const reasons = detail.reasons.filter((r) => r.verdict !== "not_applicable");
+  // Laid out by the width this column actually has (a container query),
+  // not the viewport's: beside the aside at 1024px it is phone-narrow.
   return (
-    <div>
+    <div className="@container">
       <p className="text-[14px]">
         <EligibilityFact eligibility={{ status: detail.status, headline: detail.headline }} />
         {detail.option && <span className="text-fg-muted"> ({detail.option})</span>}
@@ -45,24 +47,25 @@ export function EligibilityDetail({ detail }: { detail: Detail }) {
         <>
           <div
             aria-hidden="true"
-            className="mt-4 hidden grid-cols-[120px_minmax(0,1fr)_minmax(0,190px)] gap-4 border-b border-line-subtle pb-2 text-label text-fg-muted md:grid"
+            className="mt-4 hidden grid-cols-[120px_minmax(0,1fr)_minmax(0,190px)] gap-4 border-b border-line-subtle pb-2 text-label text-fg-muted @xl:grid"
           >
             <span>Requirement</span>
             <span>Posting says</span>
             <span>You</span>
           </div>
-          <ul role="list" className="max-md:mt-3 max-md:border-t max-md:border-line-subtle">
+          <ul role="list" className="@max-xl:mt-3 @max-xl:border-t @max-xl:border-line-subtle">
             {reasons.map((r) => {
               const verdict = VERDICT[r.verdict] ?? { word: r.verdict, marker: "border border-fg-muted" };
               const evidence = r.evidence ?? [];
               return (
                 <li
                   key={`${r.rule}-${r.conclusion}`}
-                  className="grid gap-x-4 gap-y-1 border-b border-line-subtle py-3 text-row md:grid-cols-[120px_minmax(0,1fr)_minmax(0,190px)] md:items-baseline"
+                  data-eligibility-row className="grid gap-x-4 gap-y-1 border-b border-line-subtle py-3 text-row @xl:grid-cols-[120px_minmax(0,1fr)_minmax(0,190px)] @xl:items-baseline"
                 >
-                  <span className="font-medium text-fg-secondary md:font-normal">{ruleLabel(r.rule)}</span>
+                  <span className="font-medium text-fg-secondary @xl:font-normal">{ruleLabel(r.rule)}</span>
                   <span className="text-fg-body">
-                    <span className="sr-only">The posting says: </span>
+                    {/* Stacked, the columns' header is gone: say which is which. */}
+                    <span className="text-fg-muted @xl:sr-only">Posting says: </span>
                     {evidence.length > 0 ? (
                       evidence.map((e) => (
                         <q key={e} className="block">

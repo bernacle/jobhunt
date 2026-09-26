@@ -4,9 +4,9 @@ import { redirect } from "next/navigation";
 import { putAside, recordFeedback } from "@/app/actions";
 import { CaughtUp } from "@/components/caught-up";
 import { DiscoveryStatus, FeedSummary } from "@/components/feed-summary";
-import { OpportunityLead, OpportunityPeer } from "@/components/opportunity";
+import { TodayFeed } from "@/components/opportunity";
 import { RefreshControls } from "@/components/refresh-on-focus";
-import { Label, Notice, PageHeader, textLinkClass } from "@/components/ui";
+import { Notice, PageHeader, textLinkClass } from "@/components/ui";
 import { api, loadOrNoProfile } from "@/lib/api";
 import { inAbout } from "@/lib/format";
 
@@ -22,7 +22,7 @@ export default async function TodayPage() {
   const now = new Date(feed.generated_at);
   const date = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
   const actions = { feedback: recordFeedback, putAside };
-  const [lead, ...peers] = feed.items;
+  const lead = feed.items[0];
   const next = feed.discovery.next_read_at;
   return (
     <div>
@@ -53,17 +53,7 @@ export default async function TodayPage() {
         <CaughtUp feed={feed} now={now} />
       ) : (
         <>
-          <ol aria-label="Recommendations">
-            <li>
-              <OpportunityLead item={lead} actions={actions} now={now} />
-            </li>
-            {peers.map((item, i) => (
-              <li key={item.id} className={i === 0 ? "mt-11 max-sm:mt-8" : undefined}>
-                {i === 0 && <Label className="mb-1">Also worth a look</Label>}
-                <OpportunityPeer item={item} actions={actions} now={now} />
-              </li>
-            ))}
-          </ol>
+          <TodayFeed items={feed.items} actions={actions} now={now} />
           <div className="mt-9 flex flex-col gap-1.5 text-[13px] leading-normal text-fg-muted max-sm:mt-6">
             <p className="text-fg-secondary">
               That&apos;s everything new worth your time.{next && ` Next check ${inAbout(next, now)}.`}
