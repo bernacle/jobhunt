@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { clarifyPreference, tellPreferences, uploadResume } from "@/app/actions";
-import { ClarifyPreference, clarifyTitle } from "@/components/clarify";
+import { ClarifyPreference } from "@/components/clarify";
 import { StatementForm } from "@/components/preferences";
 import { ResumeUpload } from "@/components/resume-upload";
 import { LinkButton, PageHeader } from "@/components/ui";
 import { api, loadOrNoProfile } from "@/lib/api";
+import { clarifyTitle } from "@/lib/clarify";
 
 export const metadata: Metadata = { title: "Welcome" };
 

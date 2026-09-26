@@ -3,7 +3,8 @@
 import { useId, useState, useTransition } from "react";
 
 import type { ActionResult } from "@/app/actions";
-import type { Clarify, PreferenceInput, PreferenceUpdateResult, PreferenceView } from "@/lib/api-types";
+import type { PreferenceInput, PreferenceUpdateResult, PreferenceView } from "@/lib/api-types";
+import { amountText } from "@/lib/clarify";
 
 import { Button, helpClass, inputClass, labelClass } from "./ui";
 
@@ -21,15 +22,6 @@ function Choice({ name, value, label, required }: { name: string; value: string;
       {label}
     </label>
   );
-}
-
-function amountText(c: Extract<Clarify, { kind: "pay" }>): string {
-  return `${c.amount.toLocaleString("en-US")} per ${c.period}`;
-}
-
-/** What a question is about, in a few words. */
-export function clarifyTitle(c: Clarify): string {
-  return c.kind === "pay" ? `Pay: ${amountText(c)}` : c.value === "small_company" ? "Small companies" : "Small teams";
 }
 
 /**
