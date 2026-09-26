@@ -7,6 +7,11 @@
 #   ./scripts/check.sh --msrv   also type-check on the declared minimum Rust
 #   ./scripts/check.sh --cloud  require the Postgres tests (needs
 #                               JOBHUNT_TEST_DATABASE_URL; see CONTRIBUTING.md)
+#   ./scripts/check.sh --web    also the web app: API types, type-check, lint,
+#                               component tests, build (needs Node 24)
+#   ./scripts/check.sh --e2e    also the browser end-to-end tests (implies
+#                               --web; needs JOBHUNT_E2E_DATABASE_URL or the
+#                               default local Postgres, and psql)
 #
 # Stops at the first failing check and exits non-zero, naming the check.
 # Needs only rustup/cargo (plus rustfmt and clippy components). Live source
@@ -15,13 +20,17 @@
 set -euo pipefail
 
 usage() {
-    sed -n '2,13s/^# \{0,1\}//p' "$0"
+    sed -n '2,18s/^# \{0,1\}//p' "$0"
 }
 
 msrv=false
+web=false
+e2e=false
 for arg in "$@"; do
     case "$arg" in
         --msrv) msrv=true ;;
+        --web) web=true ;;
+        --e2e) web=true; e2e=true ;;
         --cloud)
             if [[ -z "${JOBHUNT_TEST_DATABASE_URL:-}" ]]; then
                 echo "--cloud needs JOBHUNT_TEST_DATABASE_URL (a Postgres server)" >&2
@@ -91,6 +100,23 @@ if $msrv; then
         exit 1
     fi
     step "MSRV (Rust $version)" cargo "+$version" check --workspace --all-targets --locked
+fi
+
+if $web; then
+    web_dir=apps/web
+    if [[ ! -d "$web_dir/node_modules" ]]; then
+        step "web dependencies" npm --prefix "$web_dir" ci --no-audit --no-fund
+    fi
+    step "web: API types match the schema" npm --prefix "$web_dir" run types:check
+    step "web: type-check" npm --prefix "$web_dir" run typecheck
+    step "web: lint" npm --prefix "$web_dir" run lint
+    step "web: component tests" npm --prefix "$web_dir" test
+    step "web: build" npm --prefix "$web_dir" run build
+fi
+
+if $e2e; then
+    step "e2e: jobhunt binary" cargo build --locked -p jobhunt-cli
+    step "e2e: browser tests" npm --prefix apps/web run e2e
 fi
 
 current=''

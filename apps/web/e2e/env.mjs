@@ -14,7 +14,7 @@ export const JOBHUNT_BIN = process.env.JOBHUNT_BIN ?? here("../../../target/debu
 
 /** The Postgres server; the stack uses a fresh `jobhunt_e2e` database on it. */
 export const ADMIN_DATABASE_URL =
-  process.env.JOBHUNT_E2E_DATABASE_URL ?? "postgres://jobhunt:jobhunt@127.0.0.1:55432/jobhunt";
+  process.env.JOBHUNT_E2E_DATABASE_URL ?? "postgres://jobhunt:jobhunt@127.0.0.1:5432/jobhunt";
 
 export function databaseUrl() {
   const url = new URL(ADMIN_DATABASE_URL);

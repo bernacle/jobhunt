@@ -32,7 +32,6 @@ export async function GET(request: NextRequest) {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
-        idToken: tokens.idToken,
         name: tokens.name,
         email: tokens.email,
         mode: "oidc",

@@ -1,12 +1,16 @@
 // JobHunt Cloud on Railway (Infrastructure as Code).
 //
-// One image (the repository's Dockerfile), four resources:
+// Two images (the repository's Dockerfile for the Rust binary,
+// apps/web/Dockerfile for the web app), six resources:
 //
 //   Postgres              the database (shared corpus + private data)
 //   api                   `jobhunt server`: HTTP API and hosted MCP; runs
 //                         `jobhunt migrate` before each deploy
+//   web                   the web app (Next.js), which calls `api` over
+//                         Railway's private network
 //   worker-discovery      cron: reads the sources that are due
 //   worker-verification   cron: re-verifies the jobs that matter
+//   worker-notify         cron: emails strong new recommendations
 //
 // Secrets are declared with preserve(): set them once in the dashboard or
 // with `railway variable set KEY=… -s api` (and seal them); applying this
@@ -39,6 +43,8 @@ export default defineRailway((ctx) => {
     env: {
       DATABASE_URL: db.env.DATABASE_URL,
       JOBHUNT_DB_MAX_CONNECTIONS: "10",
+      // A fixed port, so `web` can reach it on the private network.
+      PORT: "8080",
       // Secrets and per-environment values, set by hand:
       JOBHUNT_ENCRYPTION_KEYS: preserve(),
       JOBHUNT_PUBLIC_URL: preserve(),
@@ -47,6 +53,11 @@ export default defineRailway((ctx) => {
       JOBHUNT_OIDC_CLI_CLIENT_ID: preserve(),
       JOBHUNT_OIDC_AUDIENCE_PARAMETER: preserve(),
       JOBHUNT_ALLOWED_ORIGINS: preserve(),
+      // Links in emails, and the address confirmation email the API sends.
+      JOBHUNT_WEB_URL: preserve(),
+      JOBHUNT_EMAIL_PROVIDER: preserve(),
+      JOBHUNT_RESEND_API_KEY: preserve(),
+      JOBHUNT_EMAIL_FROM: preserve(),
     },
     deploy: {
       restartPolicyType: "ON_FAILURE",
@@ -88,5 +99,54 @@ export default defineRailway((ctx) => {
     },
   });
 
-  return project("jobhunt", { resources: [db, api, discovery, verification] });
+  const notify = service("worker-notify", {
+    source: source(),
+    build,
+    start: "jobhunt worker notify",
+    env: {
+      DATABASE_URL: db.env.DATABASE_URL,
+      JOBHUNT_DB_MAX_CONNECTIONS: "4",
+      // Reads private data (the address, rankings) and sends email: the
+      // same keys as `api`, and the email provider.
+      JOBHUNT_ENCRYPTION_KEYS: preserve(),
+      JOBHUNT_WEB_URL: preserve(),
+      JOBHUNT_EMAIL_PROVIDER: preserve(),
+      JOBHUNT_RESEND_API_KEY: preserve(),
+      JOBHUNT_EMAIL_FROM: preserve(),
+      JOBHUNT_NOTIFY_MIN_INTERVAL_HOURS: "4",
+    },
+    deploy: {
+      // Every 15 minutes, after discovery (7, 37) and verification (22)
+      // had a chance to find and check new jobs. Each account gets at
+      // most one email per JOBHUNT_NOTIFY_MIN_INTERVAL_HOURS (or a day).
+      cronSchedule: "12,27,42,57 * * * *",
+      restartPolicyType: "NEVER",
+    },
+  });
+
+  const web = service("web", {
+    source: source(),
+    build: { builder: "DOCKERFILE" as const, dockerfilePath: "apps/web/Dockerfile", watchPatterns: ["apps/web/**"] },
+    healthcheck: "/healthz",
+    env: {
+      // Server to server, over the private network (never exposed to the
+      // browser).
+      JOBHUNT_API_URL: "http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080",
+      PORT: "3000",
+      // Set by hand:
+      JOBHUNT_API_PUBLIC_URL: preserve(),
+      JOBHUNT_WEB_URL: preserve(),
+      JOBHUNT_WEB_SESSION_SECRET: preserve(),
+      JOBHUNT_WEB_OIDC_CLIENT_ID: preserve(),
+      JOBHUNT_WEB_OIDC_CLIENT_SECRET: preserve(),
+    },
+    deploy: {
+      restartPolicyType: "ON_FAILURE",
+      restartPolicyMaxRetries: 10,
+      drainingSeconds: 15,
+      overlapSeconds: 15,
+    },
+  });
+
+  return project("jobhunt", { resources: [db, api, web, discovery, verification, notify] });
 });

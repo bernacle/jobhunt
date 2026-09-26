@@ -29,7 +29,6 @@ export async function proxy(request: NextRequest) {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       expiresAt: tokens.expiresAt,
-      idToken: tokens.idToken ?? session.idToken,
     });
     // This request's render sees the new token, and so does the browser.
     request.cookies.set(SESSION_COOKIE, sealed);

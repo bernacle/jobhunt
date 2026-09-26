@@ -17,11 +17,10 @@ export interface Session {
   /** Access token expiry, seconds since the epoch. */
   expiresAt: number;
   mode: "oidc" | "dev";
-  /** For display only (from the identity provider's ID token). */
+  /** For display only (from the identity provider's ID token, which is
+   * not kept: the cookie must stay under 4 KB). */
   name?: string;
   email?: string;
-  /** For RP-initiated logout. */
-  idToken?: string;
 }
 
 export const SESSION_COOKIE = "jh_session";

@@ -17,6 +17,11 @@ network access for tests. The cloud tests also need a PostgreSQL server
 and they run; without it they are skipped. Each test creates and drops its
 own database.
 
+The web app ([`apps/web`](apps/web)) needs Node 24; its browser tests also
+need a Postgres server, `psql`, and Chromium for Playwright
+(`npx playwright install chromium`). See
+[apps/web/README.md](apps/web/README.md).
+
 ## Build and test
 
 ```bash
@@ -48,6 +53,16 @@ The CLI and the MCP server are interfaces to one local application:
 - private data in Postgres is only reachable through `PgUserStore` (one
   account's view) and is sealed with `Keyring` before it is written; never
   log it (ids and counts only).
+- the web app (`apps/web`) is another interface: it renders the API's
+  views and calls its endpoints. It never ranks, filters, gates or
+  re-words decisions (only presentation: dates, labels). When the web
+  needs something new, add a use case and view in `jobhunt-app`, expose it
+  in the API (and, when it makes sense, as an MCP tool), then regenerate
+  the schema and types: `JOBHUNT_UPDATE_SCHEMA=1 cargo test -p
+  jobhunt-cloud --test api_schema`, then `npm run types` in `apps/web`.
+- email goes through `jobhunt_cloud::email::EmailSender`; tests use
+  `MemorySender` (or the file provider in the browser tests). No test may
+  send real email.
 
 `jobhunt-app` and everything below it must never print: `jobhunt mcp`'s
 stdout belongs to the protocol. Report progress through `Progress`, logs
@@ -83,6 +98,9 @@ stops at the first failure, names it, and exits non-zero:
 
 `./scripts/check.sh --msrv` also type-checks the workspace on the MSRV
 (install it once with `rustup toolchain install 1.88 --profile minimal`).
+`--web` adds the web app's checks (CI's `web` job) and `--e2e` also its
+browser tests (CI's `e2e` job; `JOBHUNT_E2E_DATABASE_URL` names the
+Postgres server, default `postgres://jobhunt:jobhunt@127.0.0.1:5432/jobhunt`).
 
 Tests run with HTTP(S) proxies pointed at an unreachable address (local mock
 servers excepted), so a test that accidentally reaches the internet fails
@@ -150,6 +168,8 @@ requests that are ready for review (not on drafts) and on every push to
 | `test` | a compile error (build step), then any failing unit, integration or doc test: model, lifecycle, dedupe, SQLite, migrations, adapters, end-to-end discovery, resume reading and parsing, profile re-import and evidence rules, the profile CLI flow, verification (domain, HTTP verifiers against mocks, SQLite), the eligibility rule matrix and region definitions, eligibility on real postings, and verify/show/check/find through the CLI; ranking (job facets, reason reading, feedback state, learned taste, signals, gates, pay, briefs), feedback and rankings in SQLite, and rank/why/feedback/taste/pipeline through the CLI |
 | `docs` | any rustdoc warning (broken intra-doc links, …) |
 | `msrv` | code or a dependency that needs a newer Rust than `rust-version` |
+| `web` | the web app: TypeScript types out of date with the API schema, a type error, a lint error, a failing component test (including axe checks), or a failed production build |
+| `e2e` | the product loop failing in a real browser against the real stack (Postgres, `jobhunt server` and workers, fixture job boards, file email): sign in, onboarding, Today, feedback, Applications, Preferences, Profile, notifications, sign out/in, accessibility, a phone viewport |
 | `ci-passed` | any of the above not succeeding |
 
 Notes:
@@ -237,7 +257,7 @@ Intended rules: protection against accidents, not bureaucracy.
 - Changes arrive through pull requests; direct pushes, force pushes and
   branch deletion are blocked.
 - Required status checks: `fmt`, `clippy`, `test`, `cloud`, `docs`, `msrv`,
-  `ci-passed`, from GitHub Actions, and the branch must be up to date with
+  `web`, `e2e`, `ci-passed`, from GitHub Actions, and the branch must be up to date with
   `main` before merging.
 - Zero required approvals.
 - Repository admins can bypass the rules when merging a pull request (an

@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   let target = `${config().webUrl}/signin?signed_out=1`;
   if (session?.mode === "oidc") {
     if (session.refreshToken) await revoke(session.refreshToken);
-    target = (await endSessionUrl(session.idToken)) ?? target;
+    target = (await endSessionUrl()) ?? target;
   }
   const response = NextResponse.redirect(target, 303);
   response.cookies.delete(SESSION_COOKIE);
