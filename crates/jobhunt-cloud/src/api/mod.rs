@@ -1140,7 +1140,7 @@ fn unavailable_email() -> ApiError {
     ApiError::new(
         StatusCode::SERVICE_UNAVAILABLE,
         "email_unavailable",
-        "This JobHunt service cannot send email.",
+        "This Narrow server cannot send email.",
     )
 }
 

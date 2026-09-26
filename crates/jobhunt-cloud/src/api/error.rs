@@ -51,7 +51,7 @@ impl ApiError {
         Self::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal_error",
-            "JobHunt Cloud failed to answer. Try again; if it keeps failing, report the \
+            "Narrow failed to answer. Try again; if it keeps failing, report the \
              request id.",
         )
     }

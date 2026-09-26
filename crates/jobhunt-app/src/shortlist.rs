@@ -572,8 +572,7 @@ impl SearchResults {
             RefreshReason::Background { oldest: None }
         ) {
             notes.push(
-                "JobHunt Cloud has not read any job board yet; its scheduled discovery will."
-                    .into(),
+                "Narrow has not read any job board yet; its scheduled discovery will.".into(),
             );
         }
         Self {

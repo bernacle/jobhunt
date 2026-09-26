@@ -68,7 +68,7 @@ pub struct Identity {
 /// Why a request is not authenticated.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AuthError {
-    #[error("sign in to use JobHunt Cloud (no bearer token)")]
+    #[error("sign in to use Narrow (no bearer token)")]
     Missing,
     #[error("the access token is not valid: {0}")]
     Invalid(String),
