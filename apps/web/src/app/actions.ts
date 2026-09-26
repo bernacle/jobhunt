@@ -83,6 +83,16 @@ export async function setPreference(input: PreferenceInput): Promise<ActionResul
   return result;
 }
 
+/**
+ * Settles a preference Narrow read with an open question: the person's
+ * explicit answer replaces the reading, in one update.
+ */
+export async function clarifyPreference(id: string, set: PreferenceInput[]): Promise<ActionResult<PreferenceUpdateResult>> {
+  const result = await attempt(() => api.preferences({ set, remove: [id] }));
+  if (result.ok) refresh();
+  return result;
+}
+
 export async function removePreference(id: string): Promise<ActionResult<PreferenceUpdateResult>> {
   const result = await attempt(() => api.preferences({ remove: [id] }));
   if (result.ok) refresh();

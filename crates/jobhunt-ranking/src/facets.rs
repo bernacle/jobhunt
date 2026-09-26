@@ -14,11 +14,17 @@
 //! are required, in a "nice to have" list preferred, elsewhere only
 //! mentioned.
 
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::{Arc, LazyLock, Mutex};
+
 use chrono::{DateTime, Utc};
-use jobhunt_jobs::{EmploymentType, JobRecord, WorkplaceType};
+use jobhunt_jobs::{EmploymentType, JobId, JobRecord, WorkplaceType};
 use jobhunt_profile::WorkMode;
-use jobhunt_profile::infer::{domains_in, role_signals, technologies_in};
-use jobhunt_profile::words::{Pattern, Word, span_text, words};
+use jobhunt_profile::infer::{
+    domains_in, domains_in_words, role_signals_in, technologies_in, technologies_in_words,
+};
+use jobhunt_profile::words::{Pattern, Vocabulary, Word, span_text, words};
 use serde::{Deserialize, Serialize};
 
 use crate::key::{Dimension, TasteKey};
@@ -311,6 +317,12 @@ const COMPANY_TERMS: &[(&str, &str)] = &[
     ("series b", "scaleup"),
     ("series c", "scaleup"),
     ("series d", "scaleup"),
+    // Later rounds are a stage, not a size: they say nothing about teams.
+    ("series e", "scaleup"),
+    ("series f", "scaleup"),
+    ("series g", "scaleup"),
+    ("series h", "scaleup"),
+    ("pre ipo", "scaleup"),
     ("hypergrowth", "scaleup"),
     ("startup", "startup"),
     ("start up", "startup"),
@@ -320,6 +332,12 @@ const COMPANY_TERMS: &[(&str, &str)] = &[
     ("small team", "small_team"),
     ("tiny team", "small_team"),
     ("lean team", "small_team"),
+    ("large team", "large_team"),
+    ("big team", "large_team"),
+    // The company itself ("we're a small company"), not its customers
+    // ("tools for small companies").
+    ("a small company", "small_company"),
+    ("a small startup", "small_company"),
     ("fortune 500", "large_company"),
     ("thousands of employees", "large_company"),
     ("publicly traded", "public_company"),
@@ -416,9 +434,53 @@ const BOILERPLATE_CUES: [&str; 20] = [
     "pay range",
 ];
 
+// The vocabularies above, compiled once (a posting is read against every
+// one of them, sentence by sentence).
+fn compile_terms(terms: &[(&str, &'static str)]) -> Terms {
+    let patterns: Vec<&str> = terms.iter().map(|(p, _)| *p).collect();
+    (
+        Vocabulary::compile(&patterns),
+        terms.iter().map(|(_, v)| *v).collect(),
+    )
+}
+/// A vocabulary of phrases and the value each one stands for.
+type Terms = (Vocabulary, Vec<&'static str>);
+static REQUIRED_HEADING_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&REQUIRED_HEADINGS));
+static PREFERRED_HEADING_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&PREFERRED_HEADINGS));
+static OTHER_HEADING_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&OTHER_HEADINGS));
+static PREFERRED_CUE_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&PREFERRED_CUES));
+static REQUIRED_CUE_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&REQUIRED_CUES));
+static BOILERPLATE_HEADING_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&BOILERPLATE_HEADINGS));
+static BOILERPLATE_CUE_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&BOILERPLATE_CUES));
+static ENGINEERING_TITLE_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&ENGINEERING_TITLE));
+static ROLE_TITLE_PATTERNS: LazyLock<Terms> = LazyLock::new(|| compile_terms(ROLE_TITLE_TERMS));
+static COMPANY_PATTERNS: LazyLock<Terms> = LazyLock::new(|| compile_terms(COMPANY_TERMS));
+static WORK_STYLE_PATTERNS: LazyLock<Terms> = LazyLock::new(|| compile_terms(WORK_STYLE_TERMS));
+static TEAM_OF: LazyLock<Pattern> = LazyLock::new(|| Pattern::new("team of _"));
+
+/// A content sentence of a description, split into words once.
+struct Sentence {
+    text: String,
+    words: Vec<Word>,
+}
+
 /// The sentences of a description that describe the job and the company,
 /// without benefits and policy boilerplate.
 pub fn content_sentences(description: &str) -> Vec<String> {
+    content(description).into_iter().map(|s| s.text).collect()
+}
+
+/// [`content_sentences`], with their words: read once per posting and
+/// shared by every reader of the description.
+fn content(description: &str) -> Vec<Sentence> {
     let mut out = Vec::new();
     let mut skipping = false;
     for line in description.lines() {
@@ -426,10 +488,7 @@ pub fn content_sentences(description: &str) -> Vec<String> {
         let ws = words(trimmed);
         let short = !trimmed.is_empty() && ws.len() <= 6 && !trimmed.ends_with('.');
         if short && !trimmed.starts_with(['-', '*', '•', '–']) {
-            if BOILERPLATE_HEADINGS
-                .iter()
-                .any(|p| Pattern::new(p).find(&ws).is_some_and(|r| r.start <= 2))
-            {
+            if starts_with_any(&ws, &BOILERPLATE_HEADING_PATTERNS) {
                 skipping = true;
                 continue;
             }
@@ -441,8 +500,12 @@ pub fn content_sentences(description: &str) -> Vec<String> {
             continue;
         }
         for sentence in jobhunt_eligibility::job::sentences(line) {
-            if !has(&words(&sentence), &BOILERPLATE_CUES) {
-                out.push(sentence);
+            let ws = words(&sentence);
+            if !has(&ws, &BOILERPLATE_CUE_PATTERNS) {
+                out.push(Sentence {
+                    text: sentence,
+                    words: ws,
+                });
             }
         }
     }
@@ -579,25 +642,29 @@ pub fn company_key(company: &str) -> TasteKey {
     TasteKey::new(Dimension::Company, jobhunt_core::text::search_key(company))
 }
 
-fn find_terms<'a>(
+fn find_terms(
     text: &str,
     ws: &[Word],
-    terms: &'a [(&'a str, &'a str)],
-) -> Vec<(&'a str, String)> {
+    (vocabulary, values): &Terms,
+) -> Vec<(&'static str, String)> {
     let mut out: Vec<(&str, String)> = Vec::new();
-    for (pattern, value) in terms {
-        if out.iter().any(|(v, _)| v == value) {
-            continue;
-        }
-        if let Some(range) = Pattern::new(pattern).find(ws) {
+    for (id, range) in vocabulary.find_first(ws) {
+        let value = values[id];
+        if !out.iter().any(|(v, _)| *v == value) {
             out.push((value, span_text(text, ws, &range).to_owned()));
         }
     }
     out
 }
 
-fn has(ws: &[Word], patterns: &[&str]) -> bool {
-    patterns.iter().any(|p| Pattern::new(p).find(ws).is_some())
+fn has(ws: &[Word], vocabulary: &Vocabulary) -> bool {
+    vocabulary.any(ws)
+}
+
+/// A phrase of `vocabulary` within the first three words (a heading's
+/// subject).
+fn starts_with_any(ws: &[Word], vocabulary: &Vocabulary) -> bool {
+    vocabulary.find_first(ws).iter().any(|(_, r)| r.start <= 2)
 }
 
 /// The level a title states.
@@ -619,7 +686,7 @@ pub fn title_level(title: &str) -> Option<(Level, String)> {
 /// Role shapes a title names, with the words.
 pub fn title_roles(title: &str) -> Vec<(&'static str, String)> {
     let ws = words(title);
-    let mut found = find_terms(title, &ws, ROLE_TITLE_TERMS);
+    let mut found = find_terms(title, &ws, &ROLE_TITLE_PATTERNS);
     // "Design Engineer" is frontend engineering, not design.
     if found.iter().any(|(v, _)| *v == "frontend") {
         found.retain(|(v, _)| *v != "design");
@@ -628,7 +695,7 @@ pub fn title_roles(title: &str) -> Vec<(&'static str, String)> {
     if found
         .iter()
         .any(|(v, _)| matches!(*v, "sales" | "product management"))
-        && !has(&ws, &ENGINEERING_TITLE)
+        && !has(&ws, &ENGINEERING_TITLE_PATTERNS)
     {
         found.retain(|(v, _)| matches!(*v, "sales" | "product management" | "design"));
     }
@@ -640,7 +707,7 @@ fn function_of(title: &str, roles: &[(&str, String)]) -> JobFunction {
     let is = |v: &str| roles.iter().any(|(r, _)| *r == v);
     if is("solutions") {
         JobFunction::CustomerEngineering
-    } else if has(&ws, &ENGINEERING_TITLE) || is("sre") {
+    } else if has(&ws, &ENGINEERING_TITLE_PATTERNS) || is("sre") {
         JobFunction::Engineering
     } else if is("sales") {
         JobFunction::Sales
@@ -664,24 +731,18 @@ fn heading_kind(line: &str) -> Option<Requirement> {
         || trimmed.len() > 80
         || trimmed.ends_with('.')
         || trimmed.starts_with(['-', '*', '•', '–'])
-        || !technologies_in(trimmed, false).is_empty()
     {
         return None;
     }
     let ws = words(trimmed);
-    if ws.len() > 6 {
+    if !technologies_in_words(trimmed, &ws, false).is_empty() || ws.len() > 6 {
         return None;
     }
-    let starts = |patterns: &[&str]| {
-        patterns
-            .iter()
-            .any(|p| Pattern::new(p).find(&ws).is_some_and(|r| r.start <= 2))
-    };
-    if starts(&PREFERRED_HEADINGS) {
+    if starts_with_any(&ws, &PREFERRED_HEADING_PATTERNS) {
         Some(Requirement::Preferred)
-    } else if starts(&REQUIRED_HEADINGS) {
+    } else if starts_with_any(&ws, &REQUIRED_HEADING_PATTERNS) {
         Some(Requirement::Required)
-    } else if starts(&OTHER_HEADINGS) {
+    } else if starts_with_any(&ws, &OTHER_HEADING_PATTERNS) {
         Some(Requirement::Mentioned)
     } else {
         None
@@ -705,14 +766,14 @@ fn technologies(title: &str, description: &str) -> Vec<TechFact> {
             continue;
         }
         for sentence in jobhunt_eligibility::job::sentences(line) {
-            let mentions = technologies_in(&sentence, false);
+            let ws = words(&sentence);
+            let mentions = technologies_in_words(&sentence, &ws, false);
             if mentions.is_empty() {
                 continue;
             }
-            let ws = words(&sentence);
-            let level = if has(&ws, &PREFERRED_CUES) {
+            let level = if has(&ws, &PREFERRED_CUE_PATTERNS) {
                 Requirement::Preferred
-            } else if section == Requirement::Mentioned && has(&ws, &REQUIRED_CUES) {
+            } else if section == Requirement::Mentioned && has(&ws, &REQUIRED_CUE_PATTERNS) {
                 Requirement::Required
             } else {
                 section
@@ -737,7 +798,7 @@ fn technologies(title: &str, description: &str) -> Vec<TechFact> {
     out
 }
 
-fn domains(title: &str, structured: &[&str], description: &str) -> Vec<Fact> {
+fn domains(title: &str, structured: &[&str], sentences: &[Sentence]) -> Vec<Fact> {
     let mut out: Vec<Fact> = Vec::new();
     let mut push = |domain: &str, evidence: String, source: FactSource| {
         if !out.iter().any(|f| f.key.value == domain) {
@@ -759,14 +820,18 @@ fn domains(title: &str, structured: &[&str], description: &str) -> Vec<Fact> {
     // The description counts when it names the domain more than once, or
     // once alongside typical vocabulary: one stray "AI" is not a domain.
     let mut tally: Vec<(&str, usize, usize, String)> = Vec::new();
-    for sentence in content_sentences(description) {
-        for hit in domains_in(&sentence) {
+    for Sentence {
+        text: sentence,
+        words: ws,
+    } in sentences
+    {
+        for hit in domains_in_words(sentence, ws) {
             match tally.iter_mut().find(|(d, ..)| *d == hit.domain) {
                 Some(entry) => {
                     if hit.strong {
                         entry.1 += 1;
                         if entry.1 == 1 {
-                            entry.3.clone_from(&sentence);
+                            entry.3.clone_from(sentence);
                         }
                     } else {
                         entry.2 += 1;
@@ -789,11 +854,14 @@ fn domains(title: &str, structured: &[&str], description: &str) -> Vec<Fact> {
     out
 }
 
-fn statements(description: &str, terms: &[(&str, &str)], dimension: Dimension) -> Vec<Fact> {
+fn statements(sentences: &[Sentence], terms: &Terms, dimension: Dimension) -> Vec<Fact> {
     let mut out: Vec<Fact> = Vec::new();
-    for sentence in content_sentences(description) {
-        let ws = words(&sentence);
-        for (value, _) in find_terms(&sentence, &ws, terms) {
+    for Sentence {
+        text: sentence,
+        words: ws,
+    } in sentences
+    {
+        for (value, _) in find_terms(sentence, ws, terms) {
             if !out.iter().any(|f| f.key.value == value) {
                 out.push(Fact {
                     key: TasteKey::new(dimension, value),
@@ -806,24 +874,85 @@ fn statements(description: &str, terms: &[(&str, &str)], dimension: Dimension) -
     out
 }
 
-/// "a team of 6 engineers": a small team when the number is small.
-fn team_size(description: &str) -> Option<Fact> {
-    for sentence in content_sentences(description) {
-        let ws = words(&sentence);
-        for range in Pattern::new("team of _").find_all(&ws) {
+/// "a team of 6 engineers": a small team when the number is small, a
+/// large one when it is large (in between says nothing). A team's size,
+/// never the company's.
+fn team_size(sentences: &[Sentence]) -> Option<Fact> {
+    for Sentence {
+        text: sentence,
+        words: ws,
+    } in sentences
+    {
+        for range in TEAM_OF.find_all(ws) {
             let n: Option<u32> = ws.get(range.end - 1).and_then(|w| w.lower.parse().ok());
-            if let Some(n) = n
-                && (2..=25).contains(&n)
-            {
-                return Some(Fact {
-                    key: TasteKey::new(Dimension::CompanyTrait, "small_team"),
-                    evidence: sentence.clone(),
-                    source: FactSource::Description,
-                });
-            }
+            let size = match n {
+                Some(2..=25) => "small_team",
+                Some(50..) => "large_team",
+                _ => continue,
+            };
+            return Some(Fact {
+                key: TasteKey::new(Dimension::CompanyTrait, size),
+                evidence: sentence.clone(),
+                source: FactSource::Description,
+            });
         }
     }
     None
+}
+
+/// How many postings [`facets_of`] remembers (a few megabytes); past that
+/// it starts over.
+const REMEMBERED: usize = 20_000;
+
+/// Facets by record and a hash of what they were read from.
+type Remembered = HashMap<(JobId, u64), Arc<JobFacets>>;
+
+static REMEMBERED_FACETS: LazyLock<Mutex<Remembered>> = LazyLock::new(Mutex::default);
+
+/// Everything [`facets`] reads from a record, hashed: a new version of a
+/// posting is a new key.
+fn facets_input(record: &JobRecord) -> u64 {
+    let job = &record.posting;
+    let mut h = std::hash::DefaultHasher::new();
+    (
+        &job.title,
+        &job.description_text,
+        &job.department,
+        &job.team,
+        &job.company,
+        job.is_remote,
+        job.posted_at,
+        record.first_seen_at,
+    )
+        .hash(&mut h);
+    format!(
+        "{:?}{:?}{}",
+        job.workplace_type, job.employment_type, job.provenance.source
+    )
+    .hash(&mut h);
+    h.finish()
+}
+
+/// [`facets`], remembered per posting version. Reading a posting is most
+/// of what ranking costs, and every ranking of every person reads the same
+/// postings; the facts only change when the posting does.
+pub fn facets_of(record: &JobRecord) -> Arc<JobFacets> {
+    let key = (record.id, facets_input(record));
+    if let Some(found) = REMEMBERED_FACETS
+        .lock()
+        .ok()
+        .and_then(|m| m.get(&key).cloned())
+    {
+        return found;
+    }
+    let read = Arc::new(facets(record));
+    if let Ok(mut remembered) = REMEMBERED_FACETS.lock() {
+        if remembered.len() >= REMEMBERED {
+            remembered.clear();
+        }
+        remembered.insert(key, Arc::clone(&read));
+    }
+    read
 }
 
 /// Reads one stored job.
@@ -842,6 +971,7 @@ pub fn facets(record: &JobRecord) -> JobFacets {
         })
         .collect();
     let technologies = technologies(&title, description);
+    let sentences = content(description);
     // A generic engineering title: the description says what kind.
     if function == JobFunction::Engineering && roles.is_empty() {
         let techs: Vec<&str> = technologies
@@ -849,9 +979,11 @@ pub fn facets(record: &JobRecord) -> JobFacets {
             .filter(|t| t.requirement >= Requirement::Preferred)
             .map(|t| t.name.as_str())
             .collect();
-        let sentences = content_sentences(description);
-        let texts: Vec<&str> = sentences.iter().map(String::as_str).collect();
-        for signal in role_signals(None, &techs, &texts) {
+        let texts: Vec<(&str, &[Word])> = sentences
+            .iter()
+            .map(|s| (s.text.as_str(), s.words.as_slice()))
+            .collect();
+        for signal in role_signals_in(None, &techs, &texts) {
             let value = signal.role;
             if !roles.iter().any(|f| f.key.value == value) {
                 roles.push(Fact {
@@ -866,9 +998,11 @@ pub fn facets(record: &JobRecord) -> JobFacets {
         .into_iter()
         .flatten()
         .collect();
-    let mut company_traits = statements(description, COMPANY_TERMS, Dimension::CompanyTrait);
-    if let Some(fact) = team_size(description)
-        && !company_traits.iter().any(|f| f.key == fact.key)
+    let mut company_traits = statements(&sentences, &COMPANY_PATTERNS, Dimension::CompanyTrait);
+    if let Some(fact) = team_size(&sentences)
+        && !company_traits
+            .iter()
+            .any(|f| matches!(f.key.value.as_str(), "small_team" | "large_team"))
     {
         company_traits.push(fact);
     }
@@ -881,7 +1015,7 @@ pub fn facets(record: &JobRecord) -> JobFacets {
             source: FactSource::Structured,
         });
     }
-    let mut work_style = statements(description, WORK_STYLE_TERMS, Dimension::WorkStyle);
+    let mut work_style = statements(&sentences, &WORK_STYLE_PATTERNS, Dimension::WorkStyle);
     let level = title_level(&title);
     if let Some((Level::Manager, words)) = &level
         && function.is_engineering()
@@ -913,7 +1047,7 @@ pub fn facets(record: &JobRecord) -> JobFacets {
         function,
         roles,
         level,
-        domains: domains(&title, &structured, description),
+        domains: domains(&title, &structured, &sentences),
         technologies,
         company_traits,
         work_style,
@@ -929,6 +1063,23 @@ pub fn facets(record: &JobRecord) -> JobFacets {
 mod tests {
     use super::*;
     use crate::testing::record;
+
+    #[test]
+    fn remembered_facets_follow_the_posting_version() {
+        let first = record(
+            "ashby:acme",
+            "Backend Engineer",
+            "We are a small team of 8.",
+        );
+        let a = facets_of(&first);
+        assert!(Arc::ptr_eq(&a, &facets_of(&first)), "read once per version");
+        assert_eq!(*a, facets(&first));
+        let mut edited = first.clone();
+        edited.posting.description_text = Some("Join a team of 200 engineers.".into());
+        let b = facets_of(&edited);
+        assert!(b.company_traits.iter().any(|f| f.key.value == "large_team"));
+        assert!(!b.company_traits.iter().any(|f| f.key.value == "small_team"));
+    }
 
     #[test]
     fn titles_name_roles_and_levels() {

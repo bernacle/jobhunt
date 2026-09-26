@@ -35,6 +35,7 @@
 //! means not acted on yet.
 
 use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 use chrono::{DateTime, Duration, Utc};
 use jobhunt_jobs::verification::CompensationCheck;
@@ -113,6 +114,43 @@ pub struct FeedEntry {
     pub changes: Vec<String>,
     pub stage: Stage,
     pub first_shown_at: Option<DateTime<Utc>>,
+    /// The company's other recommendations, held off the feed (best first).
+    pub also_at_company: Vec<SameCompany>,
+}
+
+/// Another recommendation at the same company as a feed item, not on the
+/// feed itself (and not recorded as shown).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct SameCompany {
+    /// `opp_…`.
+    pub id: String,
+    pub title: String,
+}
+
+/// Today's picks, in rank order: each company's best-ranked candidate,
+/// until `limit` companies are on it. A company's other candidates go
+/// with its pick instead of taking a slot; nothing pads the feed when
+/// fewer companies qualify. One rule, no score: Today is a few distinct
+/// decisions, and "do I want this company?" is one of them.
+fn one_per_company<T>(
+    candidates: Vec<T>,
+    limit: usize,
+    company: impl Fn(&T) -> String,
+) -> Vec<(T, Vec<T>)> {
+    let mut picks: Vec<(T, Vec<T>)> = Vec::new();
+    let mut at: HashMap<String, usize> = HashMap::new();
+    for candidate in candidates {
+        let key = company(&candidate);
+        match at.get(&key) {
+            Some(i) => picks[*i].1.push(candidate),
+            None if picks.len() < limit => {
+                at.insert(key, picks.len());
+                picks.push((candidate, Vec::new()));
+            }
+            None => {}
+        }
+    }
+    picks
 }
 
 /// Opportunities in the person's pipeline, by stage.
@@ -208,18 +246,39 @@ fn describe_change(
     out
 }
 
+/// Where preparing Today took its time (milliseconds), logged with every
+/// feed; ranking's own parts come from [`jobhunt_ranking::RankTimings`].
+#[derive(Debug, Clone, Copy, Default)]
+struct FeedTimings {
+    /// Profile check and feedback, outside the ranking.
+    prepare_ms: u64,
+    verify_ms: u64,
+    rerank_ms: u64,
+    classify_ms: u64,
+    /// Checking and recording what is shown.
+    select_ms: u64,
+}
+
+fn ms_since(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
+}
+
+fn report_ms(t: &jobhunt_ranking::RankTimings) -> u64 {
+    t.person_ms + t.load_ms + t.eligibility_ms + t.ranking_ms
+}
+
 impl LocalApp {
     /// Material changes to an opportunity's records after `since`, and when
-    /// the latest happened.
-    pub async fn material_changes(
-        &self,
+    /// the latest happened, from their `histories`.
+    fn material_changes(
         records: &[JobRecord],
         since: DateTime<Utc>,
-    ) -> Result<(Vec<String>, Option<DateTime<Utc>>), AppError> {
+        histories: &HashMap<JobId, Vec<jobhunt_jobs::JobEvent>>,
+    ) -> (Vec<String>, Option<DateTime<Utc>>) {
         let mut changes: Vec<String> = Vec::new();
         let mut latest: Option<DateTime<Utc>> = None;
         for record in records {
-            for event in self.store().history(record.id).await? {
+            for event in histories.get(&record.id).into_iter().flatten() {
                 if event.at <= since {
                     continue;
                 }
@@ -240,7 +299,7 @@ impl LocalApp {
                 }
             }
         }
-        Ok((changes, latest))
+        (changes, latest)
     }
 
     /// Sorts every recommendation worth reviewing into new, changed and
@@ -258,6 +317,21 @@ impl LocalApp {
             .collect();
         let ids: Vec<OpportunityId> = worth.iter().map(|r| r.opportunity).collect();
         let marks = self.store().feed_marks(&ids).await?;
+        // Records of every recommendation, and the history of those whose
+        // changes can bring them back: one repository call each.
+        let mut records_of = self.store().opportunity_records_many(&ids).await?;
+        let pool: Vec<JobId> = ids
+            .iter()
+            .take(CHANGE_POOL)
+            .filter_map(|id| records_of.get(id))
+            .flatten()
+            .map(|r| r.id)
+            .collect();
+        let histories = if pool.is_empty() {
+            HashMap::new()
+        } else {
+            self.store().histories(&pool).await?
+        };
         let mut out = Classified {
             candidates: Vec::new(),
             new_total: 0,
@@ -265,10 +339,7 @@ impl LocalApp {
             passed_over: 0,
         };
         for (position, ranking) in worth.into_iter().enumerate() {
-            let records = self
-                .store()
-                .opportunity_records(ranking.opportunity)
-                .await?;
+            let records = records_of.remove(&ranking.opportunity).unwrap_or_default();
             if records.is_empty() {
                 continue;
             }
@@ -306,7 +377,7 @@ impl LocalApp {
             let dismissed = mark.as_ref().and_then(|m| m.dismissed_at);
             let reference = reference.max(dismissed.unwrap_or(reference));
             let (changes, change_at) = if position < CHANGE_POOL {
-                self.material_changes(&records, reference).await?
+                Self::material_changes(&records, reference, &histories)
             } else {
                 (Vec::new(), None)
             };
@@ -348,6 +419,7 @@ impl LocalApp {
                 "limit must be between 1 and {MAX_FEED_LIMIT}"
             )));
         }
+        let started = Instant::now();
         if self.profile_facts().await?.is_none() {
             return Err(AppError::NoProfile);
         }
@@ -362,8 +434,14 @@ impl LocalApp {
         };
         let feedback = self.feedback_by_job().await?;
         let mut report = ranking.rank(&query, now).await?;
+        let first_rank = report.timings;
+        let mut timings = FeedTimings {
+            prepare_ms: ms_since(started).saturating_sub(report_ms(&first_rank)),
+            ..FeedTimings::default()
+        };
         let mut verified_now = 0;
         if request.verify {
+            let phase = Instant::now();
             let pool = request.limit * 2;
             let classified = self.classify(&report, &feedback, now).await?;
             let chosen: Vec<&Ranking> = classified
@@ -374,20 +452,36 @@ impl LocalApp {
                 .collect();
             verified_now = self.verify_candidates(&chosen, pool, progress, now).await?;
             drop(classified);
+            timings.verify_ms = ms_since(phase);
             if verified_now > 0 {
+                let phase = Instant::now();
                 report = ranking.rank(&query, now).await?;
+                timings.rerank_ms = ms_since(phase);
             }
         }
+        let phase = Instant::now();
         let Classified {
             candidates,
             new_total,
             changed_total,
             passed_over,
         } = self.classify(&report, &feedback, now).await?;
+        timings.classify_ms = ms_since(phase);
+        let phase = Instant::now();
         let mut entries = Vec::new();
         let mut shown = Vec::new();
         let mut resurfaced = Vec::new();
-        for c in candidates.into_iter().take(request.limit) {
+        let picks = one_per_company(candidates, request.limit, |c| {
+            jobhunt_core::text::search_key(&c.ranking.facets.company)
+        });
+        for (c, others) in picks {
+            let also_at_company = others
+                .iter()
+                .map(|o| SameCompany {
+                    id: o.ranking.opportunity.to_string(),
+                    title: o.ranking.title.clone(),
+                })
+                .collect();
             let opportunity = Opportunity {
                 id: c.ranking.opportunity,
                 records: c.records,
@@ -412,6 +506,7 @@ impl LocalApp {
                 changes: c.changes,
                 stage: c.state.stage,
                 first_shown_at: c.mark.and_then(|m| m.first_shown_at),
+                also_at_company,
             });
         }
         // Per-person search state: best effort, it never fails the feed.
@@ -421,6 +516,7 @@ impl LocalApp {
         if let Err(error) = self.store().record_resurfaced(&resurfaced, now).await {
             tracing::warn!(%error, "could not record resurfaced opportunities");
         }
+        timings.select_ms = ms_since(phase);
         let mut pipeline = PipelineCounts::default();
         for entry in ranking.pipeline(false).await? {
             match entry.state.stage {
@@ -431,6 +527,22 @@ impl LocalApp {
                 _ => {}
             }
         }
+        tracing::info!(
+            total_ms = ms_since(started),
+            prepare_ms = timings.prepare_ms,
+            person_ms = first_rank.person_ms,
+            load_ms = first_rank.load_ms,
+            eligibility_ms = first_rank.eligibility_ms,
+            ranking_ms = first_rank.ranking_ms,
+            verify_ms = timings.verify_ms,
+            verified_now,
+            rerank_ms = timings.rerank_ms,
+            classify_ms = timings.classify_ms,
+            select_ms = timings.select_ms,
+            considered = report.considered,
+            shown = entries.len(),
+            "today prepared"
+        );
         Ok(Feed {
             refresh,
             report,
@@ -547,6 +659,7 @@ impl LocalApp {
                     changes: Vec::new(),
                     stage: PipelineStage::Unseen,
                     first_shown_at: None,
+                    also_at_company: Vec::new(),
                 },
                 job,
                 content_version,
@@ -583,6 +696,10 @@ pub struct FeedItem {
     /// When a feed or shortlist first showed it to the person.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_shown_at: Option<String>,
+    /// Other recommendations at the same company, held off the feed so
+    /// that one company doesn't fill it (best first).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub also_at_company: Vec<SameCompany>,
 }
 
 /// From every open job to what is on the feed. Every number is counted,
@@ -653,6 +770,7 @@ impl FeedView {
                 changes: e.changes.clone(),
                 stage: e.stage.into(),
                 first_shown_at: e.first_shown_at.map(time),
+                also_at_company: e.also_at_company.clone(),
             })
             .collect();
         let mut notes = Vec::new();
@@ -778,6 +896,39 @@ mod tests {
                 interval: Some(jobhunt_jobs::PayInterval::Year),
             }],
         }
+    }
+
+    #[test]
+    fn one_role_per_company_in_rank_order_never_padded() {
+        let ranked = [
+            ("Supabase", "a"),
+            ("Supabase", "b"),
+            ("Airbnb", "c"),
+            ("supabase", "d"),
+            ("Supabase", "e"),
+            ("Linear", "f"),
+            ("Modal", "g"),
+        ];
+        let key = |c: &(&str, &str)| jobhunt_core::text::search_key(c.0);
+        let picks = one_per_company(ranked.to_vec(), 5, key);
+        let chosen: Vec<&str> = picks.iter().map(|(c, _)| c.1).collect();
+        assert_eq!(
+            chosen,
+            ["a", "c", "f", "g"],
+            "best of each company, then the rest"
+        );
+        let held: Vec<&str> = picks[0].1.iter().map(|c| c.1).collect();
+        assert_eq!(
+            held,
+            ["b", "d", "e"],
+            "the company's other roles, best first"
+        );
+        assert!(picks[1..].iter().all(|(_, others)| others.is_empty()));
+        // A full feed leaves later companies out; their roles are not
+        // attached anywhere.
+        let two = one_per_company(ranked.to_vec(), 2, key);
+        assert_eq!(two.iter().map(|(c, _)| c.1).collect::<Vec<_>>(), ["a", "c"]);
+        assert_eq!(two[0].1.len(), 3);
     }
 
     #[test]

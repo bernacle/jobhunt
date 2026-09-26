@@ -1183,7 +1183,7 @@ eligibility), a one-line summary, and its evidence.
 | stack | technologies the job *requires* (its title, requirements lists, "must"/"strong experience" sentences) against those your resume shows you used; "nice to have" and passing mentions don't count; one missing technology is never a reason to skip |
 | domain | the job's domains (title, department, or named more than once in its description) against domains you want or avoid; having worked in a domain is shown as experience, never as wanting it |
 | pay | see below |
-| company | company and team kinds the posting states (startup, early-stage, founder-led, small team, large company, consulting, agency, open source, remote-first, …) against yours; unstated ones you care about are unknowns |
+| company | company and team kinds the posting states (startup, early-stage, scale-up, founder-led, small team, small company, large company, public company, consulting, agency, open source, remote-first, …) against yours. Team size and company size are different facts: a stated opposite of the *same* kind (a large team against small teams; a large or public company against small companies) counts against a want and rules out a requirement, and a company's size never decides a team's. Unstated ones you care about are unknowns; a required one left unstated is unresolved, never taken as met, and never a strong fit |
 | work style | ownership, management, on-call, greenfield, async, … against yours; people management when you want individual-contributor work |
 | work mode | remote / hybrid / on-site against modes you want or avoid (a *required* mode is eligibility's) |
 | feedback | what you did with this job (saved, liked, disliked), and notes about it only ("great product") |

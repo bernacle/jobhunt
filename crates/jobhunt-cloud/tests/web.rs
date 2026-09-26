@@ -509,6 +509,169 @@ async fn seed_each(server: &Server, postings: &[JobPosting], verified: Option<i6
 }
 
 #[tokio::test]
+async fn an_ambiguous_onboarding_answer_stays_unresolved_until_confirmed() {
+    let Some(server) = Server::start().await else {
+        return;
+    };
+    let token = server.token("bruno").await;
+    let (status, body) = server.upload(&token, "ana_lima.md", "text/markdown").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = server
+        .post(
+            "/api/v1/preferences",
+            &token,
+            json!({"statement": "Small teams and the sallary of 140k"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let questions = |profile: &Value| -> Vec<Value> {
+        profile["preferences"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|p| p["active"] == true && !p["clarify"].is_null())
+            .cloned()
+            .collect()
+    };
+    let (_, profile) = server.get("/api/v1/profile", &token).await;
+    let open = questions(&profile);
+    assert_eq!(open.len(), 2, "{profile}");
+    let pay = open.iter().find(|p| p["clarify"]["kind"] == "pay").unwrap();
+    assert_eq!(pay["clarify"]["amount"], 140_000);
+    assert_eq!(pay["clarify"]["bound"], "target");
+    assert!(pay["clarify"]["currency"].is_null(), "never assumed");
+    let size = open
+        .iter()
+        .find(|p| p["clarify"]["kind"] == "size")
+        .unwrap();
+    assert_eq!(size["clarify"]["value"], "small_team");
+
+    // The answers replace the readings: a USD floor, and small teams as a
+    // requirement.
+    let (status, body) = server
+        .post(
+            "/api/v1/preferences",
+            &token,
+            json!({
+                "set": [
+                    {"kind": "compensation", "minimum": 140_000, "currency": "USD", "period": "year"},
+                    {"kind": "company", "company": "small_team", "stance": "require"},
+                ],
+                "remove": [pay["id"], size["id"]],
+            }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, profile) = server.get("/api/v1/profile", &token).await;
+    assert!(questions(&profile).is_empty(), "{profile}");
+    let active: Vec<(String, String)> = profile["preferences"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|p| p["active"] == true)
+        .map(|p| {
+            (
+                p["stance"].as_str().unwrap().to_owned(),
+                p["value"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    assert!(
+        active
+            .iter()
+            .any(|(stance, value)| stance == "required" && value.contains("USD 140,000")),
+        "{active:?}"
+    );
+    assert!(
+        active
+            .iter()
+            .any(|(stance, value)| stance == "required" && value == "small teams"),
+        "{active:?}"
+    );
+    server.finish().await;
+}
+
+#[tokio::test]
+async fn today_shows_one_role_per_company() {
+    let Some(server) = Server::start().await else {
+        return;
+    };
+    let token = server.token("ana").await;
+    server.onboard(&token).await;
+    // Four strong roles at one company, and two strong ones elsewhere.
+    let supa: Vec<JobPosting> = [
+        ("701", "Senior Backend Engineer (Go)"),
+        ("702", "Backend Engineer, Payments APIs"),
+        ("703", "Staff Platform Engineer"),
+        ("704", "Senior Software Engineer, Developer Tools"),
+    ]
+    .iter()
+    .map(|(id, title)| {
+        posting(
+            "greenhouse:supa",
+            id,
+            "Supa",
+            title,
+            BACKEND,
+            Some(salary(150_000.0, 190_000.0)),
+        )
+    })
+    .collect();
+    server.seed("greenhouse:supa", &supa, Some(1)).await;
+    let (strong, _) = corpus();
+    seed_each(&server, &strong[..2], Some(1)).await;
+
+    let feed = server.feed(&token, 5).await;
+    let companies: Vec<&str> = feed.items.iter().map(|i| i.item.company.as_str()).collect();
+    assert_eq!(
+        companies.iter().filter(|c| **c == "Supa").count(),
+        1,
+        "{companies:?}"
+    );
+    assert_eq!(
+        feed.items.len(),
+        3,
+        "three companies, not padded: {companies:?}"
+    );
+    let first = feed
+        .items
+        .iter()
+        .find(|i| i.item.company == "Supa")
+        .unwrap();
+    assert_eq!(
+        first.also_at_company.len(),
+        3,
+        "the other Supa roles go with it"
+    );
+    assert!(
+        first
+            .also_at_company
+            .iter()
+            .all(|o| o.id != first.item.id && !ids(&feed).contains(&o.id))
+    );
+    assert_eq!(feed.summary.new, 6, "held back is still new");
+
+    // Held back is not shown: a day later the Supa role on the feed has
+    // passed, and one of the others takes its place, new.
+    server.age_feed(25).await;
+    let later = server.feed(&token, 5).await;
+    let next = later
+        .items
+        .iter()
+        .find(|i| i.item.company == "Supa")
+        .expect("another Supa role, never shown before");
+    assert_ne!(next.item.id, first.item.id);
+    assert!(first.also_at_company.iter().any(|o| o.id == next.item.id));
+    assert_eq!(next.also_at_company.len(), 2);
+    assert!(
+        next.first_shown_at.is_none(),
+        "first shown by this feed, not before"
+    );
+    server.finish().await;
+}
+
+#[tokio::test]
 async fn today_is_a_small_feed_of_new_recommendations_that_can_be_finished() {
     let Some(server) = Server::start().await else {
         return;

@@ -223,3 +223,24 @@ describe("TodayFeed", () => {
     expect(screen.queryByText(/Staff Engineer A/)).not.toBeInTheDocument();
   });
 });
+
+describe("MoreAtCompany", () => {
+  it("names the company's other roles instead of giving them Today slots", async () => {
+    const item = feedItem({
+      company: "Supabase",
+      also_at_company: [
+        { id: "opp_1", title: "OrioleDB Deployment Engineer (AMER)" },
+        { id: "opp_2", title: "Software Engineer - Branching" },
+        { id: "opp_3", title: "Engineering Productivity Engineer" },
+      ],
+    });
+    render(<OpportunityLead item={item} actions={actions()} now={now} />);
+    await userEvent.click(screen.getByText("+3 more roles at Supabase"));
+    expect(screen.getByRole("link", { name: "Software Engineer - Branching" })).toHaveAttribute("href", "/opportunities/opp_2");
+  });
+
+  it("says nothing when the company has no other role", () => {
+    render(<OpportunityLead item={feedItem()} actions={actions()} now={now} />);
+    expect(screen.queryByText(/more roles? at/)).not.toBeInTheDocument();
+  });
+});

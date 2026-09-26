@@ -1030,7 +1030,7 @@ impl JobRepository for PgStore {
     async fn history(&self, id: JobId) -> Result<Vec<JobEvent>, StorageError> {
         let raw_id = id.to_string();
         let rows = sqlx::query(
-            "SELECT kind, at, run_id, changed_fields, previous FROM job_events \
+            "SELECT job_id, kind, at, run_id, changed_fields, previous FROM job_events \
              WHERE job_id = $1 ORDER BY id",
         )
         .bind(&raw_id)
@@ -1038,25 +1038,43 @@ impl JobRepository for PgStore {
         .await
         .map_err(query_error("loading job history"))?;
         rows.iter()
-            .map(|row| {
-                let bad = |e: String| corrupt(&raw_id, format!("history: {e}"));
-                let kind: String = row.try_get("kind").map_err(|e| bad(e.to_string()))?;
-                let run: Option<i64> = row.try_get("run_id").map_err(|e| bad(e.to_string()))?;
-                let Json(changed): Json<Vec<String>> = row
-                    .try_get("changed_fields")
-                    .map_err(|e| bad(e.to_string()))?;
-                let previous: Option<Json<JobSnapshot>> =
-                    row.try_get("previous").map_err(|e| bad(e.to_string()))?;
-                Ok(JobEvent {
-                    kind: JobEventKind::from_canonical(&kind)
-                        .ok_or_else(|| bad(format!("unknown kind {kind:?}")))?,
-                    at: row.try_get("at").map_err(|e| bad(e.to_string()))?,
-                    run: run.map(RunId),
-                    changed_fields: changed,
-                    previous: previous.map(|Json(p)| p),
-                })
-            })
+            .map(|row| decode_event(row).map(|(_, e)| e))
             .collect()
+    }
+
+    async fn histories(
+        &self,
+        ids: &[JobId],
+    ) -> Result<HashMap<JobId, Vec<JobEvent>>, StorageError> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let raw: Vec<String> = ids.iter().map(ToString::to_string).collect();
+        let rows = sqlx::query(
+            "SELECT job_id, kind, at, run_id, changed_fields, previous FROM job_events \
+             WHERE job_id = ANY($1) ORDER BY id",
+        )
+        .bind(&raw)
+        .fetch_all(self.pool())
+        .await
+        .map_err(query_error("loading job history"))?;
+        let mut out: HashMap<JobId, Vec<JobEvent>> = HashMap::new();
+        for row in &rows {
+            let (job, event) = decode_event(row)?;
+            out.entry(job).or_default().push(event);
+        }
+        Ok(out)
+    }
+
+    async fn opportunity_records_many(
+        &self,
+        ids: &[OpportunityId],
+    ) -> Result<HashMap<OpportunityId, Vec<JobRecord>>, StorageError> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let raw: Vec<String> = ids.iter().map(ToString::to_string).collect();
+        self.records_of(&raw).await
     }
 
     async fn search(&self, query: &JobQuery) -> Result<Vec<JobRecord>, StorageError> {
@@ -1104,4 +1122,33 @@ impl JobRepository for PgStore {
             .map_err(query_error("counting jobs"))?;
         Ok(u64::try_from(count).unwrap_or(0))
     }
+}
+
+/// One `job_events` row (with its `job_id`).
+fn decode_event(row: &PgRow) -> Result<(JobId, JobEvent), StorageError> {
+    let raw_id: String = row
+        .try_get("job_id")
+        .map_err(|e| corrupt("<job event>", e))?;
+    let bad = |e: String| corrupt(&raw_id, format!("history: {e}"));
+    let job: JobId = raw_id
+        .parse()
+        .map_err(|e: jobhunt_core::ParseIdError| bad(e.to_string()))?;
+    let kind: String = row.try_get("kind").map_err(|e| bad(e.to_string()))?;
+    let run: Option<i64> = row.try_get("run_id").map_err(|e| bad(e.to_string()))?;
+    let Json(changed): Json<Vec<String>> = row
+        .try_get("changed_fields")
+        .map_err(|e| bad(e.to_string()))?;
+    let previous: Option<Json<JobSnapshot>> =
+        row.try_get("previous").map_err(|e| bad(e.to_string()))?;
+    Ok((
+        job,
+        JobEvent {
+            kind: JobEventKind::from_canonical(&kind)
+                .ok_or_else(|| bad(format!("unknown kind {kind:?}")))?,
+            at: row.try_get("at").map_err(|e| bad(e.to_string()))?,
+            run: run.map(RunId),
+            changed_fields: changed,
+            previous: previous.map(|Json(p)| p),
+        },
+    ))
 }

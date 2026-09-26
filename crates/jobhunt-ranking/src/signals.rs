@@ -828,20 +828,104 @@ pub fn domain(i: &Inputs<'_>) -> Vec<Signal> {
 // ---------------------------------------------------------------------------
 // Company and work style.
 
-pub fn company(i: &Inputs<'_>) -> Vec<Signal> {
+/// The company and team kinds a posting contradicts `value` with when it
+/// states them: team size against team size, company size against company
+/// size. A company's headcount or listing says nothing about the size of
+/// the team someone would join, so it never contradicts a team.
+fn contradicting(value: &str) -> &'static [&'static str] {
+    match value {
+        "small_team" => &["large_team"],
+        "large_team" => &["small_team"],
+        "small_company" => &["large_company", "public_company"],
+        "large_company" => &["small_company"],
+        _ => &[],
+    }
+}
+
+/// One company or team kind, as said of one posting.
+fn one(value: &str) -> &'static str {
+    match value {
+        "small_team" => "a small team",
+        "large_team" => "a large team",
+        "small_company" => "a small company",
+        "large_company" => "a large company",
+        "public_company" => "a public company",
+        _ => "something else",
+    }
+}
+
+/// What a posting says against a stated company or team kind, with its
+/// words: (what it is instead, evidence).
+fn contradiction(p: &StatedPreference, facets: &JobFacets) -> Option<(&'static str, String)> {
+    let key = p.key()?;
+    contradicting(&key.value).iter().find_map(|other| {
+        facets
+            .evidence_for(&TasteKey::new(Dimension::CompanyTrait, *other))
+            .map(|evidence| (one(other), evidence))
+    })
+}
+
+/// The company signals, and what they decide beyond the score: a stated
+/// requirement the posting contradicts (which rules the job out), and
+/// whether a requirement is unresolved (the posting says nothing either
+/// way: never taken as met, and never a strong fit).
+pub struct CompanyReading {
+    pub signals: Vec<Signal>,
+    pub ruled_out: Option<String>,
+    pub unresolved: bool,
+}
+
+pub fn company(i: &Inputs<'_>) -> CompanyReading {
     let group = SignalGroup::Company;
     let mut out = stated(i, &[Dimension::CompanyTrait]);
-    let unstated: Vec<&str> = i
-        .person
-        .stated
-        .iter()
-        .filter(|p| {
-            p.dimension == Dimension::CompanyTrait
-                && p.stance.is_positive()
-                && matches(p, i.facets).is_none()
-        })
-        .map(|p| p.text.as_str())
-        .collect();
+    let mut ruled_out = None;
+    let mut unresolved: Vec<&str> = Vec::new();
+    let mut unstated: Vec<&str> = Vec::new();
+    for p in i.person.stated.iter().filter(|p| {
+        p.dimension == Dimension::CompanyTrait
+            && p.stance.is_positive()
+            && matches(p, i.facets).is_none()
+    }) {
+        match (contradiction(p, i.facets), p.stance) {
+            (Some((instead, evidence)), Stance::Required) => {
+                let why = format!("The posting says it's {instead}; you require {}", p.text);
+                out.push(
+                    Signal::new(group, Basis::Stated, -3.0, why.clone())
+                        .kind(SignalKind::Blocker)
+                        .evidence([evidence]),
+                );
+                ruled_out.get_or_insert(why);
+            }
+            (Some((instead, evidence)), stance) => {
+                let weight = if stance == Stance::Wanted { -1.5 } else { -0.5 };
+                out.push(
+                    Signal::new(
+                        group,
+                        Basis::Stated,
+                        weight,
+                        format!("The posting says it's {instead}, while you want {}", p.text),
+                    )
+                    .evidence([evidence]),
+                );
+            }
+            (None, Stance::Required) => unresolved.push(p.text.as_str()),
+            (None, _) => unstated.push(p.text.as_str()),
+        }
+    }
+    if !unresolved.is_empty() {
+        out.push(
+            Signal::new(
+                group,
+                Basis::Stated,
+                0.0,
+                format!(
+                    "Unresolved: you require {}, and the posting doesn't say",
+                    unresolved.join(" and ")
+                ),
+            )
+            .kind(SignalKind::Unknown),
+        );
+    }
     if !unstated.is_empty() {
         out.push(
             Signal::new(
@@ -857,7 +941,11 @@ pub fn company(i: &Inputs<'_>) -> Vec<Signal> {
         );
     }
     out.extend(learned(i, &[Dimension::CompanyTrait, Dimension::Company]));
-    out
+    CompanyReading {
+        signals: out,
+        ruled_out,
+        unresolved: !unresolved.is_empty(),
+    }
 }
 
 pub fn work_style(i: &Inputs<'_>) -> Vec<Signal> {

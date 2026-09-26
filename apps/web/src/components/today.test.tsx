@@ -1,10 +1,12 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import { feedView } from "../../test/fixtures";
 import { violations } from "../../test/axe";
 import { CaughtUp } from "./caught-up";
 import { DiscoveryStatus, FeedSummary } from "./feed-summary";
+import { RefreshButton } from "./refresh-on-focus";
 
 const now = new Date("2026-09-25T12:00:00Z");
 
@@ -53,5 +55,67 @@ describe("CaughtUp", () => {
     render(<CaughtUp feed={feed} now={now} />);
     expect(screen.getByRole("heading", { name: "Narrow is still gathering jobs." })).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+});
+
+describe("CaughtUp, told apart", () => {
+  it("says nothing was worth showing when no open job fit, not that the person is caught up", () => {
+    const feed = feedView({
+      items: [],
+      caught_up: true,
+      passed_over: 0,
+      summary: { checked: 2882, passed_eligibility: 2600, worth_reviewing: 0, new: 0, changed: 0, shown: 0 },
+      pipeline: { saved: 0, applied: 0, interviewing: 0, offer: 0 },
+    });
+    render(<CaughtUp feed={feed} now={now} />);
+    expect(screen.getByRole("heading", { name: "Nothing worth your time yet." })).toBeInTheDocument();
+    expect(screen.getByText(/checked 2,882 open jobs and none fits well enough to show/)).toBeInTheDocument();
+    expect(screen.queryByText("You're caught up.")).not.toBeInTheDocument();
+  });
+
+  it("says caught up once the person has been through what was worth it", () => {
+    const feed = feedView({
+      items: [],
+      caught_up: true,
+      passed_over: 3,
+      summary: { checked: 2882, passed_eligibility: 2600, worth_reviewing: 3, new: 0, changed: 0, shown: 0 },
+      pipeline: { saved: 0, applied: 0, interviewing: 0, offer: 0 },
+    });
+    render(<CaughtUp feed={feed} now={now} />);
+    expect(screen.getByRole("heading", { name: "You're caught up." })).toBeInTheDocument();
+  });
+});
+
+describe("RefreshButton", () => {
+  it("while checking, says so quietly, with no progress it doesn't have", () => {
+    const { rerender } = render(
+      <>
+        <ol aria-label="Recommendations">
+          <li>Senior Backend Engineer (Go)</li>
+        </ol>
+        <RefreshButton pending={false} onRefresh={() => {}} />
+      </>,
+    );
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    rerender(
+      <>
+        <ol aria-label="Recommendations">
+          <li>Senior Backend Engineer (Go)</li>
+        </ol>
+        <RefreshButton pending onRefresh={() => {}} />
+      </>,
+    );
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Checking for new opportunities…");
+    expect(status.textContent).not.toMatch(/\d|%/);
+    // The list already on screen stays while it checks.
+    expect(screen.getByRole("list", { name: "Recommendations" })).toHaveTextContent("Senior Backend Engineer (Go)");
+  });
+
+  it("checks again on demand", async () => {
+    const onRefresh = vi.fn();
+    render(<RefreshButton pending={false} onRefresh={onRefresh} />);
+    await userEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(onRefresh).toHaveBeenCalledOnce();
   });
 });

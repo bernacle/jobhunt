@@ -9,7 +9,7 @@
 
 use std::sync::LazyLock;
 
-use crate::words::{Pattern, Word, span_text, words};
+use crate::words::{Pattern, Vocabulary, Word, span_text, words};
 
 /// A known technology.
 #[derive(Debug)]
@@ -155,6 +155,20 @@ static TECH_PATTERNS: LazyLock<Vec<(&'static Technology, Vec<Pattern>)>> = LazyL
         .collect()
 });
 
+/// Every technology pattern in one [`Vocabulary`], in [`TECH_PATTERNS`]
+/// order, with the technology each belongs to.
+static TECH_VOCABULARY: LazyLock<(Vocabulary, Vec<&'static Technology>)> = LazyLock::new(|| {
+    let mut owners = Vec::new();
+    let mut patterns = Vec::new();
+    for (tech, compiled) in TECH_PATTERNS.iter() {
+        for pattern in compiled {
+            owners.push(*tech);
+            patterns.push(pattern.clone());
+        }
+    }
+    (Vocabulary::new(patterns), owners)
+});
+
 /// Normalized key for a topic: lowercase, single spaces.
 pub fn topic_key(name: &str) -> String {
     name.split_whitespace()
@@ -175,29 +189,35 @@ pub struct Mention {
 /// Every known technology named in `text`, once each, in order of first
 /// mention. `list` enables names too ambiguous for prose ("C").
 pub fn technologies_in(text: &str, list: bool) -> Vec<Mention> {
-    let ws = words(text);
+    technologies_in_words(text, &words(text), list)
+}
+
+/// [`technologies_in`] for text already split into `ws` (`words(text)`).
+pub fn technologies_in_words(text: &str, ws: &[Word], list: bool) -> Vec<Mention> {
+    let (vocabulary, owners) = &*TECH_VOCABULARY;
     let mut taken = vec![false; ws.len()];
     let mut found: Vec<(usize, Mention)> = Vec::new();
-    for (tech, patterns) in TECH_PATTERNS.iter() {
+    // Pattern order is technology order, so earlier technologies claim
+    // their words first, as they always have.
+    for (id, ranges) in vocabulary.find_all(ws) {
+        let tech = owners[id];
         if tech.list_only && !list {
             continue;
         }
-        for pattern in patterns {
-            for range in pattern.find_all(&ws) {
-                if taken[range.clone()].iter().any(|t| *t) {
-                    continue;
-                }
-                taken[range.clone()].iter_mut().for_each(|t| *t = true);
-                if !found.iter().any(|(_, m)| m.technology == tech.name) {
-                    found.push((
-                        range.start,
-                        Mention {
-                            technology: tech.name,
-                            category: tech.category,
-                            matched: span_text(text, &ws, &range).to_owned(),
-                        },
-                    ));
-                }
+        for range in ranges {
+            if taken[range.clone()].iter().any(|t| *t) {
+                continue;
+            }
+            taken[range.clone()].iter_mut().for_each(|t| *t = true);
+            if !found.iter().any(|(_, m)| m.technology == tech.name) {
+                found.push((
+                    range.start,
+                    Mention {
+                        technology: tech.name,
+                        category: tech.category,
+                        matched: span_text(text, ws, &range).to_owned(),
+                    },
+                ));
             }
         }
     }
@@ -438,6 +458,23 @@ static DOMAIN_PATTERNS: LazyLock<Vec<CompiledDomain>> = LazyLock::new(|| {
         .collect()
 });
 
+/// Every domain pattern in one [`Vocabulary`], in [`DOMAIN_PATTERNS`] order
+/// (each domain's strong phrases, then its weak ones), with the domain and
+/// whether the phrase is strong.
+static DOMAIN_VOCABULARY: LazyLock<(Vocabulary, Vec<(&'static str, bool)>)> = LazyLock::new(|| {
+    let mut owners = Vec::new();
+    let mut patterns = Vec::new();
+    for (domain, strong, weak) in DOMAIN_PATTERNS.iter() {
+        for (compiled, is_strong) in [(strong, true), (weak, false)] {
+            for pattern in compiled {
+                owners.push((*domain, is_strong));
+                patterns.push(pattern.clone());
+            }
+        }
+    }
+    (Vocabulary::new(patterns), owners)
+});
+
 /// A domain phrase found in text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DomainHit {
@@ -449,19 +486,21 @@ pub struct DomainHit {
 
 /// Every domain phrase in `text`.
 pub fn domains_in(text: &str) -> Vec<DomainHit> {
-    let ws = words(text);
+    domains_in_words(text, &words(text))
+}
+
+/// [`domains_in`] for text already split into `ws` (`words(text)`).
+pub fn domains_in_words(text: &str, ws: &[Word]) -> Vec<DomainHit> {
+    let (vocabulary, owners) = &*DOMAIN_VOCABULARY;
     let mut hits = Vec::new();
-    for (domain, strong, weak) in DOMAIN_PATTERNS.iter() {
-        for (patterns, is_strong) in [(strong, true), (weak, false)] {
-            for pattern in patterns {
-                for range in pattern.find_all(&ws) {
-                    hits.push(DomainHit {
-                        domain,
-                        phrase: span_text(text, &ws, &range).to_owned(),
-                        strong: is_strong,
-                    });
-                }
-            }
+    for (id, ranges) in vocabulary.find_all(ws) {
+        let (domain, strong) = owners[id];
+        for range in ranges {
+            hits.push(DomainHit {
+                domain,
+                phrase: span_text(text, ws, &range).to_owned(),
+                strong,
+            });
         }
     }
     hits
@@ -663,15 +702,34 @@ pub struct RoleSignal {
 /// used, and its bullet text. Full stack is signalled by the title or by
 /// solid backend *and* frontend evidence together.
 pub fn role_signals(title: Option<&str>, technologies: &[&str], texts: &[&str]) -> Vec<RoleSignal> {
-    let title_words = title.map(words).unwrap_or_default();
     let text_words: Vec<Vec<Word>> = texts.iter().map(|t| words(t)).collect();
+    let split: Vec<(&str, &[Word])> = texts
+        .iter()
+        .zip(&text_words)
+        .map(|(t, ws)| (*t, ws.as_slice()))
+        .collect();
+    role_signals_in(title, technologies, &split)
+}
+
+/// [`ROLES`] with their patterns compiled once: (title, phrases).
+static ROLE_PATTERNS: LazyLock<Vec<(Vocabulary, Vocabulary)>> = LazyLock::new(|| {
+    ROLES
+        .iter()
+        .map(|r| (Vocabulary::compile(r.title), Vocabulary::compile(r.phrases)))
+        .collect()
+});
+
+/// [`role_signals`] for texts already split into words: `(text, words(text))`.
+pub fn role_signals_in(
+    title: Option<&str>,
+    technologies: &[&str],
+    texts: &[(&str, &[Word])],
+) -> Vec<RoleSignal> {
+    let title_words = title.map(words).unwrap_or_default();
     let mut signals: Vec<RoleSignal> = Vec::new();
-    for terms in ROLES {
+    for (terms, (title_patterns, phrase_patterns)) in ROLES.iter().zip(ROLE_PATTERNS.iter()) {
         let mut reasons = Vec::new();
-        let from_title = terms
-            .title
-            .iter()
-            .any(|p| Pattern::new(p).find(&title_words).is_some());
+        let from_title = title_patterns.any(&title_words);
         if from_title && let Some(title) = title {
             reasons.push(format!("title “{title}”"));
         }
@@ -684,13 +742,11 @@ pub fn role_signals(title: Option<&str>, technologies: &[&str], texts: &[&str]) 
             reasons.push(format!("uses {}", techs.join(", ")));
         }
         let mut phrases: Vec<String> = Vec::new();
-        for (text, ws) in texts.iter().zip(&text_words) {
-            for p in terms.phrases {
-                if let Some(range) = Pattern::new(p).find(ws) {
-                    let phrase = span_text(text, ws, &range).to_owned();
-                    if !phrases.iter().any(|x| x.eq_ignore_ascii_case(&phrase)) {
-                        phrases.push(phrase);
-                    }
+        for (text, ws) in texts {
+            for (_, range) in phrase_patterns.find_first(ws) {
+                let phrase = span_text(text, ws, &range).to_owned();
+                if !phrases.iter().any(|x| x.eq_ignore_ascii_case(&phrase)) {
+                    phrases.push(phrase);
                 }
             }
         }

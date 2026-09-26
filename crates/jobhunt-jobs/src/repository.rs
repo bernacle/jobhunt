@@ -9,6 +9,7 @@
 //! made by [`crate::lifecycle::plan_scan`]; backends apply the plan
 //! atomically and keep history.
 
+use std::collections::HashMap;
 use std::fmt;
 
 use async_trait::async_trait;
@@ -219,6 +220,45 @@ pub trait JobRepository: Send + Sync {
 
     /// The job's history, oldest first.
     async fn history(&self, id: JobId) -> Result<Vec<JobEvent>, StorageError>;
+
+    /// [`JobRepository::opportunity_records`] of many opportunities in one
+    /// call (opportunities without records are absent). Networked backends
+    /// answer it with one query; the default asks one by one.
+    async fn opportunity_records_many(
+        &self,
+        ids: &[OpportunityId],
+    ) -> Result<HashMap<OpportunityId, Vec<JobRecord>>, StorageError> {
+        let mut out = HashMap::new();
+        for id in ids {
+            if out.contains_key(id) {
+                continue;
+            }
+            let records = self.opportunity_records(*id).await?;
+            if !records.is_empty() {
+                out.insert(*id, records);
+            }
+        }
+        Ok(out)
+    }
+
+    /// [`JobRepository::history`] of many jobs in one call (jobs without
+    /// history are absent).
+    async fn histories(
+        &self,
+        ids: &[JobId],
+    ) -> Result<HashMap<JobId, Vec<JobEvent>>, StorageError> {
+        let mut out = HashMap::new();
+        for id in ids {
+            if out.contains_key(id) {
+                continue;
+            }
+            let events = self.history(*id).await?;
+            if !events.is_empty() {
+                out.insert(*id, events);
+            }
+        }
+        Ok(out)
+    }
 
     async fn search(&self, query: &JobQuery) -> Result<Vec<JobRecord>, StorageError>;
 

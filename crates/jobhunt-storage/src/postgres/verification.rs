@@ -2,10 +2,12 @@
 //! facts about a listing, not about a person, so they are shared: one
 //! verification of a job serves everyone who looks at it.
 
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use jobhunt_core::UpsertOutcome;
-use jobhunt_jobs::verification::{VerificationRecord, VerificationRepository};
+use jobhunt_jobs::verification::{LatestVerifications, VerificationRecord, VerificationRepository};
 use jobhunt_jobs::{JobId, JobPosting, ScanResult, StorageError};
 use sqlx::Row;
 use sqlx::types::Json;
@@ -150,6 +152,26 @@ impl VerificationRepository for PgStore {
             .await?
             .into_iter()
             .next())
+    }
+
+    async fn latest_verifications_of(
+        &self,
+        jobs: &[JobId],
+    ) -> Result<HashMap<JobId, LatestVerifications>, StorageError> {
+        if jobs.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let raw: Vec<String> = jobs.iter().map(ToString::to_string).collect();
+        let mut out: HashMap<JobId, LatestVerifications> = HashMap::new();
+        for (success_only, v) in self.latest_verifications(&raw).await? {
+            let entry = out.entry(v.job_id).or_default();
+            if success_only {
+                entry.last_success = Some(v);
+            } else {
+                entry.latest = Some(v);
+            }
+        }
+        Ok(out)
     }
 
     async fn record_observation(

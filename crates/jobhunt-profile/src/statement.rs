@@ -396,7 +396,7 @@ const ROLE_PHRASES: [(&str, &str); 26] = [
     ("mobile", "mobile"),
 ];
 
-const COMPANY_PHRASES: [(&str, CompanyTrait); 29] = [
+const COMPANY_PHRASES: [(&str, CompanyTrait); 31] = [
     ("start up*", CompanyTrait::Startup),
     ("startup*", CompanyTrait::Startup),
     ("early stage", CompanyTrait::EarlyStage),
@@ -422,6 +422,9 @@ const COMPANY_PHRASES: [(&str, CompanyTrait); 29] = [
     ("body shop*", CompanyTrait::Consulting),
     ("public compan*", CompanyTrait::PublicCompany),
     ("private compan*", CompanyTrait::PrivateCompany),
+    // The company's size, not the team's ("small teams" is the team).
+    ("small compan*", CompanyTrait::SmallCompany),
+    ("tiny compan*", CompanyTrait::SmallCompany),
     ("small _ team*", CompanyTrait::SmallTeam),
     ("small team*", CompanyTrait::SmallTeam),
     ("large team*", CompanyTrait::LargeTeam),
@@ -1450,6 +1453,47 @@ mod tests {
         assert_eq!(sre.stance, Stance::Unwanted);
         assert_eq!(sre.snippet, "Avoid pure SRE roles");
         assert_eq!(out.preferences.len(), 4);
+    }
+
+    /// The phrase a real person typed at onboarding: two things read,
+    /// both marked for confirmation, neither turned into a requirement.
+    #[test]
+    fn reads_a_terse_onboarding_answer_as_two_unconfirmed_wants() {
+        let out = read("Small teams and the sallary of 140k");
+        let small = find(&out, "company:small_team");
+        assert_eq!(small.stance, Stance::Wanted);
+        let comp = out
+            .preferences
+            .iter()
+            .find(|p| matches!(p.value, PreferenceValue::Compensation { .. }))
+            .expect("the pay is read");
+        assert_eq!(
+            comp.value,
+            PreferenceValue::Compensation {
+                bound: CompensationBound::Target,
+                amount: 140_000,
+                currency: None,
+                period: PayPeriod::Year,
+                arrangement: None,
+            },
+            "no “at least”: a target, and no currency is assumed"
+        );
+        assert_eq!(comp.stance, Stance::Wanted);
+        assert_eq!(comp.certainty, Certainty::Uncertain);
+    }
+
+    #[test]
+    fn small_companies_and_small_teams_are_different_things() {
+        let out = read("I want small companies");
+        find(&out, "company:small_company");
+        assert!(
+            !out.preferences
+                .iter()
+                .any(|p| p.value.key() == "company:small_team"),
+            "a company's size is not a team's"
+        );
+        let out = read("I want small teams");
+        find(&out, "company:small_team");
     }
 
     fn currency(text: &str) -> (Option<String>, Certainty, Option<String>) {

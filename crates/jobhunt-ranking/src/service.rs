@@ -12,7 +12,7 @@ use chrono::{DateTime, Utc};
 use jobhunt_eligibility::{
     Assessment, EligibilityRepository, ProfileFacts, cached_assess, cached_assess_many,
 };
-use jobhunt_jobs::verification::{FreshnessPolicy, VerificationRepository, cached};
+use jobhunt_jobs::verification::{FreshnessPolicy, VerificationRepository, cached, cached_many};
 use jobhunt_jobs::{JobId, JobQuery, JobRecord, JobRepository, JobStatus, OpportunityId};
 use jobhunt_profile::{ProfileData, ProfileError, ProfileRepository, ProfileService};
 
@@ -89,6 +89,8 @@ pub struct Excluded {
     pub closed: usize,
     pub ineligible: usize,
     pub below_minimum: usize,
+    /// The posting contradicts a required company or team kind.
+    pub unmet_requirement: usize,
 }
 
 impl Excluded {
@@ -99,11 +101,17 @@ impl Excluded {
             Exclusion::Closed { .. } => self.closed += 1,
             Exclusion::Ineligible { .. } => self.ineligible += 1,
             Exclusion::BelowMinimum { .. } => self.below_minimum += 1,
+            Exclusion::UnmetRequirement { .. } => self.unmet_requirement += 1,
         }
     }
 
     pub fn total(&self) -> usize {
-        self.rejected + self.in_pipeline + self.closed + self.ineligible + self.below_minimum
+        self.rejected
+            + self.in_pipeline
+            + self.closed
+            + self.ineligible
+            + self.below_minimum
+            + self.unmet_requirement
     }
 }
 
@@ -117,6 +125,23 @@ pub struct RankReport {
     pub considered: usize,
     pub taste: TasteModel,
     pub person: Person,
+    /// Where the time went, for operations.
+    pub timings: RankTimings,
+}
+
+/// How long each part of a ranking took, in milliseconds.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RankTimings {
+    /// The person: profile, preferences, learned taste, feedback.
+    pub person_ms: u64,
+    /// The open opportunities, their records and verification state.
+    pub load_ms: u64,
+    pub eligibility_ms: u64,
+    pub ranking_ms: u64,
+}
+
+fn ms_since(started: std::time::Instant) -> u64 {
+    u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
 /// An opportunity in the person's pipeline.
@@ -367,6 +392,8 @@ where
         query: &RankQuery,
         now: DateTime<Utc>,
     ) -> Result<RankReport, RankingError> {
+        let mut timings = RankTimings::default();
+        let started = std::time::Instant::now();
         let (data, person) = self.person().await?;
         let data = data.ok_or(RankingError::NoProfile)?;
         let facts = ProfileFacts::from_profile(&data);
@@ -386,6 +413,8 @@ where
             taste: &taste,
             now,
         };
+        timings.person_ms = ms_since(started);
+        let started = std::time::Instant::now();
         struct Prepared {
             records: Vec<JobRecord>,
             assessment: Assessment,
@@ -396,23 +425,31 @@ where
         let mut rankings: Vec<(usize, Ranking)> = Vec::new();
         let listed = self.repo.search(&search).await?;
         let considered = listed.len();
-        // Gather every candidate first, then assess them together: one
-        // eligibility lookup (and one write) for the whole search, not one
-        // per opportunity.
+        // Gather every candidate first, then assess them together: records
+        // and verification state in two repository calls, and one
+        // eligibility lookup (and one write), whatever the search's size.
+        let ids: Vec<OpportunityId> = listed.iter().map(|r| r.opportunity_id).collect();
+        let mut by_opportunity = self.repo.opportunity_records_many(&ids).await?;
         let mut gathered: Vec<(Vec<JobRecord>, OpportunityState)> = Vec::new();
-        let mut verified = Vec::new();
         for record in listed {
-            let records = self.repo.opportunity_records(record.opportunity_id).await?;
+            let records = by_opportunity
+                .remove(&record.opportunity_id)
+                .unwrap_or_default();
             let state = OpportunityState::of(
                 records
                     .iter()
                     .flat_map(|r| by_job.get(&r.id).cloned().unwrap_or_default()),
             );
-            verified.push(cached(self.repo, &records).await?);
             gathered.push((records, state));
         }
+        let all: Vec<&[JobRecord]> = gathered.iter().map(|(r, _)| r.as_slice()).collect();
+        let verified = cached_many(self.repo, &all).await?;
+        timings.load_ms = ms_since(started);
+        let started = std::time::Instant::now();
         let assessments =
             cached_assess_many(self.repo, &verified, &facts, &self.policy, now).await?;
+        timings.eligibility_ms = ms_since(started);
+        let started = std::time::Instant::now();
         for ((records, state), assessment) in gathered.into_iter().zip(assessments) {
             let candidate = Candidate {
                 records: &records,
@@ -433,6 +470,7 @@ where
                 state,
             });
         }
+        timings.ranking_ms = ms_since(started);
         let mut ordered: Vec<Ranking> = Vec::with_capacity(rankings.len());
         let mut index: HashMap<OpportunityId, usize> = HashMap::new();
         for (i, r) in rankings {
@@ -466,6 +504,7 @@ where
             considered,
             taste,
             person,
+            timings,
         })
     }
 

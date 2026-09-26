@@ -17,8 +17,11 @@ export const metadata: Metadata = { title: "Today" };
  * explicit end. Nothing is added to make it look full.
  */
 export default async function TodayPage() {
-  const feed = await loadOrNoProfile(() => api.feed(5));
+  const [feed, profile] = await Promise.all([loadOrNoProfile(() => api.feed(5)), loadOrNoProfile(() => api.profile())]);
   if (feed === "no_profile") redirect("/welcome");
+  // Preferences read from the person's words with an open question: not
+  // used the way they meant until answered.
+  const unresolved = profile === "no_profile" ? 0 : profile.preferences.filter((p) => p.active && p.clarify).length;
   const now = new Date(feed.generated_at);
   const date = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
   const actions = { feedback: recordFeedback, putAside };
@@ -39,6 +42,17 @@ export default async function TodayPage() {
         <FeedSummary summary={feed.summary} />
         <RefreshControls />
       </div>
+      {unresolved > 0 && (
+        <div className="mb-8">
+          <Notice title={unresolved === 1 ? "A preference needs your answer" : `${unresolved} preferences need your answer`}>
+            Narrow read {unresolved === 1 ? "it" : "them"} from your words but can&apos;t tell exactly what you meant, so {unresolved === 1 ? "it isn't" : "they aren't"} used
+            that way yet.{" "}
+            <a href="/preferences" className={textLinkClass}>
+              Answer in Preferences
+            </a>
+          </Notice>
+        </div>
+      )}
       {!feed.learning.has_preferences && (
         <div className="mb-8">
           <Notice title="Tell Narrow what you want">
