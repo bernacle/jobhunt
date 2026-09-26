@@ -963,3 +963,47 @@ fn a_required_small_team_isnt_ruled_out_by_the_company_headcount() {
         summaries(&r)
     );
 }
+
+#[test]
+fn company_wording_never_overrides_the_team_someone_joins() {
+    let person = wanting("small_team", Stance::Required);
+    let posting = "Our company is a large team of 200 employees. You will join a team of 6 \
+        engineers building backend services in Rust and PostgreSQL.";
+    let r = ranked(
+        &job("Backend Engineer", posting),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(matches!(r.gate, Gate::Recommended), "{:?}", r.gate);
+    assert!(company_weight(&r) > 0.0, "{:?}", summaries(&r));
+    // Denied in its own clause: no evidence; affirmed in another: evidence.
+    let posting = "You will not be working as part of a large team: backend services in Rust \
+        and PostgreSQL.";
+    let r = ranked(
+        &job("Senior Backend Engineer", posting),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(matches!(r.gate, Gate::Recommended), "{:?}", r.gate);
+    let small_company = wanting("small_company", Stance::Required);
+    let posting = "We are not a startup, but a publicly traded company. You will build backend \
+        services in Rust and PostgreSQL.";
+    let r = ranked(
+        &job("Backend Engineer", posting),
+        &small_company,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(
+        matches!(
+            &r.gate,
+            Gate::Excluded {
+                exclusion: Exclusion::UnmetRequirement { .. }
+            }
+        ),
+        "{:?}",
+        r.gate
+    );
+}

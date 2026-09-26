@@ -16,6 +16,7 @@
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::ops::Range;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use chrono::{DateTime, Utc};
@@ -329,11 +330,8 @@ const COMPANY_TERMS: &[(&str, &str)] = &[
     ("y combinator", "startup"),
     ("founder*", "founder_led"),
     ("founding team", "founder_led"),
-    ("small team", "small_team"),
-    ("tiny team", "small_team"),
-    ("lean team", "small_team"),
-    ("large team", "large_team"),
-    ("big team", "large_team"),
+    // Team sizes are read by `team_size`, clause by clause: whose team a
+    // size is decides what it can mean.
     // The company itself ("we're a small company"), not its customers
     // ("tools for small companies").
     ("a small company", "small_company"),
@@ -470,6 +468,8 @@ static TEAM_OF: LazyLock<Pattern> = LazyLock::new(|| Pattern::new("team of _"));
 struct Sentence {
     text: String,
     words: Vec<Word>,
+    /// Its clauses, as word ranges (see [`clauses`]).
+    clauses: Vec<Range<usize>>,
 }
 
 /// The sentences of a description that describe the job and the company,
@@ -502,9 +502,11 @@ fn content(description: &str) -> Vec<Sentence> {
         for sentence in jobhunt_eligibility::job::sentences(line) {
             let ws = words(&sentence);
             if !has(&ws, &BOILERPLATE_CUE_PATTERNS) {
+                let clauses = clauses(&sentence, &ws);
                 out.push(Sentence {
                     text: sentence,
                     words: ws,
+                    clauses,
                 });
             }
         }
@@ -823,6 +825,7 @@ fn domains(title: &str, structured: &[&str], sentences: &[Sentence]) -> Vec<Fact
     for Sentence {
         text: sentence,
         words: ws,
+        ..
     } in sentences
     {
         for hit in domains_in_words(sentence, ws) {
@@ -856,15 +859,11 @@ fn domains(title: &str, structured: &[&str], sentences: &[Sentence]) -> Vec<Fact
 
 fn statements(sentences: &[Sentence], terms: &Terms, dimension: Dimension) -> Vec<Fact> {
     let mut out: Vec<Fact> = Vec::new();
-    for Sentence {
-        text: sentence,
-        words: ws,
-    } in sentences
-    {
+    for sentence in sentences {
         let found = if dimension == Dimension::CompanyTrait {
-            affirmed_terms(ws, terms)
+            affirmed_terms(sentence, terms)
         } else {
-            find_terms(sentence, ws, terms)
+            find_terms(&sentence.text, &sentence.words, terms)
                 .into_iter()
                 .map(|(v, _)| v)
                 .collect()
@@ -873,7 +872,7 @@ fn statements(sentences: &[Sentence], terms: &Terms, dimension: Dimension) -> Ve
             if !out.iter().any(|f| f.key.value == value) {
                 out.push(Fact {
                     key: TasteKey::new(dimension, value),
-                    evidence: sentence.clone(),
+                    evidence: sentence.text.clone(),
                     source: FactSource::Description,
                 });
             }
@@ -882,74 +881,174 @@ fn statements(sentences: &[Sentence], terms: &Terms, dimension: Dimension) -> Ve
     out
 }
 
-/// Words that, shortly before a phrase, deny it: "you will not be part of
-/// a large team", "we aren't a small company", "no large teams". ("Isn't"
-/// is split into "isn" and "t".)
-const NEGATORS: [&str; 12] = [
-    "not", "no", "never", "without", "nor", "isn", "aren", "wasn", "weren", "don", "doesn", "won",
-];
+// ---------------------------------------------------------------------------
+// Clauses: where negation and "whose team" are read.
 
-/// Whether the phrase starting at word `start` is denied by a negator in
-/// the five words before it.
-fn negated(ws: &[Word], start: usize) -> bool {
-    ws[start.saturating_sub(5)..start]
-        .iter()
-        .any(|w| NEGATORS.contains(&w.lower.as_str()))
+/// Punctuation between two words that ends a clause.
+const CLAUSE_MARKS: [char; 9] = [',', ';', ':', '(', ')', '—', '–', '!', '?'];
+/// Words that open a new clause, turning against the one before ("we're
+/// not a startup, but a public company").
+const CONTRAST: [&str; 6] = ["but", "however", "although", "though", "yet", "whereas"];
+
+/// A sentence's clauses, as word ranges: split at punctuation between
+/// words and before contrast words. A fact is read within its clause:
+/// negation there denies it, and what the clause is about (the team the
+/// person joins, or the company) says whose size it is.
+fn clauses(text: &str, ws: &[Word]) -> Vec<Range<usize>> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    for i in 1..ws.len() {
+        let between = &text[ws[i - 1].span.end..ws[i].span.start];
+        if between.contains(&CLAUSE_MARKS[..]) || CONTRAST.contains(&ws[i].lower.as_str()) {
+            out.push(start..i);
+            start = i;
+        }
+    }
+    if !ws.is_empty() {
+        out.push(start..ws.len());
+    }
+    out
 }
 
-/// The terms a sentence states, not the ones it denies: a denied company
-/// or team kind is no evidence either way.
-fn affirmed_terms(ws: &[Word], (vocabulary, values): &Terms) -> Vec<&'static str> {
+/// Words that deny what follows them in the same clause ("isn't" is split
+/// into "isn" and "t").
+const NEGATORS: [&str; 13] = [
+    "not", "no", "never", "without", "nor", "isn", "aren", "wasn", "weren", "don", "doesn", "didn",
+    "won",
+];
+
+impl Sentence {
+    /// The clause word `at` is in.
+    fn clause(&self, at: usize) -> Range<usize> {
+        self.clauses
+            .iter()
+            .find(|c| c.contains(&at))
+            .cloned()
+            .unwrap_or(0..self.words.len())
+    }
+
+    /// Whether the phrase starting at word `start` is denied: a negator
+    /// before it in its own clause.
+    fn denied(&self, start: usize) -> bool {
+        let clause = self.clause(start);
+        self.words[clause.start..start]
+            .iter()
+            .any(|w| NEGATORS.contains(&w.lower.as_str()))
+    }
+}
+
+/// The company kinds a sentence states, not the ones it denies: a denied
+/// kind is no evidence either way.
+fn affirmed_terms(sentence: &Sentence, (vocabulary, values): &Terms) -> Vec<&'static str> {
     let mut out: Vec<&'static str> = Vec::new();
-    for (id, ranges) in vocabulary.find_all(ws) {
+    for (id, ranges) in vocabulary.find_all(&sentence.words) {
         let value = values[id];
-        if !out.contains(&value) && ranges.iter().any(|r| !negated(ws, r.start)) {
+        if !out.contains(&value) && ranges.iter().any(|r| !sentence.denied(r.start)) {
             out.push(value);
         }
     }
     out
 }
 
-/// Words just before "team of N" that make N the company's headcount
-/// ("a global team of 200 people"), not the team someone joins.
-const HEADCOUNT_BEFORE: [&str; 11] = [
-    "global",
-    "entire",
-    "whole",
+// ---------------------------------------------------------------------------
+// Team size.
+
+/// A clause about the company, not a team ("our company is a team of 200
+/// employees"): no size in it is a team's.
+const COMPANY_WORDS: [&str; 8] = [
     "company",
-    "worldwide",
+    "companies",
     "organization",
     "organisation",
     "org",
-    "total",
-    "distributed",
-    "overall",
+    "employees",
+    "staff",
+    "headcount",
 ];
-/// Words just after N that make it a headcount ("a team of 200 employees").
-const HEADCOUNT_AFTER: [&str; 2] = ["employees", "staff"];
-/// What says a sentence is about the team the person would join.
+/// Words right before "team" that make it everyone ("our global team of
+/// 200 people"). How a team works ("distributed", "remote") is not one.
+const WHOLE: [&str; 6] = ["global", "entire", "whole", "worldwide", "overall", "total"];
+/// What says a clause is about the team the person would join.
 static JOINING: LazyLock<Vocabulary> = LazyLock::new(|| {
     Vocabulary::compile(&[
         "join*",
         "part of",
         "work in",
         "work on",
+        "working in",
+        "working on",
         "be on",
         "sit on",
         "sit in",
-        "you ll be on",
         "your team",
     ])
 });
+/// Team size said in words.
+static TEAM_PHRASES: LazyLock<Terms> = LazyLock::new(|| {
+    compile_terms(&[
+        ("small team", "small_team"),
+        ("tiny team", "small_team"),
+        ("lean team", "small_team"),
+        ("large team", "large_team"),
+        ("big team", "large_team"),
+    ])
+});
+/// Who a number of people counts ("has 6 engineers").
+const PEOPLE: [&str; 5] = ["engineers", "people", "developers", "members", "designers"];
 
-/// "You'll join a team of 6 engineers": the size of the team someone would
-/// join. A headcount ("a global team of 200 people", "a team of 200
-/// employees") is the company's, never a team's, so it is skipped. The
-/// team the person joins wins; failing that, a small team mentioned without
-/// saying whose still counts as small ("a small product team of 12"),
-/// while a large one stays unknown: whose it is decides whether it rules
-/// anything out, and the posting didn't say. Denied sizes ("not part of a
-/// team of 200") are no evidence.
+fn size_of(n: u32) -> Option<&'static str> {
+    match n {
+        2..=25 => Some("small_team"),
+        50.. => Some("large_team"),
+        _ => None,
+    }
+}
+
+/// The team sizes a clause states, with where each starts and the
+/// position of its "team": "a small team", "a team of 6", "the team has
+/// 6 engineers".
+fn team_mentions(ws: &[Word], clause: &Range<usize>) -> Vec<(usize, usize, &'static str)> {
+    let words = &ws[clause.clone()];
+    let mut out = Vec::new();
+    let (phrases, values) = &*TEAM_PHRASES;
+    for (id, ranges) in phrases.find_all(words) {
+        for r in ranges {
+            out.push((clause.start + r.start, clause.start + r.end - 1, values[id]));
+        }
+    }
+    for r in TEAM_OF.find_all(words) {
+        if let Some(size) = words[r.end - 1].lower.parse().ok().and_then(size_of) {
+            out.push((clause.start + r.start, clause.start + r.start, size));
+        }
+    }
+    if let Some(team) = words.iter().position(|w| w.lower == "team") {
+        for (i, pair) in words.windows(2).enumerate().skip(team + 1) {
+            let after_of = words[i - 1].lower == "of";
+            if let (false, Ok(n)) = (after_of, pair[0].lower.parse::<u32>())
+                && PEOPLE.contains(&pair[1].lower.as_str())
+                && let Some(size) = size_of(n)
+            {
+                out.push((clause.start + i, clause.start + team, size));
+            }
+        }
+    }
+    out.sort_by_key(|m| m.0);
+    out
+}
+
+/// The size of the team someone would join, read clause by clause:
+///
+/// 1. said of the team the person joins ("you'll join a team of 6
+///    engineers", "you'll be part of a large team"): that is the team's
+///    size, small or large;
+/// 2. failing that, a small team mentioned without saying whose ("a small
+///    product team of 12") still counts as small;
+/// 3. otherwise unknown. A large team without saying whose stays unknown,
+///    since whose it is decides whether it rules anything out.
+///
+/// A clause about the company ("our company is a team of 200 employees")
+/// or everyone ("our global team of 200 people") never gives a team's
+/// size, and a denied size ("you won't join a large team") is no evidence.
 fn team_size(sentences: &[Sentence]) -> Option<Fact> {
     let fact = |size: &str, evidence: &String| Fact {
         key: TasteKey::new(Dimension::CompanyTrait, size),
@@ -957,37 +1056,29 @@ fn team_size(sentences: &[Sentence]) -> Option<Fact> {
         source: FactSource::Description,
     };
     let mut unattributed_small: Option<Fact> = None;
-    for Sentence {
-        text: sentence,
-        words: ws,
-    } in sentences
-    {
-        let joining = JOINING.any(ws);
-        for range in TEAM_OF.find_all(ws) {
-            if negated(ws, range.start) {
-                continue;
-            }
-            let before = &ws[range.start.saturating_sub(3)..range.start];
-            let headcount = before
+    for sentence in sentences {
+        for clause in &sentence.clauses {
+            let words = &sentence.words[clause.clone()];
+            if words
                 .iter()
-                .any(|w| HEADCOUNT_BEFORE.contains(&w.lower.as_str()))
-                || ws
-                    .get(range.end)
-                    .is_some_and(|w| HEADCOUNT_AFTER.contains(&w.lower.as_str()));
-            if headcount {
+                .any(|w| COMPANY_WORDS.contains(&w.lower.as_str()))
+            {
                 continue;
             }
-            let n: Option<u32> = ws.get(range.end - 1).and_then(|w| w.lower.parse().ok());
-            let size = match n {
-                Some(2..=25) => "small_team",
-                Some(50..) => "large_team",
-                _ => continue,
-            };
-            if joining {
-                return Some(fact(size, sentence));
-            }
-            if size == "small_team" && unattributed_small.is_none() {
-                unattributed_small = Some(fact(size, sentence));
+            let joining = JOINING.any(words);
+            for (start, team, size) in team_mentions(&sentence.words, clause) {
+                let everyone = sentence.words[team.saturating_sub(2).max(clause.start)..team]
+                    .iter()
+                    .any(|w| WHOLE.contains(&w.lower.as_str()));
+                if everyone || sentence.denied(start) {
+                    continue;
+                }
+                if joining {
+                    return Some(fact(size, &sentence.text));
+                }
+                if size == "small_team" && unattributed_small.is_none() {
+                    unattributed_small = Some(fact(size, &sentence.text));
+                }
             }
         }
     }
@@ -1093,11 +1184,7 @@ pub fn facets(record: &JobRecord) -> JobFacets {
         .flatten()
         .collect();
     let mut company_traits = statements(&sentences, &COMPANY_PATTERNS, Dimension::CompanyTrait);
-    if let Some(fact) = team_size(&sentences)
-        && !company_traits
-            .iter()
-            .any(|f| matches!(f.key.value.as_str(), "small_team" | "large_team"))
-    {
+    if let Some(fact) = team_size(&sentences) {
         company_traits.push(fact);
     }
     if record.posting.provenance.source.kind() == "yc"
@@ -1213,6 +1300,88 @@ mod tests {
         // Stated, they are.
         assert_eq!(sizes("We're a small company."), ["small_company"]);
         assert_eq!(sizes("You will be part of a large team."), ["large_team"]);
+    }
+
+    fn traits(description: &str) -> Vec<String> {
+        facets(&record("ashby:acme", "Backend Engineer", description))
+            .company_traits
+            .iter()
+            .map(|f| f.key.value.clone())
+            .collect()
+    }
+
+    #[test]
+    fn the_team_someone_joins_outranks_what_the_company_says() {
+        // Company wording first, the joined team after: the team's size.
+        assert_eq!(
+            sizes(
+                "Our company is a large team of 200 employees. You will join a team of 6 engineers."
+            ),
+            ["small_team"]
+        );
+        let big_company_small_team = traits(
+            "We are a publicly traded company with thousands of employees. You'll join a team \
+             of 6 engineers.",
+        );
+        for expected in ["public_company", "large_company", "small_team"] {
+            assert!(
+                big_company_small_team.contains(&expected.into()),
+                "{big_company_small_team:?}"
+            );
+        }
+        assert!(!big_company_small_team.contains(&"large_team".into()));
+        let small_company_big_team =
+            traits("We're a small company. You'll join a team of 60 engineers.");
+        assert!(small_company_big_team.contains(&"small_company".into()));
+        assert!(small_company_big_team.contains(&"large_team".into()));
+        // No team someone joins: unknown, unless a small team is said.
+        assert!(sizes("Our company is a large team of 200 employees.").is_empty());
+        assert!(
+            sizes("We are a large team.").is_empty(),
+            "whose large team isn't said"
+        );
+        assert_eq!(sizes("We are a small team."), ["small_team"]);
+        assert_eq!(
+            sizes("Not a large company. The team you'll join has 6 engineers."),
+            ["small_team"]
+        );
+    }
+
+    #[test]
+    fn distributed_is_how_a_team_works_not_its_headcount() {
+        assert_eq!(
+            sizes("You will join a distributed team of 6 engineers."),
+            ["small_team"]
+        );
+        assert_eq!(
+            sizes("You will join a globally distributed team of 6 engineers."),
+            ["small_team"]
+        );
+        assert!(sizes("We are a distributed company with 200 employees.").is_empty());
+        assert!(
+            sizes("Join our global team of 200 people.").is_empty(),
+            "everyone, not a team"
+        );
+    }
+
+    #[test]
+    fn negation_stays_in_its_clause() {
+        let t = traits("We are not a startup, but a publicly traded company.");
+        assert!(!t.contains(&"startup".into()), "{t:?}");
+        assert!(t.contains(&"public_company".into()), "{t:?}");
+        let t = traits("We are not a publicly traded company, but we're a small startup.");
+        assert!(!t.contains(&"public_company".into()), "{t:?}");
+        assert!(t.contains(&"small_company".into()), "{t:?}");
+        assert!(sizes("You will not be working as part of a large team.").is_empty());
+        assert!(sizes("You won't join a large team.").is_empty());
+        // Stated, they are.
+        assert!(traits("We are a startup.").contains(&"startup".into()));
+        assert!(traits("We are a publicly traded company.").contains(&"public_company".into()));
+        assert_eq!(
+            sizes("You will be working as part of a large team."),
+            ["large_team"]
+        );
+        assert_eq!(sizes("You'll join a large team."), ["large_team"]);
     }
 
     #[test]
