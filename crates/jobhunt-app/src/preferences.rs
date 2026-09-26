@@ -11,8 +11,8 @@
 use chrono::{DateTime, Utc};
 use jobhunt_profile::{
     Arrangement, Certainty, CompanyTrait, CompensationBound, Engagement, PayPeriod, Preference,
-    PreferenceStatement, PreferenceValue, ProfileData, Removal, RuleParser, Stance,
-    StatementOutcome, WorkAspect, WorkMode,
+    PreferenceOrigin, PreferenceStatement, PreferenceValue, ProfileData, Removal, RuleParser,
+    Stance, StatementOutcome, WorkAspect, WorkMode,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -471,6 +471,69 @@ pub struct PreferenceView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub statement_id: Option<String>,
     pub active: bool,
+    /// What the person must settle before Narrow relies on it (read from
+    /// their words, and ambiguous in a way that matters). Until then it is
+    /// unresolved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clarify: Option<Clarify>,
+}
+
+/// A question about a preference read from someone's words, with the
+/// reading it would correct.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Clarify {
+    /// "140,000: at least, or around? In which currency?" A pay without a
+    /// currency is never compared with any job's.
+    Pay {
+        amount: u64,
+        /// `year`, `month`, `day` or `hour`, as read.
+        period: String,
+        /// As read: `minimum` or `target`.
+        bound: String,
+        /// As read; absent when the words didn't say (never assumed).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        currency: Option<String>,
+        /// `employment` or `contract`, when the words said.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        applies_to: Option<String>,
+    },
+    /// "Small teams: must have, or nice to have? The team you'd join, or
+    /// the company's size?" Words like these rarely say which.
+    Size {
+        /// As read: `small_team` or `small_company`.
+        value: String,
+    },
+}
+
+impl Clarify {
+    /// The question a preference raises, if any.
+    pub fn of(p: &Preference) -> Option<Self> {
+        if p.origin != PreferenceOrigin::Statement || !p.active {
+            return None;
+        }
+        match &p.value {
+            PreferenceValue::Compensation {
+                bound,
+                amount,
+                currency,
+                period,
+                arrangement,
+            } if currency.is_none() || p.certainty == Certainty::Uncertain => Some(Self::Pay {
+                amount: *amount,
+                period: period.as_str().to_owned(),
+                bound: bound.as_str().to_owned(),
+                currency: currency.clone(),
+                applies_to: arrangement.map(|a| a.as_str().to_owned()),
+            }),
+            PreferenceValue::Company {
+                company: company @ (CompanyTrait::SmallTeam | CompanyTrait::SmallCompany),
+            } => Some(Self::Size {
+                value: company.as_str().to_owned(),
+            }),
+            _ => None,
+        }
+    }
 }
 
 impl PreferenceView {
@@ -490,6 +553,7 @@ impl PreferenceView {
             note: p.note.clone(),
             statement_id: p.statement.map(|s| s.to_string()),
             active: p.active,
+            clarify: Clarify::of(p),
         }
     }
 }

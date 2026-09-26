@@ -97,6 +97,41 @@ export type ApplicationState = "active" | "closed" | "unavailable" | "unknown";
  */
 export type ListingState = "active" | "closed" | "unreachable" | "ambiguous" | "unknown";
 /**
+ * A question about a preference read from someone's words, with the
+ * reading it would correct.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "Clarify".
+ */
+export type Clarify =
+  | {
+      amount: number;
+      /**
+       * `employment` or `contract`, when the words said.
+       */
+      applies_to?: string | null;
+      /**
+       * As read: `minimum` or `target`.
+       */
+      bound: string;
+      /**
+       * As read; absent when the words didn't say (never assumed).
+       */
+      currency?: string | null;
+      kind: "pay";
+      /**
+       * `year`, `month`, `day` or `hour`, as read.
+       */
+      period: string;
+    }
+  | {
+      kind: "size";
+      /**
+       * As read: `small_team` or `small_company`.
+       */
+      value: string;
+    };
+/**
  * One precise preference.
  *
  * This interface was referenced by `JobHuntApi`'s JSON-Schema
@@ -953,6 +988,11 @@ export interface DiscoveryStatus {
  */
 export interface FeedItem {
   /**
+   * Other recommendations at the same company, held off the feed so
+   * that one company doesn't fill it (best first).
+   */
+  also_at_company?: SameCompany[];
+  /**
    * What changed, for `changed` items.
    */
   changes?: string[];
@@ -1025,6 +1065,20 @@ export interface FeedItem {
    * `remote`, `hybrid` or `onsite`, as the listing says.
    */
   workplace?: string | null;
+}
+/**
+ * Another recommendation at the same company as a feed item, not on the
+ * feed itself (and not recorded as shown).
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "SameCompany".
+ */
+export interface SameCompany {
+  /**
+   * `opp_…`.
+   */
+  id: string;
+  title: string;
 }
 /**
  * Published pay, as facts.
@@ -1629,6 +1683,12 @@ export interface PreferenceView {
    */
   certainty: string;
   /**
+   * What the person must settle before Narrow relies on it (read from
+   * their words, and ambiguous in a way that matters). Until then it is
+   * unresolved.
+   */
+  clarify?: Clarify | null;
+  /**
    * `pref_…`.
    */
   id: string;
@@ -2097,6 +2157,10 @@ export interface NotShown {
    */
   lower_tiers: number;
   rejected: number;
+  /**
+   * The posting contradicts a required company or team kind.
+   */
+  unmet_requirement?: number;
 }
 /**
  * One shortlisted opportunity.

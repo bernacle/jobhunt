@@ -30,7 +30,7 @@ use jobhunt_jobs::{JobId, JobRecord, OpportunityId};
 use serde::{Deserialize, Serialize};
 
 use crate::brief::{DecisionBrief, brief};
-use crate::facets::{JobFacets, facets};
+use crate::facets::{JobFacets, facets_of};
 use crate::feedback::{OpportunityState, Stage};
 use crate::person::Person;
 use crate::signals::{self, Inputs, PayEvidence, Signal, SignalKind};
@@ -38,7 +38,7 @@ use crate::taste::TasteModel;
 
 /// Revision of the signals, weights, gates and tiers. Part of every stored
 /// ranking's key; bump it with any change that can rank a job differently.
-pub const RANKING_VERSION: &str = "1";
+pub const RANKING_VERSION: &str = "2";
 
 /// Why an opportunity is not among the recommendations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -59,6 +59,11 @@ pub enum Exclusion {
     BelowMinimum {
         why: String,
     },
+    /// The posting states the opposite of a required company or team kind
+    /// ("a public company" against "small companies required").
+    UnmetRequirement {
+        why: String,
+    },
 }
 
 impl Exclusion {
@@ -68,7 +73,7 @@ impl Exclusion {
             Self::InPipeline { stage } => format!("in your pipeline ({})", stage.as_str()),
             Self::Closed { why } => format!("closed: {why}"),
             Self::Ineligible { why } => format!("you can't take it: {why}"),
-            Self::BelowMinimum { why } => why.clone(),
+            Self::BelowMinimum { why } | Self::UnmetRequirement { why } => why.clone(),
         }
     }
 }
@@ -212,7 +217,12 @@ pub struct Context<'a> {
     pub now: DateTime<Utc>,
 }
 
-fn gate(a: &Assessment, state: &OpportunityState, below_minimum: Option<String>) -> Gate {
+fn gate(
+    a: &Assessment,
+    state: &OpportunityState,
+    below_minimum: Option<String>,
+    unmet_requirement: Option<String>,
+) -> Gate {
     let excluded = |exclusion| Gate::Excluded { exclusion };
     if state.stage == Stage::Rejected {
         return excluded(Exclusion::Rejected);
@@ -232,6 +242,9 @@ fn gate(a: &Assessment, state: &OpportunityState, below_minimum: Option<String>)
     }
     if let Some(why) = below_minimum {
         return excluded(Exclusion::BelowMinimum { why });
+    }
+    if let Some(why) = unmet_requirement {
+        return excluded(Exclusion::UnmetRequirement { why });
     }
     match a.decision.status {
         Eligibility::Uncertain => Gate::EligibilityUnclear {
@@ -268,7 +281,7 @@ fn tier(signals: &[Signal], score: f64) -> Tier {
 /// Ranks one opportunity.
 pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
     let record = candidate.representative()?;
-    let facets = facets(record);
+    let facets = JobFacets::clone(&facets_of(record));
     let pay = candidate.pay()?;
     let inputs = Inputs {
         facets: &facets,
@@ -291,15 +304,28 @@ pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
     all.extend(signals::domain(&inputs));
     let (pay_signals, below_minimum) = signals::compensation(&inputs);
     all.extend(pay_signals);
-    all.extend(signals::company(&inputs));
+    let company = signals::company(&inputs);
+    all.extend(company.signals);
     all.extend(signals::work_style(&inputs));
     all.extend(signals::work_mode(&inputs));
     all.extend(signals::freshness(&inputs));
 
     let score = all.iter().map(|s| s.weight).sum::<f64>();
     let score = (score * 100.0).round() / 100.0;
-    let gate = gate(candidate.assessment, candidate.state, below_minimum);
+    let gate = gate(
+        candidate.assessment,
+        candidate.state,
+        below_minimum,
+        company.ruled_out,
+    );
     let tier = tier(&all, score);
+    // A requirement the posting says nothing about is not met: never a
+    // strong fit on the strength of everything else.
+    let tier = if company.unresolved {
+        tier.min(Tier::WorthReviewing)
+    } else {
+        tier
+    };
     let brief = brief(&facets, &pay, &gate, tier, &all, ctx.person);
     Some(Ranking {
         opportunity: record.opportunity_id,

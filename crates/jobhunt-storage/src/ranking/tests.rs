@@ -372,3 +372,355 @@ async fn ranking_needs_a_profile() {
         "{error}"
     );
 }
+
+/// Ranking asks the repository a fixed number of questions, whatever the
+/// size of the corpus: records, verification state and eligibility come
+/// in batches, never one call per job (thousands of round trips against a
+/// networked database).
+mod repository_calls {
+    use std::collections::{BTreeMap, HashMap};
+
+    use jobhunt_core::UpsertOutcome;
+    use jobhunt_eligibility::{CacheKey, EligibilityDecision, EligibilityRepository};
+    use jobhunt_jobs::verification::{
+        LatestVerifications, VerificationRecord, VerificationRepository,
+    };
+    use jobhunt_jobs::{
+        IdentityEntry, JobEvent, JobId, JobQuery, LastListing, RunId, RunSummary, ScanResult,
+        StorageError,
+    };
+    use jobhunt_profile::{
+        Claim, ClaimQuery, ProfileData, ProfileEvent, ProfileId, ProfileRepository,
+    };
+    use jobhunt_ranking::{FeedbackEvent, FeedbackRepository, RankKey, Ranking, RankingRepository};
+
+    use super::*;
+
+    /// A repository that counts the calls made to it.
+    struct Counting<'a> {
+        inner: &'a SqliteJobStore,
+        calls: Mutex<BTreeMap<&'static str, usize>>,
+    }
+
+    impl<'a> Counting<'a> {
+        fn new(inner: &'a SqliteJobStore) -> Self {
+            Self {
+                inner,
+                calls: Mutex::default(),
+            }
+        }
+        fn count(&self, method: &'static str) {
+            *self.calls.lock().unwrap().entry(method).or_default() += 1;
+        }
+        fn calls(&self) -> BTreeMap<&'static str, usize> {
+            self.calls.lock().unwrap().clone()
+        }
+    }
+
+    #[async_trait]
+    impl JobRepository for Counting<'_> {
+        async fn begin_run(&self, at: DateTime<Utc>) -> Result<RunId, StorageError> {
+            self.count("begin_run");
+            self.inner.begin_run(at).await
+        }
+        async fn finish_run(&self, run: RunId, summary: &RunSummary) -> Result<(), StorageError> {
+            self.count("finish_run");
+            self.inner.finish_run(run, summary).await
+        }
+        async fn last_listing(
+            &self,
+            source: &SourceKey,
+        ) -> Result<Option<LastListing>, StorageError> {
+            self.count("last_listing");
+            self.inner.last_listing(source).await
+        }
+        async fn apply_scan(&self, scan: &ScanWrite<'_>) -> Result<ScanResult, StorageError> {
+            self.count("apply_scan");
+            self.inner.apply_scan(scan).await
+        }
+        async fn identity_index(&self) -> Result<Vec<IdentityEntry>, StorageError> {
+            self.count("identity_index");
+            self.inner.identity_index().await
+        }
+        async fn assign_opportunities(
+            &self,
+            assignments: &[(JobId, OpportunityId)],
+        ) -> Result<(), StorageError> {
+            self.count("assign_opportunities");
+            self.inner.assign_opportunities(assignments).await
+        }
+        async fn get(&self, id: JobId) -> Result<Option<JobRecord>, StorageError> {
+            self.count("get");
+            self.inner.get(id).await
+        }
+        async fn get_many(&self, ids: &[JobId]) -> Result<HashMap<JobId, JobRecord>, StorageError> {
+            self.count("get_many");
+            self.inner.get_many(ids).await
+        }
+        async fn opportunity_records(
+            &self,
+            id: OpportunityId,
+        ) -> Result<Vec<JobRecord>, StorageError> {
+            self.count("opportunity_records");
+            self.inner.opportunity_records(id).await
+        }
+        async fn opportunity_records_many(
+            &self,
+            ids: &[OpportunityId],
+        ) -> Result<HashMap<OpportunityId, Vec<JobRecord>>, StorageError> {
+            self.count("opportunity_records_many");
+            self.inner.opportunity_records_many(ids).await
+        }
+        async fn history(&self, id: JobId) -> Result<Vec<JobEvent>, StorageError> {
+            self.count("history");
+            self.inner.history(id).await
+        }
+        async fn histories(
+            &self,
+            ids: &[JobId],
+        ) -> Result<HashMap<JobId, Vec<JobEvent>>, StorageError> {
+            self.count("histories");
+            self.inner.histories(ids).await
+        }
+        async fn search(&self, query: &JobQuery) -> Result<Vec<JobRecord>, StorageError> {
+            self.count("search");
+            self.inner.search(query).await
+        }
+        async fn count(&self, query: &JobQuery) -> Result<u64, StorageError> {
+            self.count("count");
+            self.inner.count(query).await
+        }
+    }
+
+    #[async_trait]
+    impl VerificationRepository for Counting<'_> {
+        async fn save_verification(&self, record: &VerificationRecord) -> Result<(), StorageError> {
+            self.count("save_verification");
+            self.inner.save_verification(record).await
+        }
+        async fn verification_history(
+            &self,
+            job: JobId,
+        ) -> Result<Vec<VerificationRecord>, StorageError> {
+            self.count("verification_history");
+            self.inner.verification_history(job).await
+        }
+        async fn latest_verification(
+            &self,
+            job: JobId,
+        ) -> Result<Option<VerificationRecord>, StorageError> {
+            self.count("latest_verification");
+            self.inner.latest_verification(job).await
+        }
+        async fn latest_successful_verification(
+            &self,
+            job: JobId,
+        ) -> Result<Option<VerificationRecord>, StorageError> {
+            self.count("latest_successful_verification");
+            self.inner.latest_successful_verification(job).await
+        }
+        async fn latest_verifications_of(
+            &self,
+            jobs: &[JobId],
+        ) -> Result<HashMap<JobId, LatestVerifications>, StorageError> {
+            self.count("latest_verifications_of");
+            self.inner.latest_verifications_of(jobs).await
+        }
+        async fn record_observation(
+            &self,
+            posting: &JobPosting,
+            at: DateTime<Utc>,
+        ) -> Result<UpsertOutcome, StorageError> {
+            self.count("record_observation");
+            self.inner.record_observation(posting, at).await
+        }
+    }
+
+    #[async_trait]
+    impl EligibilityRepository for Counting<'_> {
+        async fn cached_decision(
+            &self,
+            key: &CacheKey,
+        ) -> Result<Option<EligibilityDecision>, StorageError> {
+            self.count("cached_decision");
+            self.inner.cached_decision(key).await
+        }
+        async fn store_decision(
+            &self,
+            key: &CacheKey,
+            decision: &EligibilityDecision,
+            at: DateTime<Utc>,
+        ) -> Result<(), StorageError> {
+            self.count("store_decision");
+            self.inner.store_decision(key, decision, at).await
+        }
+        async fn cached_decisions(
+            &self,
+            keys: &[CacheKey],
+        ) -> Result<HashMap<String, EligibilityDecision>, StorageError> {
+            self.count("cached_decisions");
+            self.inner.cached_decisions(keys).await
+        }
+        async fn store_decisions(
+            &self,
+            decisions: &[(CacheKey, EligibilityDecision)],
+            at: DateTime<Utc>,
+        ) -> Result<(), StorageError> {
+            self.count("store_decisions");
+            self.inner.store_decisions(decisions, at).await
+        }
+    }
+
+    #[async_trait]
+    impl FeedbackRepository for Counting<'_> {
+        async fn record_feedback(&self, event: &FeedbackEvent) -> Result<(), StorageError> {
+            self.count("record_feedback");
+            self.inner.record_feedback(event).await
+        }
+        async fn feedback(&self, profile_id: &str) -> Result<Vec<FeedbackEvent>, StorageError> {
+            self.count("feedback");
+            self.inner.feedback(profile_id).await
+        }
+        async fn feedback_for_jobs(
+            &self,
+            profile_id: &str,
+            jobs: &[JobId],
+        ) -> Result<Vec<FeedbackEvent>, StorageError> {
+            self.count("feedback_for_jobs");
+            self.inner.feedback_for_jobs(profile_id, jobs).await
+        }
+    }
+
+    #[async_trait]
+    impl RankingRepository for Counting<'_> {
+        async fn cached_ranking(&self, key: &RankKey) -> Result<Option<Ranking>, StorageError> {
+            self.count("cached_ranking");
+            self.inner.cached_ranking(key).await
+        }
+        async fn store_ranking(
+            &self,
+            key: &RankKey,
+            ranking: &Ranking,
+            at: DateTime<Utc>,
+        ) -> Result<(), StorageError> {
+            self.count("store_ranking");
+            self.inner.store_ranking(key, ranking, at).await
+        }
+    }
+
+    #[async_trait]
+    impl ProfileRepository for Counting<'_> {
+        async fn load_profile(
+            &self,
+            id: ProfileId,
+        ) -> Result<Option<ProfileData>, jobhunt_profile::StorageError> {
+            self.count("load_profile");
+            self.inner.load_profile(id).await
+        }
+        async fn save_profile(
+            &self,
+            data: &ProfileData,
+            expected_revision: u64,
+            events: &[ProfileEvent],
+        ) -> Result<(), jobhunt_profile::StorageError> {
+            self.count("save_profile");
+            self.inner
+                .save_profile(data, expected_revision, events)
+                .await
+        }
+        async fn find_claims(
+            &self,
+            profile: ProfileId,
+            query: &ClaimQuery,
+        ) -> Result<Vec<Claim>, jobhunt_profile::StorageError> {
+            self.count("find_claims");
+            self.inner.find_claims(profile, query).await
+        }
+        async fn profile_events(
+            &self,
+            profile: ProfileId,
+            limit: usize,
+        ) -> Result<Vec<ProfileEvent>, jobhunt_profile::StorageError> {
+            self.count("profile_events");
+            self.inner.profile_events(profile, limit).await
+        }
+    }
+
+    /// The repository calls one ranking of `jobs` open postings makes, for
+    /// someone who has looked at every one, saved every third, and whose
+    /// jobs all have history (a second scan changed their pay).
+    async fn calls_ranking(jobs: usize) -> BTreeMap<&'static str, usize> {
+        let store = SqliteJobStore::open_in_memory().await.unwrap();
+        ProfileService::new(&store)
+            .set_preference(
+                PreferenceValue::CurrentLocation {
+                    place: "Berlin, Germany".into(),
+                },
+                Stance::Required,
+                now() - Duration::days(1),
+            )
+            .await
+            .unwrap();
+        let postings: Vec<JobPosting> = (0..jobs)
+            .map(|i| {
+                posting(
+                    &i.to_string(),
+                    "Backend Engineer",
+                    "Remote - Worldwide",
+                    None,
+                )
+            })
+            .collect();
+        discover(&store, &postings).await;
+        let changed: Vec<JobPosting> = (0..jobs)
+            .map(|i| {
+                posting(
+                    &i.to_string(),
+                    "Backend Engineer",
+                    "Remote - Worldwide",
+                    Some((150_000.0, 180_000.0)),
+                )
+            })
+            .collect();
+        discover(&store, &changed).await;
+        let service = RankingService::new(&store, &RuleReader);
+        for (i, p) in postings.iter().enumerate() {
+            let r = get(&store, p).await;
+            let action = if i % 3 == 0 {
+                FeedbackAction::Save
+            } else {
+                FeedbackAction::Seen
+            };
+            service
+                .record(std::slice::from_ref(&r), action, None, now())
+                .await
+                .unwrap();
+            assert!(!store.history(r.id).await.unwrap().is_empty());
+        }
+        let counting = Counting::new(&store);
+        let ranking = RankingService::new(&counting, &RuleReader);
+        let report = ranking.rank(&RankQuery::default(), now()).await.unwrap();
+        assert_eq!(report.considered, jobs);
+        let pipeline = ranking.pipeline(false).await.unwrap();
+        assert_eq!(pipeline.len(), jobs.div_ceil(3));
+        counting.calls()
+    }
+
+    #[tokio::test]
+    async fn ranking_makes_the_same_calls_for_3_jobs_as_for_30() {
+        let few = calls_ranking(3).await;
+        let many = calls_ranking(30).await;
+        assert_eq!(few, many, "per-job repository calls crept back in");
+        for per_job in [
+            "opportunity_records",
+            "latest_verification",
+            "latest_successful_verification",
+            "cached_decision",
+            "get",
+            "history",
+        ] {
+            assert!(!many.contains_key(per_job), "{per_job} called: {many:?}");
+        }
+        assert!(many.contains_key("get_many"), "feedback is read: {many:?}");
+    }
+}

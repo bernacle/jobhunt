@@ -346,6 +346,72 @@
       ],
       "type": "object"
     },
+    "Clarify": {
+      "description": "A question about a preference read from someone's words, with the\nreading it would correct.",
+      "oneOf": [
+        {
+          "description": "\"140,000: at least, or around? In which currency?\" A pay without a\ncurrency is never compared with any job's.",
+          "properties": {
+            "amount": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "applies_to": {
+              "description": "`employment` or `contract`, when the words said.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "bound": {
+              "description": "As read: `minimum` or `target`.",
+              "type": "string"
+            },
+            "currency": {
+              "description": "As read; absent when the words didn't say (never assumed).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "pay",
+              "type": "string"
+            },
+            "period": {
+              "description": "`year`, `month`, `day` or `hour`, as read.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "amount",
+            "period",
+            "bound"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "\"Small teams: must have, or nice to have? The team you'd join, or\nthe company's size?\" Words like these rarely say which.",
+          "properties": {
+            "kind": {
+              "const": "size",
+              "type": "string"
+            },
+            "value": {
+              "description": "As read: `small_team` or `small_company`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "value"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "CloudStateView": {
       "description": "Where the account's data stands in the cloud.",
       "properties": {
@@ -1196,6 +1262,13 @@
     "FeedItem": {
       "description": "One item on the feed: a shortlist item, with why it is on the feed.",
       "properties": {
+        "also_at_company": {
+          "description": "Other recommendations at the same company, held off the feed so\nthat one company doesn't fill it (best first).",
+          "items": {
+            "$ref": "#/$defs/SameCompany"
+          },
+          "type": "array"
+        },
         "changes": {
           "description": "What changed, for `changed` items.",
           "items": {
@@ -2097,6 +2170,13 @@
           "format": "uint",
           "minimum": 0,
           "type": "integer"
+        },
+        "unmet_requirement": {
+          "default": 0,
+          "description": "The posting contradicts a required company or team kind.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "required": [
@@ -2736,6 +2816,17 @@
           "description": "`certain`, or `uncertain` when JobHunt read it with doubts.",
           "type": "string"
         },
+        "clarify": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Clarify"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the person must settle before Narrow relies on it (read from\ntheir words, and ambiguous in a way that matters). Until then it is\nunresolved."
+        },
         "id": {
           "description": "`pref_…`.",
           "type": "string"
@@ -3213,6 +3304,23 @@
         "ignored_lines",
         "needs_review",
         "profile"
+      ],
+      "type": "object"
+    },
+    "SameCompany": {
+      "description": "Another recommendation at the same company as a feed item, not on the\nfeed itself (and not recorded as shown).",
+      "properties": {
+        "id": {
+          "description": "`opp_…`.",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
       ],
       "type": "object"
     },

@@ -46,15 +46,15 @@ mod testing;
 
 pub use brief::DecisionBrief;
 pub use cache::{FeedbackRepository, RankKey, RankingRepository, cached_rank};
-pub use facets::{JobFacets, JobFunction, Level, facets};
+pub use facets::{JobFacets, JobFunction, Level, facets, facets_of};
 pub use feedback::{FeedbackAction, FeedbackEvent, FeedbackId, OpportunityState, Sentiment, Stage};
 pub use key::{Dimension, Direction, TasteKey};
 pub use person::Person;
 pub use rank::{Candidate, Context, Exclusion, Gate, RANKING_VERSION, Ranking, Tier, rank};
 pub use reason::{RULE_READER_REVISION, ReasonReader, ReasonReading, RuleReader};
 pub use service::{
-    Excluded, Explained, PipelineEntry, RankQuery, RankReport, RankingError, RankingService,
-    Recorded,
+    Excluded, Explained, PipelineEntry, RankQuery, RankReport, RankTimings, RankingError,
+    RankingService, Recorded,
 };
 pub use signals::{Basis, Signal, SignalGroup, SignalKind};
 pub use taste::{Confidence, LearnedTaste, TASTE_VERSION, TasteModel, TasteStatus};

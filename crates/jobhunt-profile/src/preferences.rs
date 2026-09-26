@@ -189,6 +189,10 @@ pub enum CompanyTrait {
     Consulting,
     PublicCompany,
     PrivateCompany,
+    /// The company is small (its headcount), whatever its teams' size.
+    SmallCompany,
+    /// The team the person would work in is small, whatever the company's
+    /// size.
     SmallTeam,
     LargeTeam,
     RemoteFirst,
@@ -196,7 +200,7 @@ pub enum CompanyTrait {
 }
 
 impl CompanyTrait {
-    pub const ALL: [CompanyTrait; 14] = [
+    pub const ALL: [CompanyTrait; 15] = [
         Self::Startup,
         Self::EarlyStage,
         Self::Scaleup,
@@ -207,6 +211,7 @@ impl CompanyTrait {
         Self::Consulting,
         Self::PublicCompany,
         Self::PrivateCompany,
+        Self::SmallCompany,
         Self::SmallTeam,
         Self::LargeTeam,
         Self::RemoteFirst,
@@ -225,6 +230,7 @@ impl CompanyTrait {
             Self::Consulting => "consulting",
             Self::PublicCompany => "public_company",
             Self::PrivateCompany => "private_company",
+            Self::SmallCompany => "small_company",
             Self::SmallTeam => "small_team",
             Self::LargeTeam => "large_team",
             Self::RemoteFirst => "remote_first",
@@ -249,6 +255,7 @@ impl CompanyTrait {
             Self::Consulting => "consulting",
             Self::PublicCompany => "public companies",
             Self::PrivateCompany => "private companies",
+            Self::SmallCompany => "small companies",
             Self::SmallTeam => "small teams",
             Self::LargeTeam => "large teams",
             Self::RemoteFirst => "remote-first companies",

@@ -732,3 +732,278 @@ fn rankings_order_and_round_trip() {
     let back: Ranking = serde_json::from_str(&json).unwrap();
     assert_eq!(back, rankings[0]);
 }
+
+// ---------------------------------------------------------------------------
+// Company size and team size are different facts.
+
+const PUBLIC_GIANT: &str = "We are a publicly traded company with thousands of employees. \
+    You will build backend services in Rust and PostgreSQL.";
+const BIG_TEAM: &str = "Join a team of 200 engineers building backend services in Rust \
+    and PostgreSQL.";
+const SMALL_TEAM: &str = "You join a team of 6 engineers building backend services in Rust \
+    and PostgreSQL.";
+const SMALL_COMPANY: &str = "We're a small company building backend services in Rust and \
+    PostgreSQL.";
+const SAYS_NOTHING: &str = "You will build backend services in Rust and PostgreSQL.";
+const LATE_STAGE: &str = "Over $1B raised, including our $500M Series F. You will build \
+    backend services in Rust and PostgreSQL.";
+
+fn wanting(value: &str, stance: Stance) -> Person {
+    let mut person = engineer();
+    person.stated.push(trait_pref(value, stance));
+    person
+}
+
+fn company_weight(r: &Ranking) -> f64 {
+    r.signals
+        .iter()
+        .filter(|s| s.group == crate::signals::SignalGroup::Company)
+        .map(|s| s.weight)
+        .sum()
+}
+
+fn has_unknown(r: &Ranking, text: &str) -> bool {
+    r.signals
+        .iter()
+        .any(|s| s.kind == SignalKind::Unknown && s.summary.contains(text))
+}
+
+#[test]
+fn a_big_company_says_nothing_about_the_size_of_the_team() {
+    let person = wanting("small_team", Stance::Wanted);
+    let r = ranked(
+        &job("Backend Engineer", PUBLIC_GIANT),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert_eq!(company_weight(&r), 0.0, "{:?}", summaries(&r));
+    assert!(
+        has_unknown(&r, "doesn't say whether it's small_team"),
+        "{:?}",
+        summaries(&r)
+    );
+    // A later funding round is a stage, not a team size either.
+    let r = ranked(
+        &job("Backend Engineer", LATE_STAGE),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert_eq!(company_weight(&r), 0.0, "{:?}", summaries(&r));
+    assert!(
+        facets(&job("x", LATE_STAGE))
+            .company_traits
+            .iter()
+            .any(|f| f.key.value == "scaleup")
+    );
+}
+
+#[test]
+fn a_wanted_small_team_counts_against_a_stated_large_team() {
+    let person = wanting("small_team", Stance::Wanted);
+    let r = ranked(
+        &job("Backend Engineer", BIG_TEAM),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert_eq!(company_weight(&r), -1.5, "{:?}", summaries(&r));
+    assert!(
+        summaries(&r)
+            .iter()
+            .any(|s| s == "The posting says it's a large team, while you want small_team"),
+        "{:?}",
+        summaries(&r)
+    );
+    assert!(
+        matches!(r.gate, Gate::Recommended),
+        "a want never rules out"
+    );
+    let r = ranked(
+        &job("Backend Engineer", SMALL_TEAM),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert_eq!(company_weight(&r), 1.5);
+}
+
+#[test]
+fn a_wanted_small_company_counts_against_a_public_one() {
+    let person = wanting("small_company", Stance::Wanted);
+    let r = ranked(
+        &job("Backend Engineer", PUBLIC_GIANT),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert_eq!(company_weight(&r), -1.5, "{:?}", summaries(&r));
+    assert!(matches!(r.gate, Gate::Recommended));
+    let r = ranked(
+        &job("Backend Engineer", SAYS_NOTHING),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert_eq!(company_weight(&r), 0.0, "unknown stays unknown");
+}
+
+#[test]
+fn a_required_small_company_rules_out_a_stated_large_one_and_never_assumes() {
+    let person = wanting("small_company", Stance::Required);
+    // Stated conflict: out, with why.
+    let r = ranked(
+        &job("Backend Engineer", PUBLIC_GIANT),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(
+        matches!(&r.gate, Gate::Excluded { exclusion: Exclusion::UnmetRequirement { why } }
+            if why.contains("small_company")),
+        "{:?}",
+        r.gate
+    );
+    // Stated match: passes.
+    let r = ranked(
+        &job("Backend Engineer", SMALL_COMPANY),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(matches!(r.gate, Gate::Recommended), "{:?}", r.gate);
+    assert!(company_weight(&r) > 0.0);
+    // Nothing said: still offered, never a strong fit, and unresolved.
+    let r = ranked(
+        &job("Senior Backend Engineer", SAYS_NOTHING),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(matches!(r.gate, Gate::Recommended), "{:?}", r.gate);
+    assert!(r.tier <= Tier::WorthReviewing, "{:?}", r.tier);
+    assert!(
+        has_unknown(&r, "Unresolved: you require small_company"),
+        "{:?}",
+        summaries(&r)
+    );
+}
+
+#[test]
+fn a_required_small_team_is_decided_by_the_team_never_by_the_company() {
+    let person = wanting("small_team", Stance::Required);
+    let r = ranked(
+        &job("Backend Engineer", BIG_TEAM),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(
+        matches!(
+            &r.gate,
+            Gate::Excluded {
+                exclusion: Exclusion::UnmetRequirement { .. }
+            }
+        ),
+        "{:?}",
+        r.gate
+    );
+    let r = ranked(
+        &job("Backend Engineer", SMALL_TEAM),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(matches!(r.gate, Gate::Recommended), "{:?}", r.gate);
+    // Company headcount alone: unresolved, not a conflict.
+    let r = ranked(
+        &job("Senior Backend Engineer", PUBLIC_GIANT),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(matches!(r.gate, Gate::Recommended), "{:?}", r.gate);
+    assert!(r.tier <= Tier::WorthReviewing);
+    assert!(
+        has_unknown(&r, "Unresolved: you require small_team"),
+        "{:?}",
+        summaries(&r)
+    );
+}
+
+#[test]
+fn a_required_small_team_isnt_ruled_out_by_the_company_headcount() {
+    let person = wanting("small_team", Stance::Required);
+    let posting = "A global team of 200 people across 30 countries. You will join a team of 6 \
+        engineers building backend services in Rust and PostgreSQL.";
+    let r = ranked(
+        &job("Backend Engineer", posting),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(matches!(r.gate, Gate::Recommended), "{:?}", r.gate);
+    assert!(company_weight(&r) > 0.0, "{:?}", summaries(&r));
+    let posting = "You will not be part of a large team: backend services in Rust and PostgreSQL.";
+    let r = ranked(
+        &job("Senior Backend Engineer", posting),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(
+        matches!(r.gate, Gate::Recommended),
+        "a denial rules nothing out: {:?}",
+        r.gate
+    );
+    assert!(
+        has_unknown(&r, "Unresolved: you require small_team"),
+        "{:?}",
+        summaries(&r)
+    );
+}
+
+#[test]
+fn company_wording_never_overrides_the_team_someone_joins() {
+    let person = wanting("small_team", Stance::Required);
+    let posting = "Our company is a large team of 200 employees. You will join a team of 6 \
+        engineers building backend services in Rust and PostgreSQL.";
+    let r = ranked(
+        &job("Backend Engineer", posting),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(matches!(r.gate, Gate::Recommended), "{:?}", r.gate);
+    assert!(company_weight(&r) > 0.0, "{:?}", summaries(&r));
+    // Denied in its own clause: no evidence; affirmed in another: evidence.
+    let posting = "You will not be working as part of a large team: backend services in Rust \
+        and PostgreSQL.";
+    let r = ranked(
+        &job("Senior Backend Engineer", posting),
+        &person,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(matches!(r.gate, Gate::Recommended), "{:?}", r.gate);
+    let small_company = wanting("small_company", Stance::Required);
+    let posting = "We are not a startup, but a publicly traded company. You will build backend \
+        services in Rust and PostgreSQL.";
+    let r = ranked(
+        &job("Backend Engineer", posting),
+        &small_company,
+        &no_taste(),
+        Some(2),
+    );
+    assert!(
+        matches!(
+            &r.gate,
+            Gate::Excluded {
+                exclusion: Exclusion::UnmetRequirement { .. }
+            }
+        ),
+        "{:?}",
+        r.gate
+    );
+}

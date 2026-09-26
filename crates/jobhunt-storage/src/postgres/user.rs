@@ -6,10 +6,10 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use jobhunt_core::{SourceKey, UpsertOutcome};
 use jobhunt_eligibility::{CacheKey, EligibilityDecision, EligibilityRepository};
-use jobhunt_jobs::verification::{VerificationRecord, VerificationRepository};
+use jobhunt_jobs::verification::{LatestVerifications, VerificationRecord, VerificationRepository};
 use jobhunt_jobs::{
-    IdentityEntry, JobEvent, JobId, JobPosting, JobQuery, JobRecord, JobRepository, JobStatus,
-    LastListing, OpportunityId, RunId, RunSummary, ScanResult, ScanWrite, StorageError,
+    IdentityEntry, JobEvent, JobId, JobPosting, JobQuery, JobRecord, JobRepository, LastListing,
+    OpportunityId, RunId, RunSummary, ScanResult, ScanWrite, StorageError,
 };
 use jobhunt_ranking::{
     FeedbackAction, FeedbackEvent, FeedbackRepository, RankKey, Ranking, RankingRepository,
@@ -94,36 +94,6 @@ impl PgUserStore {
 
     fn reason_context(&self, feedback: &str) -> String {
         format!("feedback|{}|{feedback}", self.user)
-    }
-
-    /// Fills the read cache for the opportunities a ranking search listed.
-    async fn prefetch(&self, listed: &[JobRecord]) -> Result<(), StorageError> {
-        let opportunities: Vec<String> = listed
-            .iter()
-            .map(|r| r.opportunity_id.to_string())
-            .collect();
-        let records = self.shared.records_of(&opportunities).await?;
-        let jobs: Vec<String> = records
-            .values()
-            .flatten()
-            .map(|r| r.id.to_string())
-            .collect();
-        let verifications = self.shared.latest_verifications(&jobs).await?;
-        let mut cache = self.cache.lock();
-        for record in records.values().flatten() {
-            cache.latest.insert(record.id, None);
-            cache.latest_success.insert(record.id, None);
-        }
-        for (success_only, v) in verifications {
-            let slot = if success_only {
-                &mut cache.latest_success
-            } else {
-                &mut cache.latest
-            };
-            slot.insert(v.job_id, Some(v));
-        }
-        cache.records.extend(records);
-        Ok(())
     }
 
     pub(crate) fn decode_feedback(
@@ -280,18 +250,33 @@ impl JobRepository for PgUserStore {
         self.shared.history(id).await
     }
 
+    async fn histories(
+        &self,
+        ids: &[JobId],
+    ) -> Result<HashMap<JobId, Vec<JobEvent>>, StorageError> {
+        self.shared.histories(ids).await
+    }
+
+    async fn get_many(&self, ids: &[JobId]) -> Result<HashMap<JobId, JobRecord>, StorageError> {
+        self.shared.get_many(ids).await
+    }
+
+    /// Also kept for the rest of the request: the single lookups that
+    /// follow (classifying, checking what is shown) are answered from it.
+    async fn opportunity_records_many(
+        &self,
+        ids: &[OpportunityId],
+    ) -> Result<HashMap<OpportunityId, Vec<JobRecord>>, StorageError> {
+        let records = self.shared.opportunity_records_many(ids).await?;
+        self.cache
+            .lock()
+            .records
+            .extend(records.iter().map(|(id, r)| (*id, r.clone())));
+        Ok(records)
+    }
+
     async fn search(&self, query: &JobQuery) -> Result<Vec<JobRecord>, StorageError> {
-        let listed = self.shared.search(query).await?;
-        // The ranking's "every open opportunity" search: prefetch what it
-        // will ask next.
-        if query.distinct_opportunities
-            && query.status == Some(JobStatus::Open)
-            && query.limit.is_none()
-            && !listed.is_empty()
-        {
-            self.prefetch(&listed).await?;
-        }
-        Ok(listed)
+        self.shared.search(query).await
     }
 
     async fn count(&self, query: &JobQuery) -> Result<u64, StorageError> {
@@ -331,6 +316,22 @@ impl VerificationRepository for PgUserStore {
             return Ok(v.clone());
         }
         self.shared.latest_successful_verification(job).await
+    }
+
+    /// Also kept for the rest of the request (see
+    /// [`PgUserStore::opportunity_records_many`]).
+    async fn latest_verifications_of(
+        &self,
+        jobs: &[JobId],
+    ) -> Result<HashMap<JobId, LatestVerifications>, StorageError> {
+        let found = self.shared.latest_verifications_of(jobs).await?;
+        let mut cache = self.cache.lock();
+        for job in jobs {
+            let known = found.get(job).cloned().unwrap_or_default();
+            cache.latest.insert(*job, known.latest);
+            cache.latest_success.insert(*job, known.last_success);
+        }
+        Ok(found)
     }
 
     async fn record_observation(

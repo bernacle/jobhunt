@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { removePreference, setPreference, tellPreferences } from "@/app/actions";
+import { clarifyPreference, removePreference, setPreference, tellPreferences } from "@/app/actions";
 import { AddPreference, StatementForm } from "@/components/preferences";
 import { NotInUse, TasteTable } from "@/components/taste";
 import { PageHeader, Section } from "@/components/ui";
@@ -26,7 +26,7 @@ export default async function PreferencesPage() {
         <h2 id="taste-heading" className="sr-only">
           You told us, and what we&apos;ve learned
         </h2>
-        <TasteTable taste={taste} remove={removePreference} />
+        <TasteTable taste={taste} remove={removePreference} clarify={clarifyPreference} />
         <NotInUse taste={taste} />
         <p className="mt-4 text-[13px] leading-normal text-fg-muted">
           Learned from {taste.feedback_events} {taste.feedback_events === 1 ? "decision" : "decisions"} on {taste.opportunities}{" "}

@@ -2,6 +2,7 @@ import type { ActionResult } from "@/app/actions";
 import type { LearnedView, PreferenceUpdateResult, PreferenceView, TasteView } from "@/lib/api-types";
 import { STANCE_LABEL, ago } from "@/lib/format";
 
+import { type ClarifyAction, ClarifyPreference } from "./clarify";
 import { RemovePreference } from "./preferences";
 
 /*
@@ -39,7 +40,7 @@ function Square({ learned }: { learned: boolean }) {
   );
 }
 
-export function ExplicitPreference({ p, remove }: { p: PreferenceView; remove: Remove }) {
+export function ExplicitPreference({ p, remove, clarify }: { p: PreferenceView; remove: Remove; clarify?: ClarifyAction }) {
   return (
     <li className="flex gap-3 border-b border-line-subtle py-3">
       <Square learned={false} />
@@ -59,11 +60,15 @@ export function ExplicitPreference({ p, remove }: { p: PreferenceView; remove: R
             "Set by you"
           )}
         </p>
-        {p.certainty === "uncertain" && (
-          <p className="mt-1 text-[13px] text-fg-secondary">
-            <span className="nr-inferred">Narrow isn&apos;t sure it read this right</span>
-            {p.note && <>: {p.note}</>}
-          </p>
+        {p.clarify && clarify ? (
+          <ClarifyPreference p={p} clarify={clarify} />
+        ) : (
+          p.certainty === "uncertain" && (
+            <p className="mt-1 text-[13px] text-fg-secondary">
+              <span className="nr-inferred">Narrow isn&apos;t sure it read this right</span>
+              {p.note && <>: {p.note}</>}
+            </p>
+          )
         )}
       </div>
     </li>
@@ -125,7 +130,7 @@ function Empty({ children }: { children: string }) {
  * Preferences by group: what the person told Narrow beside what it
  * learned, so a tendency can never pass for a requirement.
  */
-export function TasteTable({ taste, remove }: { taste: TasteView; remove: Remove }) {
+export function TasteTable({ taste, remove, clarify }: { taste: TasteView; remove: Remove; clarify?: ClarifyAction }) {
   const stated = (categories: string[]) =>
     taste.stated
       .filter((p) => categories.includes(p.category))
@@ -167,7 +172,7 @@ export function TasteTable({ taste, remove }: { taste: TasteView; remove: Remove
               {g.told.length > 0 ? (
                 <ul role="list">
                   {g.told.map((p) => (
-                    <ExplicitPreference key={p.id} p={p} remove={remove} />
+                    <ExplicitPreference key={p.id} p={p} remove={remove} clarify={clarify} />
                   ))}
                 </ul>
               ) : (

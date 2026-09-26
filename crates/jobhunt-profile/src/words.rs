@@ -150,6 +150,112 @@ impl Pattern {
     }
 }
 
+/// Many patterns compiled together and looked up by their first word, so
+/// that matching a vocabulary costs one lookup per word of the text rather
+/// than one scan of the text per pattern.
+#[derive(Debug, Clone)]
+pub struct Vocabulary {
+    patterns: Vec<Pattern>,
+    /// Patterns whose first word is exact (or case-sensitive), by that word
+    /// lowercased.
+    by_first: std::collections::HashMap<String, Vec<usize>>,
+    /// Patterns whose first word is a prefix (`payment*`).
+    by_prefix: Vec<(String, usize)>,
+    /// Patterns that start with `_`.
+    anywhere: Vec<usize>,
+}
+
+impl Vocabulary {
+    pub fn new(patterns: Vec<Pattern>) -> Self {
+        let mut by_first: std::collections::HashMap<String, Vec<usize>> =
+            std::collections::HashMap::new();
+        let mut by_prefix = Vec::new();
+        let mut anywhere = Vec::new();
+        for (i, pattern) in patterns.iter().enumerate() {
+            match pattern.parts.first() {
+                Some(Part::Exact(w)) => by_first.entry(w.clone()).or_default().push(i),
+                Some(Part::CaseSensitive(w)) => {
+                    by_first.entry(w.to_lowercase()).or_default().push(i);
+                }
+                Some(Part::Prefix(p)) => by_prefix.push((p.clone(), i)),
+                Some(Part::Any) => anywhere.push(i),
+                None => {}
+            }
+        }
+        Self {
+            patterns,
+            by_first,
+            by_prefix,
+            anywhere,
+        }
+    }
+
+    pub fn compile(patterns: &[&str]) -> Self {
+        Self::new(patterns.iter().map(|p| Pattern::new(p)).collect())
+    }
+
+    pub fn len(&self) -> usize {
+        self.patterns.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.patterns.is_empty()
+    }
+
+    /// For every pattern that matches, in pattern order: its index and
+    /// [`Pattern::find_all`]'s matches.
+    pub fn find_all(&self, words: &[Word]) -> Vec<(usize, Vec<Range<usize>>)> {
+        let mut starts: Vec<(usize, usize)> = Vec::new();
+        for (at, word) in words.iter().enumerate() {
+            if let Some(ids) = self.by_first.get(&word.lower) {
+                starts.extend(ids.iter().map(|id| (*id, at)));
+            }
+            for (prefix, id) in &self.by_prefix {
+                if word.lower.starts_with(prefix.as_str()) {
+                    starts.push((*id, at));
+                }
+            }
+        }
+        for id in &self.anywhere {
+            starts.extend((0..words.len()).map(|at| (*id, at)));
+        }
+        starts.sort_unstable();
+        let mut out: Vec<(usize, Vec<Range<usize>>)> = Vec::new();
+        let mut next = 0;
+        for (id, at) in starts {
+            let pattern = &self.patterns[id];
+            if out.last().is_none_or(|(last, _)| *last != id) {
+                next = 0;
+            }
+            if at < next || !pattern.matches_at(words, at) {
+                continue;
+            }
+            next = at + pattern.len();
+            match out.last_mut() {
+                Some((last, ranges)) if *last == id => ranges.push(at..next),
+                _ => out.push((id, std::iter::once(at..next).collect())),
+            }
+        }
+        out
+    }
+
+    /// For every pattern that matches, in pattern order: its index and its
+    /// first match ([`Pattern::find`]).
+    pub fn find_first(&self, words: &[Word]) -> Vec<(usize, Range<usize>)> {
+        self.find_all(words)
+            .into_iter()
+            .filter_map(|(id, mut ranges)| {
+                (!ranges.is_empty()).then(|| (id, ranges.swap_remove(0)))
+            })
+            .collect()
+    }
+
+    /// Whether any pattern matches.
+    pub fn any(&self, words: &[Word]) -> bool {
+        !self.find_all(words).is_empty()
+    }
+}
+
 /// The text covered by words `range` of `text`.
 pub fn span_text<'a>(text: &'a str, words: &[Word], range: &Range<usize>) -> &'a str {
     match (words.get(range.start), words.get(range.end.wrapping_sub(1))) {
@@ -193,5 +299,48 @@ mod tests {
             span_text("Integrated four payment providers behind", &w, &r),
             "payment providers"
         );
+    }
+
+    #[test]
+    fn vocabulary_finds_what_each_pattern_finds() {
+        let texts = [
+            "Integrated four payment providers behind one Go service, payments and PAYMENT rails",
+            "We go to market with Go, Node.js and C++ on .NET; go go Go",
+            "the team of 6 engineers; team of many; a team of 30",
+            "",
+            "Payment payment payments pay payment providers payment",
+        ];
+        let patterns = [
+            "payment*",
+            "payment* provider*",
+            "four _ providers",
+            "=Go",
+            "go",
+            "team of _",
+            "_ of",
+            "node.js",
+            "c++",
+            ".net",
+            "pay",
+            "payment",
+            "providers behind",
+        ];
+        for text in texts {
+            let ws = words(text);
+            let vocabulary = Vocabulary::compile(&patterns);
+            let expected: Vec<(usize, Vec<Range<usize>>)> = patterns
+                .iter()
+                .enumerate()
+                .map(|(i, p)| (i, Pattern::new(p).find_all(&ws)))
+                .filter(|(_, ranges)| !ranges.is_empty())
+                .collect();
+            assert_eq!(vocabulary.find_all(&ws), expected, "{text:?}");
+            let first: Vec<(usize, Range<usize>)> = patterns
+                .iter()
+                .enumerate()
+                .filter_map(|(i, p)| Pattern::new(p).find(&ws).map(|r| (i, r)))
+                .collect();
+            assert_eq!(vocabulary.find_first(&ws), first, "{text:?}");
+        }
     }
 }

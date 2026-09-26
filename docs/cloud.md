@@ -345,6 +345,18 @@ product's ranking (tiers, gates, briefs); only the selection is its own
 - Only strong fits and jobs worth reviewing are candidates. With nothing
   new, the feed is **caught up**: empty, with when job boards were last
   read and when the next scheduled read is due, never padded with maybes.
+- **One role per company.** Today is a few distinct decisions: each
+  company's best-ranked candidate, in rank order, until the feed is full.
+  The company's other candidates go with it (`also_at_company`, "+3 more
+  roles at Supabase") instead of taking slots, and are not recorded as
+  shown, so they stay new. Fewer companies means a shorter feed, never a
+  padded one.
+- Preparing the feed ranks every open opportunity for the person: records,
+  verification state and eligibility come in a fixed number of batched
+  queries whatever the corpus size, and what is read from each posting is
+  remembered per posting version in the process. Each feed logs where its
+  time went (`today prepared`: person, load, eligibility, ranking, verify,
+  classify, select).
 - A **material change** is one the job's history records (UPDATED /
   REOPENED) in a field that changes whether someone would want or could
   take the job: pay published or changed, location or remote policy, work

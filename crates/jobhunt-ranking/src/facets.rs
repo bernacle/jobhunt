@@ -14,11 +14,18 @@
 //! are required, in a "nice to have" list preferred, elsewhere only
 //! mentioned.
 
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::ops::Range;
+use std::sync::{Arc, LazyLock, Mutex};
+
 use chrono::{DateTime, Utc};
-use jobhunt_jobs::{EmploymentType, JobRecord, WorkplaceType};
+use jobhunt_jobs::{EmploymentType, JobId, JobRecord, WorkplaceType};
 use jobhunt_profile::WorkMode;
-use jobhunt_profile::infer::{domains_in, role_signals, technologies_in};
-use jobhunt_profile::words::{Pattern, Word, span_text, words};
+use jobhunt_profile::infer::{
+    domains_in, domains_in_words, role_signals_in, technologies_in, technologies_in_words,
+};
+use jobhunt_profile::words::{Pattern, Vocabulary, Word, span_text, words};
 use serde::{Deserialize, Serialize};
 
 use crate::key::{Dimension, TasteKey};
@@ -311,15 +318,24 @@ const COMPANY_TERMS: &[(&str, &str)] = &[
     ("series b", "scaleup"),
     ("series c", "scaleup"),
     ("series d", "scaleup"),
+    // Later rounds are a stage, not a size: they say nothing about teams.
+    ("series e", "scaleup"),
+    ("series f", "scaleup"),
+    ("series g", "scaleup"),
+    ("series h", "scaleup"),
+    ("pre ipo", "scaleup"),
     ("hypergrowth", "scaleup"),
     ("startup", "startup"),
     ("start up", "startup"),
     ("y combinator", "startup"),
     ("founder*", "founder_led"),
     ("founding team", "founder_led"),
-    ("small team", "small_team"),
-    ("tiny team", "small_team"),
-    ("lean team", "small_team"),
+    // Team sizes are read by `team_size`, clause by clause: whose team a
+    // size is decides what it can mean.
+    // The company itself ("we're a small company"), not its customers
+    // ("tools for small companies").
+    ("a small company", "small_company"),
+    ("a small startup", "small_company"),
     ("fortune 500", "large_company"),
     ("thousands of employees", "large_company"),
     ("publicly traded", "public_company"),
@@ -416,9 +432,55 @@ const BOILERPLATE_CUES: [&str; 20] = [
     "pay range",
 ];
 
+// The vocabularies above, compiled once (a posting is read against every
+// one of them, sentence by sentence).
+fn compile_terms(terms: &[(&str, &'static str)]) -> Terms {
+    let patterns: Vec<&str> = terms.iter().map(|(p, _)| *p).collect();
+    (
+        Vocabulary::compile(&patterns),
+        terms.iter().map(|(_, v)| *v).collect(),
+    )
+}
+/// A vocabulary of phrases and the value each one stands for.
+type Terms = (Vocabulary, Vec<&'static str>);
+static REQUIRED_HEADING_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&REQUIRED_HEADINGS));
+static PREFERRED_HEADING_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&PREFERRED_HEADINGS));
+static OTHER_HEADING_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&OTHER_HEADINGS));
+static PREFERRED_CUE_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&PREFERRED_CUES));
+static REQUIRED_CUE_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&REQUIRED_CUES));
+static BOILERPLATE_HEADING_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&BOILERPLATE_HEADINGS));
+static BOILERPLATE_CUE_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&BOILERPLATE_CUES));
+static ENGINEERING_TITLE_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&ENGINEERING_TITLE));
+static ROLE_TITLE_PATTERNS: LazyLock<Terms> = LazyLock::new(|| compile_terms(ROLE_TITLE_TERMS));
+static COMPANY_PATTERNS: LazyLock<Terms> = LazyLock::new(|| compile_terms(COMPANY_TERMS));
+static WORK_STYLE_PATTERNS: LazyLock<Terms> = LazyLock::new(|| compile_terms(WORK_STYLE_TERMS));
+static TEAM_OF: LazyLock<Pattern> = LazyLock::new(|| Pattern::new("team of _"));
+
+/// A content sentence of a description, split into words once.
+struct Sentence {
+    text: String,
+    words: Vec<Word>,
+    /// Its clauses, as word ranges (see [`clauses`]).
+    clauses: Vec<Range<usize>>,
+}
+
 /// The sentences of a description that describe the job and the company,
 /// without benefits and policy boilerplate.
 pub fn content_sentences(description: &str) -> Vec<String> {
+    content(description).into_iter().map(|s| s.text).collect()
+}
+
+/// [`content_sentences`], with their words: read once per posting and
+/// shared by every reader of the description.
+fn content(description: &str) -> Vec<Sentence> {
     let mut out = Vec::new();
     let mut skipping = false;
     for line in description.lines() {
@@ -426,10 +488,7 @@ pub fn content_sentences(description: &str) -> Vec<String> {
         let ws = words(trimmed);
         let short = !trimmed.is_empty() && ws.len() <= 6 && !trimmed.ends_with('.');
         if short && !trimmed.starts_with(['-', '*', '•', '–']) {
-            if BOILERPLATE_HEADINGS
-                .iter()
-                .any(|p| Pattern::new(p).find(&ws).is_some_and(|r| r.start <= 2))
-            {
+            if starts_with_any(&ws, &BOILERPLATE_HEADING_PATTERNS) {
                 skipping = true;
                 continue;
             }
@@ -441,8 +500,14 @@ pub fn content_sentences(description: &str) -> Vec<String> {
             continue;
         }
         for sentence in jobhunt_eligibility::job::sentences(line) {
-            if !has(&words(&sentence), &BOILERPLATE_CUES) {
-                out.push(sentence);
+            let ws = words(&sentence);
+            if !has(&ws, &BOILERPLATE_CUE_PATTERNS) {
+                let clauses = clauses(&sentence, &ws);
+                out.push(Sentence {
+                    text: sentence,
+                    words: ws,
+                    clauses,
+                });
             }
         }
     }
@@ -579,25 +644,29 @@ pub fn company_key(company: &str) -> TasteKey {
     TasteKey::new(Dimension::Company, jobhunt_core::text::search_key(company))
 }
 
-fn find_terms<'a>(
+fn find_terms(
     text: &str,
     ws: &[Word],
-    terms: &'a [(&'a str, &'a str)],
-) -> Vec<(&'a str, String)> {
+    (vocabulary, values): &Terms,
+) -> Vec<(&'static str, String)> {
     let mut out: Vec<(&str, String)> = Vec::new();
-    for (pattern, value) in terms {
-        if out.iter().any(|(v, _)| v == value) {
-            continue;
-        }
-        if let Some(range) = Pattern::new(pattern).find(ws) {
+    for (id, range) in vocabulary.find_first(ws) {
+        let value = values[id];
+        if !out.iter().any(|(v, _)| *v == value) {
             out.push((value, span_text(text, ws, &range).to_owned()));
         }
     }
     out
 }
 
-fn has(ws: &[Word], patterns: &[&str]) -> bool {
-    patterns.iter().any(|p| Pattern::new(p).find(ws).is_some())
+fn has(ws: &[Word], vocabulary: &Vocabulary) -> bool {
+    vocabulary.any(ws)
+}
+
+/// A phrase of `vocabulary` within the first three words (a heading's
+/// subject).
+fn starts_with_any(ws: &[Word], vocabulary: &Vocabulary) -> bool {
+    vocabulary.find_first(ws).iter().any(|(_, r)| r.start <= 2)
 }
 
 /// The level a title states.
@@ -619,7 +688,7 @@ pub fn title_level(title: &str) -> Option<(Level, String)> {
 /// Role shapes a title names, with the words.
 pub fn title_roles(title: &str) -> Vec<(&'static str, String)> {
     let ws = words(title);
-    let mut found = find_terms(title, &ws, ROLE_TITLE_TERMS);
+    let mut found = find_terms(title, &ws, &ROLE_TITLE_PATTERNS);
     // "Design Engineer" is frontend engineering, not design.
     if found.iter().any(|(v, _)| *v == "frontend") {
         found.retain(|(v, _)| *v != "design");
@@ -628,7 +697,7 @@ pub fn title_roles(title: &str) -> Vec<(&'static str, String)> {
     if found
         .iter()
         .any(|(v, _)| matches!(*v, "sales" | "product management"))
-        && !has(&ws, &ENGINEERING_TITLE)
+        && !has(&ws, &ENGINEERING_TITLE_PATTERNS)
     {
         found.retain(|(v, _)| matches!(*v, "sales" | "product management" | "design"));
     }
@@ -640,7 +709,7 @@ fn function_of(title: &str, roles: &[(&str, String)]) -> JobFunction {
     let is = |v: &str| roles.iter().any(|(r, _)| *r == v);
     if is("solutions") {
         JobFunction::CustomerEngineering
-    } else if has(&ws, &ENGINEERING_TITLE) || is("sre") {
+    } else if has(&ws, &ENGINEERING_TITLE_PATTERNS) || is("sre") {
         JobFunction::Engineering
     } else if is("sales") {
         JobFunction::Sales
@@ -664,24 +733,18 @@ fn heading_kind(line: &str) -> Option<Requirement> {
         || trimmed.len() > 80
         || trimmed.ends_with('.')
         || trimmed.starts_with(['-', '*', '•', '–'])
-        || !technologies_in(trimmed, false).is_empty()
     {
         return None;
     }
     let ws = words(trimmed);
-    if ws.len() > 6 {
+    if !technologies_in_words(trimmed, &ws, false).is_empty() || ws.len() > 6 {
         return None;
     }
-    let starts = |patterns: &[&str]| {
-        patterns
-            .iter()
-            .any(|p| Pattern::new(p).find(&ws).is_some_and(|r| r.start <= 2))
-    };
-    if starts(&PREFERRED_HEADINGS) {
+    if starts_with_any(&ws, &PREFERRED_HEADING_PATTERNS) {
         Some(Requirement::Preferred)
-    } else if starts(&REQUIRED_HEADINGS) {
+    } else if starts_with_any(&ws, &REQUIRED_HEADING_PATTERNS) {
         Some(Requirement::Required)
-    } else if starts(&OTHER_HEADINGS) {
+    } else if starts_with_any(&ws, &OTHER_HEADING_PATTERNS) {
         Some(Requirement::Mentioned)
     } else {
         None
@@ -705,14 +768,14 @@ fn technologies(title: &str, description: &str) -> Vec<TechFact> {
             continue;
         }
         for sentence in jobhunt_eligibility::job::sentences(line) {
-            let mentions = technologies_in(&sentence, false);
+            let ws = words(&sentence);
+            let mentions = technologies_in_words(&sentence, &ws, false);
             if mentions.is_empty() {
                 continue;
             }
-            let ws = words(&sentence);
-            let level = if has(&ws, &PREFERRED_CUES) {
+            let level = if has(&ws, &PREFERRED_CUE_PATTERNS) {
                 Requirement::Preferred
-            } else if section == Requirement::Mentioned && has(&ws, &REQUIRED_CUES) {
+            } else if section == Requirement::Mentioned && has(&ws, &REQUIRED_CUE_PATTERNS) {
                 Requirement::Required
             } else {
                 section
@@ -737,7 +800,7 @@ fn technologies(title: &str, description: &str) -> Vec<TechFact> {
     out
 }
 
-fn domains(title: &str, structured: &[&str], description: &str) -> Vec<Fact> {
+fn domains(title: &str, structured: &[&str], sentences: &[Sentence]) -> Vec<Fact> {
     let mut out: Vec<Fact> = Vec::new();
     let mut push = |domain: &str, evidence: String, source: FactSource| {
         if !out.iter().any(|f| f.key.value == domain) {
@@ -759,14 +822,19 @@ fn domains(title: &str, structured: &[&str], description: &str) -> Vec<Fact> {
     // The description counts when it names the domain more than once, or
     // once alongside typical vocabulary: one stray "AI" is not a domain.
     let mut tally: Vec<(&str, usize, usize, String)> = Vec::new();
-    for sentence in content_sentences(description) {
-        for hit in domains_in(&sentence) {
+    for Sentence {
+        text: sentence,
+        words: ws,
+        ..
+    } in sentences
+    {
+        for hit in domains_in_words(sentence, ws) {
             match tally.iter_mut().find(|(d, ..)| *d == hit.domain) {
                 Some(entry) => {
                     if hit.strong {
                         entry.1 += 1;
                         if entry.1 == 1 {
-                            entry.3.clone_from(&sentence);
+                            entry.3.clone_from(sentence);
                         }
                     } else {
                         entry.2 += 1;
@@ -789,15 +857,22 @@ fn domains(title: &str, structured: &[&str], description: &str) -> Vec<Fact> {
     out
 }
 
-fn statements(description: &str, terms: &[(&str, &str)], dimension: Dimension) -> Vec<Fact> {
+fn statements(sentences: &[Sentence], terms: &Terms, dimension: Dimension) -> Vec<Fact> {
     let mut out: Vec<Fact> = Vec::new();
-    for sentence in content_sentences(description) {
-        let ws = words(&sentence);
-        for (value, _) in find_terms(&sentence, &ws, terms) {
+    for sentence in sentences {
+        let found = if dimension == Dimension::CompanyTrait {
+            affirmed_terms(sentence, terms)
+        } else {
+            find_terms(&sentence.text, &sentence.words, terms)
+                .into_iter()
+                .map(|(v, _)| v)
+                .collect()
+        };
+        for value in found {
             if !out.iter().any(|f| f.key.value == value) {
                 out.push(Fact {
                     key: TasteKey::new(dimension, value),
-                    evidence: sentence.clone(),
+                    evidence: sentence.text.clone(),
                     source: FactSource::Description,
                 });
             }
@@ -806,24 +881,263 @@ fn statements(description: &str, terms: &[(&str, &str)], dimension: Dimension) -
     out
 }
 
-/// "a team of 6 engineers": a small team when the number is small.
-fn team_size(description: &str) -> Option<Fact> {
-    for sentence in content_sentences(description) {
-        let ws = words(&sentence);
-        for range in Pattern::new("team of _").find_all(&ws) {
-            let n: Option<u32> = ws.get(range.end - 1).and_then(|w| w.lower.parse().ok());
-            if let Some(n) = n
-                && (2..=25).contains(&n)
+// ---------------------------------------------------------------------------
+// Clauses: where negation and "whose team" are read.
+
+/// Punctuation between two words that ends a clause.
+const CLAUSE_MARKS: [char; 9] = [',', ';', ':', '(', ')', '—', '–', '!', '?'];
+/// Words that open a new clause, turning against the one before ("we're
+/// not a startup, but a public company").
+const CONTRAST: [&str; 6] = ["but", "however", "although", "though", "yet", "whereas"];
+
+/// A sentence's clauses, as word ranges: split at punctuation between
+/// words and before contrast words. A fact is read within its clause:
+/// negation there denies it, and what the clause is about (the team the
+/// person joins, or the company) says whose size it is.
+fn clauses(text: &str, ws: &[Word]) -> Vec<Range<usize>> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    for i in 1..ws.len() {
+        let between = &text[ws[i - 1].span.end..ws[i].span.start];
+        if between.contains(&CLAUSE_MARKS[..]) || CONTRAST.contains(&ws[i].lower.as_str()) {
+            out.push(start..i);
+            start = i;
+        }
+    }
+    if !ws.is_empty() {
+        out.push(start..ws.len());
+    }
+    out
+}
+
+/// Words that deny what follows them in the same clause ("isn't" is split
+/// into "isn" and "t").
+const NEGATORS: [&str; 13] = [
+    "not", "no", "never", "without", "nor", "isn", "aren", "wasn", "weren", "don", "doesn", "didn",
+    "won",
+];
+
+impl Sentence {
+    /// The clause word `at` is in.
+    fn clause(&self, at: usize) -> Range<usize> {
+        self.clauses
+            .iter()
+            .find(|c| c.contains(&at))
+            .cloned()
+            .unwrap_or(0..self.words.len())
+    }
+
+    /// Whether the phrase starting at word `start` is denied: a negator
+    /// before it in its own clause.
+    fn denied(&self, start: usize) -> bool {
+        let clause = self.clause(start);
+        self.words[clause.start..start]
+            .iter()
+            .any(|w| NEGATORS.contains(&w.lower.as_str()))
+    }
+}
+
+/// The company kinds a sentence states, not the ones it denies: a denied
+/// kind is no evidence either way.
+fn affirmed_terms(sentence: &Sentence, (vocabulary, values): &Terms) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = Vec::new();
+    for (id, ranges) in vocabulary.find_all(&sentence.words) {
+        let value = values[id];
+        if !out.contains(&value) && ranges.iter().any(|r| !sentence.denied(r.start)) {
+            out.push(value);
+        }
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
+// Team size.
+
+/// A clause about the company, not a team ("our company is a team of 200
+/// employees"): no size in it is a team's.
+const COMPANY_WORDS: [&str; 8] = [
+    "company",
+    "companies",
+    "organization",
+    "organisation",
+    "org",
+    "employees",
+    "staff",
+    "headcount",
+];
+/// Words right before "team" that make it everyone ("our global team of
+/// 200 people"). How a team works ("distributed", "remote") is not one.
+const WHOLE: [&str; 6] = ["global", "entire", "whole", "worldwide", "overall", "total"];
+/// What says a clause is about the team the person would join.
+static JOINING: LazyLock<Vocabulary> = LazyLock::new(|| {
+    Vocabulary::compile(&[
+        "join*",
+        "part of",
+        "work in",
+        "work on",
+        "working in",
+        "working on",
+        "be on",
+        "sit on",
+        "sit in",
+        "your team",
+    ])
+});
+/// Team size said in words.
+static TEAM_PHRASES: LazyLock<Terms> = LazyLock::new(|| {
+    compile_terms(&[
+        ("small team", "small_team"),
+        ("tiny team", "small_team"),
+        ("lean team", "small_team"),
+        ("large team", "large_team"),
+        ("big team", "large_team"),
+    ])
+});
+/// Who a number of people counts ("has 6 engineers").
+const PEOPLE: [&str; 5] = ["engineers", "people", "developers", "members", "designers"];
+
+fn size_of(n: u32) -> Option<&'static str> {
+    match n {
+        2..=25 => Some("small_team"),
+        50.. => Some("large_team"),
+        _ => None,
+    }
+}
+
+/// The team sizes a clause states, with where each starts and the
+/// position of its "team": "a small team", "a team of 6", "the team has
+/// 6 engineers".
+fn team_mentions(ws: &[Word], clause: &Range<usize>) -> Vec<(usize, usize, &'static str)> {
+    let words = &ws[clause.clone()];
+    let mut out = Vec::new();
+    let (phrases, values) = &*TEAM_PHRASES;
+    for (id, ranges) in phrases.find_all(words) {
+        for r in ranges {
+            out.push((clause.start + r.start, clause.start + r.end - 1, values[id]));
+        }
+    }
+    for r in TEAM_OF.find_all(words) {
+        if let Some(size) = words[r.end - 1].lower.parse().ok().and_then(size_of) {
+            out.push((clause.start + r.start, clause.start + r.start, size));
+        }
+    }
+    if let Some(team) = words.iter().position(|w| w.lower == "team") {
+        for (i, pair) in words.windows(2).enumerate().skip(team + 1) {
+            let after_of = words[i - 1].lower == "of";
+            if let (false, Ok(n)) = (after_of, pair[0].lower.parse::<u32>())
+                && PEOPLE.contains(&pair[1].lower.as_str())
+                && let Some(size) = size_of(n)
             {
-                return Some(Fact {
-                    key: TasteKey::new(Dimension::CompanyTrait, "small_team"),
-                    evidence: sentence.clone(),
-                    source: FactSource::Description,
-                });
+                out.push((clause.start + i, clause.start + team, size));
             }
         }
     }
-    None
+    out.sort_by_key(|m| m.0);
+    out
+}
+
+/// The size of the team someone would join, read clause by clause:
+///
+/// 1. said of the team the person joins ("you'll join a team of 6
+///    engineers", "you'll be part of a large team"): that is the team's
+///    size, small or large;
+/// 2. failing that, a small team mentioned without saying whose ("a small
+///    product team of 12") still counts as small;
+/// 3. otherwise unknown. A large team without saying whose stays unknown,
+///    since whose it is decides whether it rules anything out.
+///
+/// A clause about the company ("our company is a team of 200 employees")
+/// or everyone ("our global team of 200 people") never gives a team's
+/// size, and a denied size ("you won't join a large team") is no evidence.
+fn team_size(sentences: &[Sentence]) -> Option<Fact> {
+    let fact = |size: &str, evidence: &String| Fact {
+        key: TasteKey::new(Dimension::CompanyTrait, size),
+        evidence: evidence.clone(),
+        source: FactSource::Description,
+    };
+    let mut unattributed_small: Option<Fact> = None;
+    for sentence in sentences {
+        for clause in &sentence.clauses {
+            let words = &sentence.words[clause.clone()];
+            if words
+                .iter()
+                .any(|w| COMPANY_WORDS.contains(&w.lower.as_str()))
+            {
+                continue;
+            }
+            let joining = JOINING.any(words);
+            for (start, team, size) in team_mentions(&sentence.words, clause) {
+                let everyone = sentence.words[team.saturating_sub(2).max(clause.start)..team]
+                    .iter()
+                    .any(|w| WHOLE.contains(&w.lower.as_str()));
+                if everyone || sentence.denied(start) {
+                    continue;
+                }
+                if joining {
+                    return Some(fact(size, &sentence.text));
+                }
+                if size == "small_team" && unattributed_small.is_none() {
+                    unattributed_small = Some(fact(size, &sentence.text));
+                }
+            }
+        }
+    }
+    unattributed_small
+}
+
+/// How many postings [`facets_of`] remembers (a few megabytes); past that
+/// it starts over.
+const REMEMBERED: usize = 20_000;
+
+/// Facets by record and a hash of what they were read from.
+type Remembered = HashMap<(JobId, u64), Arc<JobFacets>>;
+
+static REMEMBERED_FACETS: LazyLock<Mutex<Remembered>> = LazyLock::new(Mutex::default);
+
+/// Everything [`facets`] reads from a record, hashed: a new version of a
+/// posting is a new key.
+fn facets_input(record: &JobRecord) -> u64 {
+    let job = &record.posting;
+    let mut h = std::hash::DefaultHasher::new();
+    (
+        &job.title,
+        &job.description_text,
+        &job.department,
+        &job.team,
+        &job.company,
+        job.is_remote,
+        job.posted_at,
+        record.first_seen_at,
+    )
+        .hash(&mut h);
+    format!(
+        "{:?}{:?}{}",
+        job.workplace_type, job.employment_type, job.provenance.source
+    )
+    .hash(&mut h);
+    h.finish()
+}
+
+/// [`facets`], remembered per posting version. Reading a posting is most
+/// of what ranking costs, and every ranking of every person reads the same
+/// postings; the facts only change when the posting does.
+pub fn facets_of(record: &JobRecord) -> Arc<JobFacets> {
+    let key = (record.id, facets_input(record));
+    if let Some(found) = REMEMBERED_FACETS
+        .lock()
+        .ok()
+        .and_then(|m| m.get(&key).cloned())
+    {
+        return found;
+    }
+    let read = Arc::new(facets(record));
+    if let Ok(mut remembered) = REMEMBERED_FACETS.lock() {
+        if remembered.len() >= REMEMBERED {
+            remembered.clear();
+        }
+        remembered.insert(key, Arc::clone(&read));
+    }
+    read
 }
 
 /// Reads one stored job.
@@ -842,6 +1156,7 @@ pub fn facets(record: &JobRecord) -> JobFacets {
         })
         .collect();
     let technologies = technologies(&title, description);
+    let sentences = content(description);
     // A generic engineering title: the description says what kind.
     if function == JobFunction::Engineering && roles.is_empty() {
         let techs: Vec<&str> = technologies
@@ -849,9 +1164,11 @@ pub fn facets(record: &JobRecord) -> JobFacets {
             .filter(|t| t.requirement >= Requirement::Preferred)
             .map(|t| t.name.as_str())
             .collect();
-        let sentences = content_sentences(description);
-        let texts: Vec<&str> = sentences.iter().map(String::as_str).collect();
-        for signal in role_signals(None, &techs, &texts) {
+        let texts: Vec<(&str, &[Word])> = sentences
+            .iter()
+            .map(|s| (s.text.as_str(), s.words.as_slice()))
+            .collect();
+        for signal in role_signals_in(None, &techs, &texts) {
             let value = signal.role;
             if !roles.iter().any(|f| f.key.value == value) {
                 roles.push(Fact {
@@ -866,10 +1183,8 @@ pub fn facets(record: &JobRecord) -> JobFacets {
         .into_iter()
         .flatten()
         .collect();
-    let mut company_traits = statements(description, COMPANY_TERMS, Dimension::CompanyTrait);
-    if let Some(fact) = team_size(description)
-        && !company_traits.iter().any(|f| f.key == fact.key)
-    {
+    let mut company_traits = statements(&sentences, &COMPANY_PATTERNS, Dimension::CompanyTrait);
+    if let Some(fact) = team_size(&sentences) {
         company_traits.push(fact);
     }
     if record.posting.provenance.source.kind() == "yc"
@@ -881,7 +1196,7 @@ pub fn facets(record: &JobRecord) -> JobFacets {
             source: FactSource::Structured,
         });
     }
-    let mut work_style = statements(description, WORK_STYLE_TERMS, Dimension::WorkStyle);
+    let mut work_style = statements(&sentences, &WORK_STYLE_PATTERNS, Dimension::WorkStyle);
     let level = title_level(&title);
     if let Some((Level::Manager, words)) = &level
         && function.is_engineering()
@@ -913,7 +1228,7 @@ pub fn facets(record: &JobRecord) -> JobFacets {
         function,
         roles,
         level,
-        domains: domains(&title, &structured, description),
+        domains: domains(&title, &structured, &sentences),
         technologies,
         company_traits,
         work_style,
@@ -929,6 +1244,162 @@ pub fn facets(record: &JobRecord) -> JobFacets {
 mod tests {
     use super::*;
     use crate::testing::record;
+
+    fn sizes(description: &str) -> Vec<String> {
+        facets(&record("ashby:acme", "Backend Engineer", description))
+            .company_traits
+            .iter()
+            .map(|f| f.key.value.clone())
+            .filter(|v| v.ends_with("_team") || v.ends_with("_company"))
+            .collect()
+    }
+
+    #[test]
+    fn a_company_headcount_is_not_the_team_someone_joins() {
+        assert_eq!(
+            sizes(
+                "A global team of 200 people across 30 countries. You will join a team of 6 \
+                 engineers."
+            ),
+            ["small_team"],
+            "the team you join, not the company"
+        );
+        assert!(sizes("A global team of 200 people across 30 countries.").is_empty());
+        assert!(sizes("We are a team of 200 employees.").is_empty());
+        assert!(
+            sizes("Our team of 200 engineers builds payments.").is_empty(),
+            "whose 200 it is isn't said: unknown, not large"
+        );
+        assert_eq!(
+            sizes("You'll join a team of 60 engineers on payments."),
+            ["large_team"]
+        );
+        assert_eq!(
+            sizes("We are a small product team of 12 engineers."),
+            ["small_team"]
+        );
+    }
+
+    #[test]
+    fn denied_sizes_are_not_facts() {
+        assert!(sizes("You will not be part of a large team.").is_empty());
+        assert!(sizes("You will not be part of a team of 200 engineers.").is_empty());
+        assert!(sizes("We're not a small company.").is_empty());
+        assert!(sizes("We aren't a small startup.").is_empty());
+        let traits = |d: &str| -> Vec<String> {
+            facets(&record("ashby:acme", "Backend Engineer", d))
+                .company_traits
+                .iter()
+                .map(|f| f.key.value.clone())
+                .collect()
+        };
+        assert!(
+            !traits("This is not a publicly traded company.").contains(&"public_company".into())
+        );
+        assert!(!traits("We are not a Fortune 500 company.").contains(&"large_company".into()));
+        // Stated, they are.
+        assert_eq!(sizes("We're a small company."), ["small_company"]);
+        assert_eq!(sizes("You will be part of a large team."), ["large_team"]);
+    }
+
+    fn traits(description: &str) -> Vec<String> {
+        facets(&record("ashby:acme", "Backend Engineer", description))
+            .company_traits
+            .iter()
+            .map(|f| f.key.value.clone())
+            .collect()
+    }
+
+    #[test]
+    fn the_team_someone_joins_outranks_what_the_company_says() {
+        // Company wording first, the joined team after: the team's size.
+        assert_eq!(
+            sizes(
+                "Our company is a large team of 200 employees. You will join a team of 6 engineers."
+            ),
+            ["small_team"]
+        );
+        let big_company_small_team = traits(
+            "We are a publicly traded company with thousands of employees. You'll join a team \
+             of 6 engineers.",
+        );
+        for expected in ["public_company", "large_company", "small_team"] {
+            assert!(
+                big_company_small_team.contains(&expected.into()),
+                "{big_company_small_team:?}"
+            );
+        }
+        assert!(!big_company_small_team.contains(&"large_team".into()));
+        let small_company_big_team =
+            traits("We're a small company. You'll join a team of 60 engineers.");
+        assert!(small_company_big_team.contains(&"small_company".into()));
+        assert!(small_company_big_team.contains(&"large_team".into()));
+        // No team someone joins: unknown, unless a small team is said.
+        assert!(sizes("Our company is a large team of 200 employees.").is_empty());
+        assert!(
+            sizes("We are a large team.").is_empty(),
+            "whose large team isn't said"
+        );
+        assert_eq!(sizes("We are a small team."), ["small_team"]);
+        assert_eq!(
+            sizes("Not a large company. The team you'll join has 6 engineers."),
+            ["small_team"]
+        );
+    }
+
+    #[test]
+    fn distributed_is_how_a_team_works_not_its_headcount() {
+        assert_eq!(
+            sizes("You will join a distributed team of 6 engineers."),
+            ["small_team"]
+        );
+        assert_eq!(
+            sizes("You will join a globally distributed team of 6 engineers."),
+            ["small_team"]
+        );
+        assert!(sizes("We are a distributed company with 200 employees.").is_empty());
+        assert!(
+            sizes("Join our global team of 200 people.").is_empty(),
+            "everyone, not a team"
+        );
+    }
+
+    #[test]
+    fn negation_stays_in_its_clause() {
+        let t = traits("We are not a startup, but a publicly traded company.");
+        assert!(!t.contains(&"startup".into()), "{t:?}");
+        assert!(t.contains(&"public_company".into()), "{t:?}");
+        let t = traits("We are not a publicly traded company, but we're a small startup.");
+        assert!(!t.contains(&"public_company".into()), "{t:?}");
+        assert!(t.contains(&"small_company".into()), "{t:?}");
+        assert!(sizes("You will not be working as part of a large team.").is_empty());
+        assert!(sizes("You won't join a large team.").is_empty());
+        // Stated, they are.
+        assert!(traits("We are a startup.").contains(&"startup".into()));
+        assert!(traits("We are a publicly traded company.").contains(&"public_company".into()));
+        assert_eq!(
+            sizes("You will be working as part of a large team."),
+            ["large_team"]
+        );
+        assert_eq!(sizes("You'll join a large team."), ["large_team"]);
+    }
+
+    #[test]
+    fn remembered_facets_follow_the_posting_version() {
+        let first = record(
+            "ashby:acme",
+            "Backend Engineer",
+            "We are a small team of 8.",
+        );
+        let a = facets_of(&first);
+        assert!(Arc::ptr_eq(&a, &facets_of(&first)), "read once per version");
+        assert_eq!(*a, facets(&first));
+        let mut edited = first.clone();
+        edited.posting.description_text = Some("Join a team of 200 engineers.".into());
+        let b = facets_of(&edited);
+        assert!(b.company_traits.iter().any(|f| f.key.value == "large_team"));
+        assert!(!b.company_traits.iter().any(|f| f.key.value == "small_team"));
+    }
 
     #[test]
     fn titles_name_roles_and_levels() {

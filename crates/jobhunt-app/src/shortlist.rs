@@ -367,6 +367,9 @@ pub struct Funnel {
 pub struct NotShown {
     pub ineligible: usize,
     pub below_pay_minimum: usize,
+    /// The posting contradicts a required company or team kind.
+    #[serde(default)]
+    pub unmet_requirement: usize,
     pub closed: usize,
     pub rejected: usize,
     pub in_pipeline: usize,
@@ -589,6 +592,7 @@ impl SearchResults {
             not_shown: NotShown {
                 ineligible: e.ineligible,
                 below_pay_minimum: e.below_minimum,
+                unmet_requirement: e.unmet_requirement,
                 closed: e.closed,
                 rejected: e.rejected,
                 in_pipeline: e.in_pipeline,

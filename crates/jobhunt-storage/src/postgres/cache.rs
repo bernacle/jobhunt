@@ -1,14 +1,15 @@
 //! A request-scoped read cache for ranking.
 //!
-//! Ranking every open opportunity asks, per opportunity, for its records and
-//! for the latest (and latest successful) verification of each record:
-//! cheap against a local SQLite file, thousands of round trips against a
-//! networked Postgres. A [`super::PgUserStore`] lives for one request, so
-//! when it answers the ranking's "every open opportunity" search it loads
-//! those in three batched queries and serves the follow-up lookups from
-//! memory. Any write through the same store clears the cache; writes by
-//! other requests are not seen, exactly as within one transaction
-//! snapshot. What is decided from the data does not change.
+//! Ranking every open opportunity needs, per opportunity, its records and
+//! the latest (and latest successful) verification of each record. The
+//! ranking asks for them in batches (`opportunity_records_many`,
+//! `latest_verifications_of`: one query each); a [`super::PgUserStore`]
+//! lives for one request and keeps what those batches returned, so the
+//! single lookups that follow in the same request (classifying the feed,
+//! checking what is shown) are answered from memory. Any write through the
+//! same store clears the cache; writes by other requests are not seen,
+//! exactly as within one transaction snapshot. What is decided from the
+//! data does not change.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};

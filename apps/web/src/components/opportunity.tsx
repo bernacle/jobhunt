@@ -58,6 +58,35 @@ function Done({ item, outcome, headingId }: { item: FeedItem; outcome: Outcome; 
   );
 }
 
+/**
+ * The company's other recommendations, which Today holds back so that one
+ * company doesn't fill it: one line, opened on demand. They stay new (not
+ * shown), and opening one doesn't change that.
+ */
+export function MoreAtCompany({ item }: { item: FeedItem }) {
+  const others = item.also_at_company ?? [];
+  if (others.length === 0) return null;
+  return (
+    <details className="group text-[13.5px]">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 text-fg-secondary hover:text-fg max-sm:min-h-11 [&::-webkit-details-marker]:hidden">
+        <span aria-hidden="true" className="font-mono text-mono-s transition-transform group-open:rotate-90">
+          ›
+        </span>
+        +{others.length} more {others.length === 1 ? "role" : "roles"} at {item.company}
+      </summary>
+      <ul className="mt-1.5 space-y-1 pl-4">
+        {others.map((o) => (
+          <li key={o.id}>
+            <Link href={`/opportunities/${o.id}`} className="text-fg-body underline decoration-line underline-offset-2 hover:text-fg max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
+              {o.title}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 function checkFirst(item: FeedItem): string | null {
   return item.recommendation !== "recommended" ? (item.recommendation_note ?? null) : null;
 }
@@ -100,6 +129,9 @@ export function OpportunityLead({ item, actions, now }: Props) {
         checkFirst={checkFirst(item)}
         className="mt-6 border-t border-line-subtle pt-5 max-sm:mt-5 max-sm:pt-4"
       />
+      <div className="mt-4 empty:hidden">
+        <MoreAtCompany item={item} />
+      </div>
       <div className="mt-[18px] flex flex-wrap items-center justify-between gap-4 border-t border-line-subtle pt-4 max-sm:flex-col max-sm:items-stretch">
         <VerificationStamp verification={item.verification} now={now} />
         <FeedbackActions id={item.id} title={item.title} company={item.company} actions={actions} onDone={setOutcome} variant="lead" />
@@ -141,6 +173,7 @@ export function OpportunityPeer({ item, actions, now }: Props) {
         compact
         className="mt-1"
       />
+      <MoreAtCompany item={item} />
       <div className="mt-1 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 max-sm:flex-col max-sm:items-stretch">
         <VerificationStamp verification={item.verification} now={now} />
         <FeedbackActions id={item.id} title={item.title} company={item.company} actions={actions} onDone={setOutcome} variant="peer" />

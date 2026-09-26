@@ -23,6 +23,8 @@ pub mod compensation;
 pub mod model;
 pub mod trust;
 
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
@@ -152,6 +154,33 @@ pub trait VerificationRepository: Send + Sync {
         job: JobId,
     ) -> Result<Option<VerificationRecord>, StorageError>;
 
+    /// The latest attempt and the latest success of many jobs in one call
+    /// (jobs never verified are absent). Networked backends answer it with
+    /// one query; the default asks job by job.
+    async fn latest_verifications_of(
+        &self,
+        jobs: &[JobId],
+    ) -> Result<HashMap<JobId, LatestVerifications>, StorageError> {
+        let mut out = HashMap::new();
+        for job in jobs {
+            if out.contains_key(job) {
+                continue;
+            }
+            let latest = self.latest_verification(*job).await?;
+            let last_success = self.latest_successful_verification(*job).await?;
+            if latest.is_some() || last_success.is_some() {
+                out.insert(
+                    *job,
+                    LatestVerifications {
+                        latest,
+                        last_success,
+                    },
+                );
+            }
+        }
+        Ok(out)
+    }
+
     /// Applies a posting the verifier found live through the job
     /// lifecycle, exactly as a scan that listed only this job would
     /// (UNCHANGED / UPDATED / REOPENED, with history), without closing
@@ -193,6 +222,47 @@ impl RecordVerification {
             now,
         )
     }
+}
+
+/// A job's latest verification attempt and latest success.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LatestVerifications {
+    pub latest: Option<VerificationRecord>,
+    pub last_success: Option<VerificationRecord>,
+}
+
+/// [`cached`] for many opportunities' records at once: one repository call
+/// for all of them. Answers in the order of `opportunities`.
+pub async fn cached_many<R: VerificationRepository + ?Sized>(
+    repository: &R,
+    opportunities: &[&[JobRecord]],
+) -> Result<Vec<Vec<RecordVerification>>, StorageError> {
+    let jobs: Vec<JobId> = opportunities
+        .iter()
+        .flat_map(|records| records.iter().map(|r| r.id))
+        .collect();
+    let latest = if jobs.is_empty() {
+        HashMap::new()
+    } else {
+        repository.latest_verifications_of(&jobs).await?
+    };
+    Ok(opportunities
+        .iter()
+        .map(|records| {
+            records
+                .iter()
+                .map(|record| {
+                    let known = latest.get(&record.id).cloned().unwrap_or_default();
+                    RecordVerification {
+                        record: record.clone(),
+                        latest: known.latest,
+                        last_success: known.last_success,
+                        reused: true,
+                    }
+                })
+                .collect()
+        })
+        .collect())
 }
 
 /// The stored verification state of records, without asking anyone (for
