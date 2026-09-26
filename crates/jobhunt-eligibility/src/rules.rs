@@ -299,7 +299,13 @@ pub fn presence(ctx: &Context<'_>) -> Vec<Reason> {
     let place = area_name(office);
     let office_country = office.country();
     let relocation_offered = matches!(ctx.job.relocation, Some((Relocation::Offered, _)));
+    let only_to = ctx.profile.relocation_places();
     let relocation_fact = match ctx.profile.relocation {
+        Some(true) if !only_to.is_empty() => ProfileFact::new(
+            "relocation",
+            format!("willing to relocate only to {}", join(&only_to, "or")),
+            FactBasis::Preference,
+        ),
         Some(true) => ProfileFact::new("relocation", "willing to relocate", FactBasis::Preference),
         Some(false) => ProfileFact::new(
             "relocation",
@@ -337,7 +343,7 @@ pub fn presence(ctx: &Context<'_>) -> Vec<Reason> {
                     country_name(home)
                 ),
             )
-        } else if ctx.profile.relocation == Some(true) {
+        } else if ctx.profile.would_relocate_to(office) == Some(true) {
             reason(
                 Verdict::Conditional,
                 format!(
@@ -365,12 +371,19 @@ pub fn presence(ctx: &Context<'_>) -> Vec<Reason> {
         }
         _ => place.clone(),
     };
-    let r = match ctx.profile.relocation {
-        Some(false) => reason(
+    let r = match ctx.profile.would_relocate_to(office) {
+        Some(false) if ctx.profile.relocation == Some(false) => reason(
             Verdict::Fail,
             format!(
                 "Requires {how} presence in {abroad}; you live in {} and are not willing to relocate",
                 country_name(home)
+            ),
+        ),
+        Some(false) => reason(
+            Verdict::Fail,
+            format!(
+                "Requires {how} presence in {abroad}; you'd only relocate to {}",
+                join(&only_to, "or")
             ),
         ),
         Some(true) => {

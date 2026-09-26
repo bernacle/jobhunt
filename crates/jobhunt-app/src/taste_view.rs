@@ -14,6 +14,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::LocalApp;
+use crate::controls::PreferenceControls;
 use crate::error::AppError;
 use crate::preferences::{PreferenceView, StatementView};
 use crate::views::time;
@@ -166,6 +167,9 @@ pub struct TasteView {
     /// What the person said: preferences in effect (they always win over
     /// anything learned).
     pub stated: Vec<PreferenceView>,
+    /// The same preferences as structured controls (work setup,
+    /// relocation, location, pay, company and team), each in its layer.
+    pub controls: PreferenceControls,
     /// The person's statements, verbatim, with what was not understood.
     pub statements: Vec<StatementView>,
     /// Patterns learned from feedback that affect ranking now.
@@ -191,6 +195,7 @@ impl TasteView {
     pub fn of(
         model: &TasteModel,
         stated: Vec<PreferenceView>,
+        controls: PreferenceControls,
         statements: Vec<StatementView>,
     ) -> Self {
         let with = |status: &str| -> Vec<LearnedView> {
@@ -203,6 +208,7 @@ impl TasteView {
         };
         Self {
             stated,
+            controls,
             statements,
             learned: with("active"),
             contradictory: with("mixed"),
@@ -252,6 +258,7 @@ impl LocalApp {
                 .filter(|p| p.active)
                 .map(PreferenceView::of)
                 .collect(),
+            PreferenceControls::of(&data),
             data.statements.iter().map(StatementView::of).collect(),
         ))
     }

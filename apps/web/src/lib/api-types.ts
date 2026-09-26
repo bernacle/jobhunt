@@ -130,7 +130,170 @@ export type Clarify =
        * As read: `small_team` or `small_company`.
        */
       value: string;
+    }
+  | {
+      /**
+       * The same preference as an input; answering sets it with the
+       * chosen stance (`require` or `want`) in place of this reading.
+       */
+      input:
+        | {
+            kind: "role";
+            role: string;
+            /**
+             * How strongly a preference holds.
+             */
+            stance?: "require" | "want" | "accept" | "avoid";
+          }
+        | {
+            /**
+             * Applies to employment only or contracts only (both when absent).
+             */
+            applies_to?: ArrangementInput | null;
+            /**
+             * ISO 4217 code (USD, EUR, BRL). Never assumed.
+             */
+            currency: string;
+            kind: "compensation";
+            minimum?: number | null;
+            /**
+             * A pay period.
+             */
+            period?: "year" | "month" | "day" | "hour";
+            target?: number | null;
+          }
+        | {
+            kind: "work_mode";
+            mode: WorkModeInput;
+            /**
+             * How strongly a preference holds.
+             */
+            stance?: "require" | "want" | "accept" | "avoid";
+          }
+        | {
+            kind: "location";
+            place: string;
+          }
+        | {
+            kind: "region";
+            region: string;
+            /**
+             * How strongly a preference holds.
+             */
+            stance?: "require" | "want" | "accept" | "avoid";
+          }
+        | {
+            kind: "timezone";
+            /**
+             * How strongly a preference holds.
+             */
+            stance?: "require" | "want" | "accept" | "avoid";
+            zone: string;
+          }
+        | {
+            kind: "relocation";
+            only_to?: string[];
+            willing: boolean;
+          }
+        | {
+            kind: "work_setup";
+            setup: WorkSetupInput;
+          }
+        | {
+            kind: "unknown_pay";
+            show: boolean;
+          }
+        | {
+            kind: "unclear_eligibility";
+            show: boolean;
+          }
+        | {
+            kind: "sponsorship";
+            needed: boolean;
+          }
+        | {
+            kind: "authorized_in";
+            place: string;
+          }
+        | {
+            engagement: EngagementInput;
+            kind: "engagement";
+            /**
+             * How strongly a preference holds.
+             */
+            stance?: "require" | "want" | "accept" | "avoid";
+          }
+        | {
+            company: string;
+            kind: "company";
+            /**
+             * How strongly a preference holds.
+             */
+            stance?: "require" | "want" | "accept" | "avoid";
+          }
+        | {
+            domain: string;
+            kind: "domain";
+            /**
+             * How strongly a preference holds.
+             */
+            stance?: "require" | "want" | "accept" | "avoid";
+          }
+        | {
+            aspect: string;
+            kind: "work_style";
+            /**
+             * How strongly a preference holds.
+             */
+            stance?: "require" | "want" | "accept" | "avoid";
+          };
+      kind: "importance";
+      /**
+       * The preference, readable: "remote work", "startups".
+       */
+      value: string;
     };
+/**
+ * Which arrangement a pay preference applies to.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "ArrangementInput".
+ */
+export type ArrangementInput = "employment" | "contract";
+/**
+ * Remote, hybrid or on-site.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "WorkModeInput".
+ */
+export type WorkModeInput = "remote" | "hybrid" | "onsite";
+/**
+ * How the person wants to work, as one answer. Each is stored as the
+ * work-mode preferences it means, replacing any others:
+ *
+ * | Answer | Stored | Layer |
+ * | --- | --- | --- |
+ * | `remote_only` | remote: required | requirement: hybrid or on-site jobs are a stated conflict |
+ * | `prefer_remote` | remote: wanted | preference: ranking only |
+ * | `hybrid_okay` | remote or hybrid: required | requirement: on-site jobs are a stated conflict |
+ * | `onsite_okay` | on-site: acceptable | preference: nothing is ruled out |
+ * | `no_preference` | nothing | — |
+ *
+ * Work setup is not relocation (a separate answer), nor where the person
+ * may legally work.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "WorkSetupInput".
+ */
+export type WorkSetupInput =
+  "remote_only" | "prefer_remote" | "hybrid_okay" | "onsite_okay" | "no_preference";
+/**
+ * Hired as an employee or as a contractor (B2B, freelance).
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "EngagementInput".
+ */
+export type EngagementInput = "employee" | "contractor";
 /**
  * One precise preference.
  *
@@ -193,7 +356,20 @@ export type PreferenceInput =
     }
   | {
       kind: "relocation";
+      only_to?: string[];
       willing: boolean;
+    }
+  | {
+      kind: "work_setup";
+      setup: WorkSetupInput;
+    }
+  | {
+      kind: "unknown_pay";
+      show: boolean;
+    }
+  | {
+      kind: "unclear_eligibility";
+      show: boolean;
     }
   | {
       kind: "sponsorship";
@@ -235,27 +411,6 @@ export type PreferenceInput =
        */
       stance?: "require" | "want" | "accept" | "avoid";
     };
-/**
- * Which arrangement a pay preference applies to.
- *
- * This interface was referenced by `JobHuntApi`'s JSON-Schema
- * via the `definition` "ArrangementInput".
- */
-export type ArrangementInput = "employment" | "contract";
-/**
- * Remote, hybrid or on-site.
- *
- * This interface was referenced by `JobHuntApi`'s JSON-Schema
- * via the `definition` "WorkModeInput".
- */
-export type WorkModeInput = "remote" | "hybrid" | "onsite";
-/**
- * Hired as an employee or as a contractor (B2B, freelance).
- *
- * This interface was referenced by `JobHuntApi`'s JSON-Schema
- * via the `definition` "EngagementInput".
- */
-export type EngagementInput = "employee" | "contractor";
 /**
  * Why an item is on the feed.
  *
@@ -1693,6 +1848,11 @@ export interface PreferenceView {
    */
   id: string;
   /**
+   * `requirement` (a stated conflict can leave a job out; unknown stays
+   * unresolved) or `preference` (ranking only). See [`layer`].
+   */
+  layer: string;
+  /**
    * How an ambiguous part was read, for the person to check.
    */
   note?: string | null;
@@ -2150,15 +2310,25 @@ export interface NotShown {
    */
   beyond_limit: number;
   closed: number;
+  /**
+   * Eligibility not confirmed, and the person hides such jobs.
+   */
+  eligibility_unconfirmed?: number;
   in_pipeline: number;
   ineligible: number;
   /**
    * Ranked maybe or low priority (`all_tiers` shows them).
    */
   lower_tiers: number;
+  /**
+   * Pay not published (or not comparable), and the person hides such
+   * jobs.
+   */
+  pay_unknown?: number;
   rejected: number;
   /**
-   * The posting contradicts a required company or team kind.
+   * The posting contradicts something the person requires: a company
+   * or team kind, their work setup, relocation, a remote geography.
    */
   unmet_requirement?: number;
 }
@@ -2263,6 +2433,7 @@ export interface TasteView {
    * Patterns the evidence contradicts: not used.
    */
   contradictory: LearnedView[];
+  controls: PreferenceControls;
   /**
    * Patterns about something the person also stated: what they said is
    * used.
@@ -2400,6 +2571,197 @@ export interface TasteEvidenceView {
    */
   summary: string;
   title: string;
+}
+/**
+ * The same preferences as structured controls (work setup,
+ * relocation, location, pay, company and team), each in its layer.
+ */
+export interface PreferenceControls {
+  company: CompanyControls;
+  location: LocationControls;
+  pay: PayControls;
+  work: WorkControls;
+}
+/**
+ * Team size, company size and stage, kept apart.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "CompanyControls".
+ */
+export interface CompanyControls {
+  items: CompanyControl[];
+}
+/**
+ * One kind of team or company.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "CompanyControl".
+ */
+export interface CompanyControl {
+  /**
+   * `must_have`, `nice_to_have`, `avoid` or `off`.
+   */
+  importance: string;
+  /**
+   * `requirement`, `preference`, or `none` when off.
+   */
+  layer: string;
+  record?: PreferenceView | null;
+  /**
+   * `team`, `company_size` or `stage`: a company's size never stands in
+   * for a team's, and neither is a stage.
+   */
+  scope: string;
+  /**
+   * `small_team`, `small_company`, `large_company`, `early_stage`,
+   * `startup`, `scaleup`.
+   */
+  value: string;
+}
+/**
+ * Where the person lives and may work, and what to do when eligibility
+ * is unclear. The job's own location, its remote scope, the person's work
+ * authorization and relocation are separate things, kept apart.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "LocationControls".
+ */
+export interface LocationControls {
+  /**
+   * Countries or regions the person stated they may already work in.
+   */
+  authorized_in: PlaceControl[];
+  /**
+   * Where the person lives, as written (from the preference, else the
+   * resume header).
+   */
+  home?: string | null;
+  /**
+   * `preference` or `resume`.
+   */
+  home_basis?: string | null;
+  /**
+   * The country Narrow reads it as ("Brazil"); absent when unrecognized.
+   */
+  home_country?: string | null;
+  /**
+   * The `current_location` preference, when set.
+   */
+  home_record?: PreferenceView | null;
+  /**
+   * Geographies remote roles should be open to, with their stance.
+   */
+  remote_geography: PlaceControl[];
+  /**
+   * Remote scopes that include where the person lives, broadest first
+   * ("anywhere", "the Americas", "Latin America", "South America",
+   * "Brazil"). A posting that says only "Remote" is none of these.
+   */
+  remote_open_to_you: string[];
+  /**
+   * `show` (marked unresolved; the default) or `hide` (until
+   * eligibility is confirmed).
+   */
+  unclear_eligibility: string;
+  unclear_eligibility_record?: PreferenceView | null;
+}
+/**
+ * A place the person named, as written and as Narrow reads it.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "PlaceControl".
+ */
+export interface PlaceControl {
+  /**
+   * Stable code of the place (`worldwide`, `americas`, `latam`, `BR`),
+   * when recognized.
+   */
+  code?: string | null;
+  /**
+   * As written.
+   */
+  place: string;
+  /**
+   * How Narrow reads it ("Brazil", "Latin America", "anywhere"); absent
+   * when it doesn't recognize the place, which then never counts as
+   * including anywhere.
+   */
+  read_as?: string | null;
+  record: PreferenceView;
+}
+/**
+ * A minimum (a requirement) and a target (a preference), and what to do
+ * with jobs whose pay isn't published.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "PayControls".
+ */
+export interface PayControls {
+  minimum: PayControl[];
+  target: PayControl[];
+  /**
+   * `show` (marked unresolved; the default) or `hide`.
+   */
+  unknown_pay: string;
+  unknown_pay_record?: PreferenceView | null;
+}
+/**
+ * One pay figure.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "PayControl".
+ */
+export interface PayControl {
+  amount: number;
+  /**
+   * `employment` or `contract`; absent for both.
+   */
+  applies_to?: string | null;
+  /**
+   * ISO code; absent when the person's words didn't say (never
+   * assumed: until it is set, pay isn't compared).
+   */
+  currency?: string | null;
+  /**
+   * `year`, `month`, `day` or `hour`.
+   */
+  period: string;
+  record: PreferenceView;
+}
+/**
+ * Remote, hybrid or on-site, and relocation: two separate answers.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "WorkControls".
+ */
+export interface WorkControls {
+  /**
+   * The stored work modes in words, when `setup` is `custom`.
+   */
+  custom?: string | null;
+  /**
+   * `not_willing`, `open`, `only_selected` or `unset`.
+   */
+  relocation: string;
+  /**
+   * The places, when `only_selected`.
+   */
+  relocation_only_to: string[];
+  relocation_record?: PreferenceView | null;
+  /**
+   * `remote_only`, `prefer_remote`, `hybrid_okay`, `onsite_okay`,
+   * `no_preference`, or `custom` when the stored work modes are none of
+   * those (a statement said "hybrid, not on-site"; see `custom`).
+   */
+  setup: string;
+  /**
+   * `requirement`, `preference`, or `none` (no preference).
+   */
+  setup_layer: string;
+  /**
+   * The work-mode preferences behind the answer.
+   */
+  setup_records: PreferenceView[];
 }
 /**
  * A reason about one job only (not generalized).
@@ -2545,4 +2907,16 @@ export interface VerificationReport {
    */
   uncertainty: string[];
   verification: VerificationBrief;
+}
+/**
+ * Every structured control, read from the preferences in effect.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "PreferenceControls".
+ */
+export interface PreferenceControls1 {
+  company: CompanyControls;
+  location: LocationControls;
+  pay: PayControls;
+  work: WorkControls;
 }

@@ -113,6 +113,12 @@ pub fn verified(record: &JobRecord, hours: i64) -> VerificationRecord {
 /// The assessment of `record` for someone living in `place`, verified
 /// `hours` ago (never, with `None`).
 pub fn assessment(record: &JobRecord, place: &str, hours: Option<i64>) -> Assessment {
+    assessment_for(record, &ProfileFacts::living_in(place), hours)
+}
+
+/// The assessment of `record` for a person's facts, verified `hours` ago
+/// (never, with `None`).
+pub fn assessment_for(record: &JobRecord, facts: &ProfileFacts, hours: Option<i64>) -> Assessment {
     let v = hours.map(|h| verified(record, h));
     let rv = RecordVerification {
         record: record.clone(),
@@ -120,12 +126,7 @@ pub fn assessment(record: &JobRecord, place: &str, hours: Option<i64>) -> Assess
         last_success: v,
         reused: true,
     };
-    assess(
-        &[rv],
-        &ProfileFacts::living_in(place),
-        &FreshnessPolicy::default(),
-        now(),
-    )
+    assess(&[rv], facts, &FreshnessPolicy::default(), now())
 }
 
 /// An event on a generic record, `minutes` after [`now`].

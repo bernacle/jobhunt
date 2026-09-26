@@ -38,6 +38,7 @@
 
 pub mod config;
 pub mod context;
+pub mod controls;
 pub mod discover;
 pub mod doctor;
 pub mod error;

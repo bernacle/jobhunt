@@ -359,6 +359,21 @@ fn write_shortlist(
         "job below your pay minimum",
         "jobs below your pay minimum",
     );
+    add(
+        n.unmet_requirement,
+        "job against what you require",
+        "jobs against what you require",
+    );
+    add(
+        n.pay_unknown,
+        "job without published pay (hidden)",
+        "jobs without published pay (hidden)",
+    );
+    add(
+        n.eligibility_unconfirmed,
+        "job with unconfirmed eligibility (hidden)",
+        "jobs with unconfirmed eligibility (hidden)",
+    );
     add(n.rejected, "you rejected", "you rejected");
     add(n.in_pipeline, "in your pipeline", "in your pipeline");
     add(n.closed, "closed", "closed");

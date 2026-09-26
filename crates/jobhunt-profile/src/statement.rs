@@ -543,18 +543,28 @@ fn read_clause(clause: &str, statement: &str) -> Vec<ReadPreference> {
     }
     let mut push = |value, stance, certainty| push_noted(value, stance, certainty, None);
 
-    // Location and logistics.
-    let remote_only = has_any(
-        &ws,
-        &[
-            "remote only",
-            "only remote",
-            "fully remote",
-            "100 remote",
-            "remote first only",
-            "full remote",
-        ],
-    );
+    // Location and logistics. "Remote from Brazil" is working remotely
+    // from where the user lives: remote is the requirement, and Brazil is
+    // home (not a region wish).
+    let remote_from = place_after(clause, &ws, &["remote from", "remotely from"]).filter(|p| {
+        let first = p.split_whitespace().next().unwrap_or("").to_lowercase();
+        !matches!(
+            first.as_str(),
+            "anywhere" | "home" | "everywhere" | "any" | "wherever"
+        )
+    });
+    let remote_only = remote_from.is_some()
+        || has_any(
+            &ws,
+            &[
+                "remote only",
+                "only remote",
+                "fully remote",
+                "100 remote",
+                "remote first only",
+                "full remote",
+            ],
+        );
     if remote_only {
         push(
             PreferenceValue::WorkMode {
@@ -608,7 +618,10 @@ fn read_clause(clause: &str, statement: &str) -> Vec<ReadPreference> {
     if has_any(&ws, &["relocat*", "move abroad", "move to"]) {
         let willing = polarity != Polarity::Unwanted;
         push(
-            PreferenceValue::Relocation { willing },
+            PreferenceValue::Relocation {
+                willing,
+                only_to: Vec::new(),
+            },
             Stance::Required,
             if hedged {
                 Certainty::Uncertain
@@ -706,7 +719,7 @@ fn read_clause(clause: &str, statement: &str) -> Vec<ReadPreference> {
             certainty,
         );
     }
-    let place = current_place(clause, &ws);
+    let place = current_place(clause, &ws).or(remote_from);
     if let Some(place) = &place {
         push(
             PreferenceValue::CurrentLocation {
@@ -1455,6 +1468,68 @@ mod tests {
         assert_eq!(out.preferences.len(), 4);
     }
 
+    /// The sentence from BRU-308: every part lands on a structured value
+    /// the Preferences controls show, and nothing is guessed.
+    #[test]
+    fn reads_remote_from_a_country_with_pay_and_team_size() {
+        let out = read("remote from Brazil, at least USD 140k, prefer small teams");
+        assert!(out.unparsed.is_empty(), "{:?}", out.unparsed);
+        let remote = find(&out, "work_mode:remote");
+        assert_eq!(
+            remote.stance,
+            Stance::Required,
+            "remote from X is remote only"
+        );
+        assert_eq!(remote.certainty, Certainty::Certain);
+        assert_eq!(
+            find(&out, "current_location").value,
+            PreferenceValue::CurrentLocation {
+                place: "Brazil".into()
+            }
+        );
+        assert!(
+            !out.preferences
+                .iter()
+                .any(|p| p.value.key().starts_with("region:")),
+            "home is not a region wish"
+        );
+        let pay = find(&out, "compensation:minimum:any");
+        assert_eq!(
+            pay.value,
+            PreferenceValue::Compensation {
+                bound: CompensationBound::Minimum,
+                amount: 140_000,
+                currency: Some("USD".into()),
+                period: PayPeriod::Year,
+                arrangement: None,
+            }
+        );
+        assert_eq!(pay.certainty, Certainty::Certain);
+        let team = find(&out, "company:small_team");
+        assert_eq!(team.stance, Stance::Wanted);
+        assert_eq!(team.certainty, Certainty::Certain);
+        assert_eq!(out.preferences.len(), 4);
+
+        // The same with a bare "$": the currency is left for the person.
+        let out = read("remote from Brazil, at least $140k, prefer small teams");
+        let pay = find(&out, "compensation:minimum:any");
+        assert!(matches!(
+            pay.value,
+            PreferenceValue::Compensation { currency: None, .. }
+        ));
+        assert_eq!(pay.certainty, Certainty::Uncertain);
+
+        for home in ["remote from home", "remote from anywhere"] {
+            let out = read(home);
+            assert!(
+                !out.preferences
+                    .iter()
+                    .any(|p| p.value.key() == "current_location"),
+                "{home}"
+            );
+        }
+    }
+
     /// The phrase a real person typed at onboarding: two things read,
     /// both marked for confirmation, neither turned into a requirement.
     #[test]
@@ -1634,7 +1709,10 @@ mod tests {
         );
         assert_eq!(
             find(&out, "relocation").value,
-            PreferenceValue::Relocation { willing: false }
+            PreferenceValue::Relocation {
+                willing: false,
+                only_to: Vec::new()
+            }
         );
         assert_eq!(
             find(&out, "sponsorship").value,

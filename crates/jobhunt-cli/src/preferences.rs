@@ -9,7 +9,7 @@ use chrono::Utc;
 use clap::Subcommand;
 use jobhunt_app::preferences::{
     ArrangementInput, EngagementInput, PeriodInput, PreferenceInput, PreferenceUpdate, StanceInput,
-    WorkModeInput,
+    WorkModeInput, WorkSetupInput,
 };
 
 use crate::config::LoadedConfig;
@@ -88,10 +88,33 @@ pub enum SetCommand {
         #[arg(long, value_enum, default_value = "want")]
         stance: StanceArg,
     },
-    /// Whether you would relocate.
+    /// Whether you would relocate (separate from your work setup).
     Relocation {
         #[arg(value_enum)]
         answer: YesNo,
+        /// Only to this country or region; repeat for each (with `yes`).
+        #[arg(long = "only-to", value_name = "PLACE")]
+        only_to: Vec<String>,
+    },
+    /// How you want to work, as one answer: remote-only, prefer-remote,
+    /// hybrid-okay (remote or hybrid, not on-site), onsite-okay, or
+    /// no-preference. Replaces your remote/hybrid/on-site preferences.
+    WorkSetup {
+        #[arg(value_enum)]
+        setup: WorkSetupArg,
+    },
+    /// Jobs that don't publish pay: `show` them marked unresolved (the
+    /// default), or `hide` them. Unknown pay never meets a minimum.
+    UnknownPay {
+        #[arg(value_enum)]
+        policy: ShowHide,
+    },
+    /// Jobs whose eligibility Narrow can't confirm ("Remote" with no
+    /// geographic scope): `show` them marked unresolved (the default), or
+    /// `hide` them until it is confirmed.
+    UnclearEligibility {
+        #[arg(value_enum)]
+        policy: ShowHide,
     },
     /// Whether you need visa sponsorship. "no" is read as: you may work
     /// where you live without it (use `authorized-in` for other places).
@@ -156,6 +179,22 @@ pub enum EngagementArg {
     Employee,
     #[value(alias = "b2b", alias = "freelance")]
     Contractor,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum WorkSetupArg {
+    RemoteOnly,
+    PreferRemote,
+    HybridOkay,
+    #[value(alias = "on-site-okay")]
+    OnsiteOkay,
+    NoPreference,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum ShowHide {
+    Show,
+    Hide,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -312,8 +351,24 @@ fn input(set: SetCommand) -> PreferenceInput {
             zone,
             stance: stance(s),
         },
-        SetCommand::Relocation { answer } => PreferenceInput::Relocation {
+        SetCommand::Relocation { answer, only_to } => PreferenceInput::Relocation {
             willing: yes(answer),
+            only_to,
+        },
+        SetCommand::WorkSetup { setup } => PreferenceInput::WorkSetup {
+            setup: match setup {
+                WorkSetupArg::RemoteOnly => WorkSetupInput::RemoteOnly,
+                WorkSetupArg::PreferRemote => WorkSetupInput::PreferRemote,
+                WorkSetupArg::HybridOkay => WorkSetupInput::HybridOkay,
+                WorkSetupArg::OnsiteOkay => WorkSetupInput::OnsiteOkay,
+                WorkSetupArg::NoPreference => WorkSetupInput::NoPreference,
+            },
+        },
+        SetCommand::UnknownPay { policy } => PreferenceInput::UnknownPay {
+            show: policy == ShowHide::Show,
+        },
+        SetCommand::UnclearEligibility { policy } => PreferenceInput::UnclearEligibility {
+            show: policy == ShowHide::Show,
         },
         SetCommand::Sponsorship { answer } => PreferenceInput::Sponsorship {
             needed: yes(answer),
@@ -417,6 +472,43 @@ mod tests {
                 },
                 Stance::Unwanted
             )
+        );
+        let setup = input(SetCommand::WorkSetup {
+            setup: WorkSetupArg::HybridOkay,
+        })
+        .values()
+        .unwrap();
+        assert_eq!(setup.len(), 2, "remote or hybrid, both required");
+        assert!(setup.iter().all(|(_, s)| *s == Stance::Required));
+        let relocation = input(SetCommand::Relocation {
+            answer: YesNo::Yes,
+            only_to: vec!["Portugal".into()],
+        })
+        .values()
+        .unwrap();
+        assert_eq!(
+            relocation[0].0,
+            PreferenceValue::Relocation {
+                willing: true,
+                only_to: vec!["Portugal".into()]
+            }
+        );
+        assert!(
+            input(SetCommand::Relocation {
+                answer: YesNo::No,
+                only_to: vec!["Portugal".into()],
+            })
+            .values()
+            .is_err()
+        );
+        assert_eq!(
+            input(SetCommand::UnknownPay {
+                policy: ShowHide::Hide
+            })
+            .values()
+            .unwrap()[0]
+                .0,
+            PreferenceValue::UnknownPay { show: false }
         );
         let company = input(SetCommand::Company {
             kind: "founder-led".into(),

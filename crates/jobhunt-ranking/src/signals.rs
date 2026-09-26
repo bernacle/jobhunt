@@ -12,7 +12,9 @@
 //! isn't published is unknown, not low.
 
 use chrono::{DateTime, Utc};
-use jobhunt_eligibility::{Assessment, Eligibility};
+use jobhunt_eligibility::geo::{Area, COUNTRIES, Membership};
+use jobhunt_eligibility::job::{JobRequirements, RemoteScope, ScopeBasis, Strength};
+use jobhunt_eligibility::{Assessment, Eligibility, RuleId, Verdict};
 use jobhunt_jobs::PayInterval;
 use jobhunt_jobs::verification::{
     CompensationCheck, CompensationStatus, CurrencyEvidence, PayRange, Standing, TrustState,
@@ -222,8 +224,49 @@ impl PayEvidence {
 // ---------------------------------------------------------------------------
 // Eligibility and verification.
 
+/// When a job is ruled out only by what the person stated about how and
+/// where they'll work (their work setup, or relocation), not by where they
+/// may legally work: those conflicts, in words. Every way of doing the job
+/// must be ruled out that way.
+pub fn stated_conflict(a: &Assessment) -> Option<String> {
+    let d = &a.decision;
+    if d.status != Eligibility::Ineligible {
+        return None;
+    }
+    let stated = |reasons: &[jobhunt_eligibility::Reason]| {
+        let fails: Vec<&jobhunt_eligibility::Reason> = reasons
+            .iter()
+            .filter(|r| r.verdict == Verdict::Fail)
+            .collect();
+        !fails.is_empty()
+            && fails
+                .iter()
+                .all(|r| matches!(r.rule, RuleId::WorkMode | RuleId::Presence))
+    };
+    if !stated(&d.reasons) || !d.other_options.iter().all(|o| stated(&o.reasons)) {
+        return None;
+    }
+    let mut conflicts: Vec<String> = Vec::new();
+    for r in d.reasons.iter().filter(|r| r.verdict == Verdict::Fail) {
+        if !conflicts.contains(&r.conclusion) {
+            conflicts.push(r.conclusion.clone());
+        }
+    }
+    Some(match &d.option {
+        Some(option) => format!(
+            "{option} conflicts with what you require: {}",
+            conflicts.join("; ")
+        ),
+        None => format!("Conflicts with what you require: {}", conflicts.join("; ")),
+    })
+}
+
 pub fn eligibility(a: &Assessment) -> Signal {
     let d = &a.decision;
+    if let Some(why) = stated_conflict(a) {
+        return Signal::new(SignalGroup::WorkMode, Basis::Stated, 0.0, why)
+            .kind(SignalKind::Blocker);
+    }
     let group = SignalGroup::Eligibility;
     let basis = Basis::Eligibility;
     let evidence: Vec<String> = d
@@ -1014,6 +1057,220 @@ pub fn work_mode(i: &Inputs<'_>) -> Vec<Signal> {
 }
 
 // ---------------------------------------------------------------------------
+// Remote geography.
+
+/// Where a posting allows remote work, as far as it says.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RemoteReach {
+    /// The job can't be done remotely: the work setup decides, not this.
+    NotRemote,
+    /// "Remote" with no geographic scope: never taken as global.
+    Unknown,
+    /// Anywhere in these areas ([`Area::Worldwide`] for global).
+    Areas(Vec<Area>),
+}
+
+impl RemoteReach {
+    /// Reads a posting's requirements: the structured remote scope, or the
+    /// description's own limits when the fields give none.
+    pub fn of(job: &JobRequirements) -> Self {
+        let Some(scope) = job.remote_option() else {
+            return Self::NotRemote;
+        };
+        match scope {
+            RemoteScope::Global(_) => Self::Areas(vec![Area::Worldwide]),
+            RemoteScope::Areas(areas) if areas.iter().any(|a| a.basis == ScopeBasis::Stated) => {
+                Self::Areas(
+                    areas
+                        .iter()
+                        .filter(|a| a.basis == ScopeBasis::Stated)
+                        .map(|a| a.area)
+                        .collect(),
+                )
+            }
+            _ => {
+                let limits: Vec<Area> = job
+                    .allow
+                    .iter()
+                    .filter(|c| c.strength == Strength::Required)
+                    .map(|c| c.area)
+                    .collect();
+                if !limits.is_empty() {
+                    Self::Areas(limits)
+                } else if job.worldwide.is_some() {
+                    Self::Areas(vec![Area::Worldwide])
+                } else {
+                    Self::Unknown
+                }
+            }
+        }
+    }
+}
+
+/// Whether all of `inner` lies within `outer`.
+fn within(inner: Area, outer: Area) -> bool {
+    if inner == outer || outer == Area::Worldwide {
+        return true;
+    }
+    if inner == Area::Worldwide {
+        return false;
+    }
+    match inner.country() {
+        Some(c) => outer.contains(c) == Membership::Yes,
+        None => COUNTRIES
+            .iter()
+            .filter(|c| inner.contains(c) == Membership::Yes)
+            .all(|c| outer.contains(c) == Membership::Yes),
+    }
+}
+
+/// Whether two areas share any place: a role open to the Americas is open
+/// to Latin America; one open anywhere is open to every region.
+fn overlaps(a: Area, b: Area) -> bool {
+    if a == b || a == Area::Worldwide || b == Area::Worldwide {
+        return true;
+    }
+    COUNTRIES
+        .iter()
+        .any(|c| a.contains(c) != Membership::No && b.contains(c) != Membership::No)
+}
+
+fn areas_text(areas: &[Area]) -> String {
+    let mut names: Vec<String> = Vec::new();
+    for a in areas {
+        let n = a.to_string();
+        if !names.contains(&n) {
+            names.push(n);
+        }
+    }
+    match names.as_slice() {
+        [] => String::new(),
+        [one] => one.clone(),
+        [init @ .., last] => format!("{} or {last}", init.join(", ")),
+    }
+}
+
+/// The remote-geography signals, and what they decide beyond the score: a
+/// required geography the posting's published scope is entirely outside
+/// of (a stated conflict), and whether a required one can't be checked
+/// (the posting publishes no scope: unresolved, never a strong fit).
+pub struct GeographyReading {
+    pub signals: Vec<Signal>,
+    pub ruled_out: Option<String>,
+    pub unresolved: bool,
+}
+
+pub fn remote_geography(i: &Inputs<'_>, reach: &RemoteReach) -> GeographyReading {
+    let group = SignalGroup::WorkMode;
+    let mut out = GeographyReading {
+        signals: Vec::new(),
+        ruled_out: None,
+        unresolved: false,
+    };
+    let stated = &i.person.remote_geography;
+    let Some(job_areas) = (match reach {
+        RemoteReach::Areas(areas) => Some(areas),
+        RemoteReach::Unknown => None,
+        RemoteReach::NotRemote => return out,
+    }) else {
+        let required: Vec<&str> = stated
+            .iter()
+            .filter(|g| g.stance == Stance::Required)
+            .map(|g| g.text.as_str())
+            .collect();
+        if !required.is_empty() {
+            out.unresolved = true;
+            out.signals.push(
+                Signal::new(
+                    group,
+                    Basis::Stated,
+                    0.0,
+                    format!(
+                        "Unresolved: you require remote roles open to {}, and the posting doesn't say where remote work is allowed",
+                        required.join(" or ")
+                    ),
+                )
+                .kind(SignalKind::Unknown),
+            );
+        }
+        return out;
+    };
+    let where_ = areas_text(job_areas);
+    let evidence = format!("remote scope: {where_}");
+    for stance in [Stance::Required, Stance::Wanted, Stance::Acceptable] {
+        let wanted: Vec<&crate::person::RemoteGeography> =
+            stated.iter().filter(|g| g.stance == stance).collect();
+        // Unrecognized places neither match nor rule anything out.
+        let known: Vec<Area> = wanted.iter().filter_map(|g| g.area).collect();
+        if known.is_empty() {
+            continue;
+        }
+        let texts: Vec<&str> = wanted.iter().map(|g| g.text.as_str()).collect();
+        let listed = texts.join(" or ");
+        let met = known
+            .iter()
+            .any(|w| job_areas.iter().any(|j| overlaps(*w, *j)));
+        let signal = match (stance, met) {
+            (Stance::Required, true) => Signal::new(
+                group,
+                Basis::Stated,
+                0.0,
+                format!("Remote from {where_}, within what you require ({listed})"),
+            ),
+            (Stance::Required, false) => {
+                let why =
+                    format!("Remote only from {where_}; you require remote roles open to {listed}");
+                out.ruled_out.get_or_insert(why.clone());
+                Signal::new(group, Basis::Stated, -3.0, why).kind(SignalKind::Blocker)
+            }
+            (Stance::Wanted, true) => Signal::new(
+                group,
+                Basis::Stated,
+                1.0,
+                format!("Remote from {where_}, as you prefer ({listed})"),
+            ),
+            (Stance::Wanted, false) => Signal::new(
+                group,
+                Basis::Stated,
+                -1.0,
+                format!("Remote only from {where_}, not {listed} as you prefer"),
+            ),
+            (_, true) => Signal::new(
+                group,
+                Basis::Stated,
+                0.25,
+                format!("Remote from {where_}, which you'd accept"),
+            ),
+            (_, false) => continue,
+        };
+        out.signals.push(signal.evidence([evidence.clone()]));
+    }
+    // Places the person doesn't want: only when the job is entirely there.
+    let avoided: Vec<&crate::person::RemoteGeography> = stated
+        .iter()
+        .filter(|g| g.stance == Stance::Unwanted && g.area.is_some())
+        .collect();
+    if let Some(g) = avoided.iter().find(|g| {
+        g.area
+            .is_some_and(|a| job_areas.iter().all(|j| within(*j, a)))
+    }) {
+        out.signals.push(
+            Signal::new(
+                group,
+                Basis::Stated,
+                -1.5,
+                format!(
+                    "Remote only from {where_}, in {} you'd rather avoid",
+                    g.text
+                ),
+            )
+            .evidence([evidence]),
+        );
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
 // Compensation.
 
 /// Whether a pay preference applies to the job's terms.
@@ -1043,9 +1300,23 @@ fn money(currency: &str, amount: f64, period: PayPeriod) -> String {
     )
 }
 
+/// The pay signals, and what they decide beyond the score.
+pub struct PayReading {
+    pub signals: Vec<Signal>,
+    /// Verified pay below a required minimum: rules the job out.
+    pub below_minimum: Option<String>,
+    /// The posting doesn't publish pay that can be compared with the
+    /// person's (none, not as a salary, or in another currency or period):
+    /// why. Unknown, never low, and never meeting a minimum.
+    pub unknown: Option<String>,
+    /// A required minimum can't be checked (the pay is unknown, or the
+    /// minimum has no currency yet): unresolved, so never a strong fit.
+    pub unresolved: bool,
+}
+
 /// The pay signals, and whether the job is ruled out (verified pay below a
-/// required minimum).
-pub fn compensation(i: &Inputs<'_>) -> (Vec<Signal>, Option<String>) {
+/// required minimum) or its pay is unknown.
+pub fn compensation(i: &Inputs<'_>) -> PayReading {
     let group = SignalGroup::Compensation;
     let pay = i.compensation;
     let provenance = pay.provenance(i.now);
@@ -1057,17 +1328,28 @@ pub fn compensation(i: &Inputs<'_>) -> (Vec<Signal>, Option<String>) {
         .collect();
     let mut out = Vec::new();
     let mut blocked = None;
+    let mut unknown = None;
     let published = pay.check.status == CompensationStatus::Published;
+    let applicable: Vec<&PayPreference> = i
+        .person
+        .pay
+        .iter()
+        .filter(|p| applies(p, i.facets.contract))
+        .collect();
+    // Required minimums that can't be checked against this job.
+    let mut unchecked: Vec<&PayPreference> = Vec::new();
     if !published || salaries.is_empty() {
         let summary = match (&pay.check.summary, published) {
             (Some(text), true) => format!("Pay isn't stated as a salary range: “{text}”"),
             _ => "Pay isn't published: unknown, not low".to_owned(),
         };
+        unknown = Some(summary.clone());
         out.push(
             Signal::new(group, Basis::Posting, 0.0, summary)
                 .kind(SignalKind::Unknown)
                 .evidence([provenance.clone()]),
         );
+        unchecked.extend(applicable.iter().copied().filter(|p| is_floor(p)));
     } else if i.person.pay.is_empty() {
         let ranges: Vec<String> = salaries.iter().map(|r| r.describe()).collect();
         out.push(
@@ -1080,17 +1362,15 @@ pub fn compensation(i: &Inputs<'_>) -> (Vec<Signal>, Option<String>) {
             .evidence([provenance.clone()]),
         );
     }
-    for p in i
-        .person
-        .pay
-        .iter()
-        .filter(|p| applies(p, i.facets.contract))
-    {
+    for p in applicable.iter().copied() {
         if !published || salaries.is_empty() {
             break;
         }
         let bound = p.bound.as_str();
         let Some(currency) = &p.currency else {
+            if is_floor(p) {
+                unchecked.push(p);
+            }
             out.push(
                 Signal::new(
                     group,
@@ -1139,6 +1419,10 @@ pub fn compensation(i: &Inputs<'_>) -> (Vec<Signal>, Option<String>) {
                     p.period.as_str()
                 )
             };
+            if is_floor(p) {
+                unchecked.push(p);
+            }
+            unknown.get_or_insert_with(|| why.clone());
             out.push(
                 Signal::new(group, Basis::Stated, 0.0, why)
                     .kind(SignalKind::Unknown)
@@ -1216,6 +1500,28 @@ pub fn compensation(i: &Inputs<'_>) -> (Vec<Signal>, Option<String>) {
         };
         out.push(signal.evidence(evidence));
     }
+    // A floor that can't be checked is not met: unresolved, and said so.
+    for p in &unchecked {
+        out.push(
+            Signal::new(
+                group,
+                Basis::Stated,
+                0.0,
+                if p.currency.is_none() {
+                    format!(
+                        "Unresolved: your minimum ({}) needs a currency before pay can be checked",
+                        p.text
+                    )
+                } else {
+                    format!(
+                        "Unresolved: you require {}, and this job's pay can't be checked against it",
+                        p.text
+                    )
+                },
+            )
+            .kind(SignalKind::Unknown),
+        );
+    }
     // Pay the person objected to before: worth a look when it is unknown or
     // below what they want.
     let objected = [
@@ -1242,7 +1548,17 @@ pub fn compensation(i: &Inputs<'_>) -> (Vec<Signal>, Option<String>) {
             ),
         ));
     }
-    (out, blocked)
+    PayReading {
+        signals: out,
+        below_minimum: blocked,
+        unknown,
+        unresolved: !unchecked.is_empty(),
+    }
+}
+
+/// A minimum the person requires: a floor pay must be shown to meet.
+fn is_floor(p: &PayPreference) -> bool {
+    p.bound == CompensationBound::Minimum && p.stance == Stance::Required
 }
 
 // ---------------------------------------------------------------------------

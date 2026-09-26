@@ -69,6 +69,9 @@ pub struct ProfileFacts {
     pub zones: Vec<(String, Offsets)>,
     pub work_modes: Vec<(WorkMode, Stance)>,
     pub relocation: Option<bool>,
+    /// When willing to relocate only to some places: those places,
+    /// normalized (unrecognized ones kept as written). Empty is anywhere.
+    pub relocation_only_to: Vec<(Option<Area>, String)>,
     pub needs_sponsorship: Option<bool>,
     /// Places the person stated they may already work in, normalized
     /// (unrecognized ones kept as written).
@@ -105,7 +108,13 @@ impl ProfileFacts {
                         out.zones.extend(ranges);
                     }
                 }
-                PreferenceValue::Relocation { willing } => out.relocation = Some(*willing),
+                PreferenceValue::Relocation { willing, only_to } => {
+                    out.relocation = Some(*willing);
+                    out.relocation_only_to = only_to
+                        .iter()
+                        .map(|place| (place_area(place), place.clone()))
+                        .collect();
+                }
                 PreferenceValue::Sponsorship { needed } => out.needs_sponsorship = Some(*needed),
                 PreferenceValue::WorkAuthorization { place } => {
                     out.authorized_in.push((place_area(place), place.clone()));
@@ -119,7 +128,9 @@ impl ProfileFacts {
                 | PreferenceValue::Region { .. }
                 | PreferenceValue::Company { .. }
                 | PreferenceValue::Domain { .. }
-                | PreferenceValue::WorkStyle { .. } => {}
+                | PreferenceValue::WorkStyle { .. }
+                | PreferenceValue::UnknownPay { .. }
+                | PreferenceValue::UnclearEligibility { .. } => {}
             }
         }
         if out.location.is_none()
@@ -177,6 +188,34 @@ impl ProfileFacts {
             .iter()
             .filter(|(_, s)| *s == Stance::Required)
             .map(|(m, _)| *m)
+            .collect()
+    }
+
+    /// Whether the person would relocate to an office in `place`:
+    /// `Some(true)` when willing (anywhere, or `place` is within one of the
+    /// places they named), `Some(false)` when not willing or it is outside
+    /// those places, and `None` when they haven't said. A place Narrow
+    /// doesn't recognize never counts as including `place`.
+    pub fn would_relocate_to(&self, place: Area) -> Option<bool> {
+        match self.relocation? {
+            false => Some(false),
+            true if self.relocation_only_to.is_empty() => Some(true),
+            true => Some(self.relocation_only_to.iter().any(|(area, _)| {
+                area.is_some_and(|a| {
+                    a == place
+                        || place
+                            .country()
+                            .is_some_and(|c| a.contains(c) == crate::geo::Membership::Yes)
+                })
+            })),
+        }
+    }
+
+    /// The places the person would only relocate to, as written.
+    pub fn relocation_places(&self) -> Vec<String> {
+        self.relocation_only_to
+            .iter()
+            .map(|(_, raw)| raw.clone())
             .collect()
     }
 

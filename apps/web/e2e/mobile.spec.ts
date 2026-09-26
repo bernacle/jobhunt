@@ -41,3 +41,26 @@ test("on a phone, Settings is reachable and the opportunity page has its own act
   expect(overflow).toBeLessThanOrEqual(0);
   await expectAccessible(page);
 });
+
+test("Preferences work on a phone: stacked settings, thumb-sized choices, no sideways scrolling", async ({ page }) => {
+  await onboardViaApi("e2e-mobile-prefs");
+  await signIn(page, "e2e-mobile-prefs", "/preferences");
+  const setup = page.getByRole("group", { name: "Work setup", exact: true });
+  await expect(setup).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  // Every choice is a 44px target.
+  for (const option of ["Remote only", "Prefer remote", "No preference"]) {
+    const box = await setup.locator("label").filter({ hasText: option }).boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  }
+  const team = page.getByRole("group", { name: "Small team", exact: true });
+  for (const option of ["Off", "Nice to have", "Must have"]) {
+    const box = await team.locator("label").filter({ hasText: option }).boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  }
+  await setup.getByText("Remote only").click();
+  await expect(setup.getByRole("status")).toHaveText(/Saved|Already in effect/);
+  await expect(setup.getByRole("radio", { name: /Remote only/ })).toBeChecked();
+  await expectAccessible(page);
+});

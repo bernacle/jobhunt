@@ -16,28 +16,17 @@ function PreferenceLine({ p }: { p: PreferenceView }) {
   );
 }
 
-type Kind =
-  | "role"
-  | "compensation"
-  | "work_mode"
-  | "region"
-  | "timezone"
-  | "location"
-  | "company"
-  | "domain"
-  | "work_style";
+type Kind = "role" | "domain" | "work_style" | "company" | "timezone";
 
-// What a preference can be about: the structured model the API accepts.
+// What a preference can be about, beyond the structured settings above it
+// (work setup, location, pay, company and team): the same model the API
+// accepts.
 const KINDS: { kind: Kind; label: string; placeholder: string }[] = [
   { kind: "role", label: "Role", placeholder: "backend, platform, founding engineer" },
-  { kind: "compensation", label: "Pay", placeholder: "120,000" },
-  { kind: "work_mode", label: "Remote, hybrid or on-site", placeholder: "" },
-  { kind: "region", label: "Region you can work in", placeholder: "EU, Americas" },
-  { kind: "timezone", label: "Time zone", placeholder: "UTC-3, US hours" },
-  { kind: "location", label: "Where you live", placeholder: "Lisbon, Portugal" },
-  { kind: "company", label: "Company or team", placeholder: "small-team, founder-led, startup" },
   { kind: "domain", label: "Domain or product", placeholder: "developer tools, fintech" },
   { kind: "work_style", label: "Way of working", placeholder: "ownership, greenfield, async-communication" },
+  { kind: "company", label: "Kind of company", placeholder: "founder-led, product-company, remote-first" },
+  { kind: "timezone", label: "Time zone", placeholder: "UTC-3, US hours" },
 ];
 
 const STANCES = [
@@ -47,14 +36,9 @@ const STANCES = [
   { value: "avoid", label: "Avoid" },
 ];
 
-const PAY_RULES = [
-  { value: "minimum", label: "At least (a hard floor)" },
-  { value: "target", label: "Aiming for" },
-];
-
 type Stance = "require" | "want" | "accept" | "avoid";
 
-function toInput(kind: Exclude<Kind, "compensation">, value: string, stance: Stance): PreferenceInput {
+function toInput(kind: Kind, value: string, stance: Stance): PreferenceInput {
   switch (kind) {
     case "role":
       return { kind, role: value, stance };
@@ -64,35 +48,22 @@ function toInput(kind: Exclude<Kind, "compensation">, value: string, stance: Sta
       return { kind, company: value, stance };
     case "work_style":
       return { kind, aspect: value, stance };
-    case "work_mode":
-      return { kind, mode: value as "remote" | "hybrid" | "onsite", stance };
-    case "region":
-      return { kind, region: value, stance };
     case "timezone":
       return { kind, zone: value, stance };
-    case "location":
-      return { kind, place: value };
   }
 }
 
 /**
  * A precise preference: what it's about, the rule, the value. The same
  * structured model the API, the CLI and AI assistants use; no free text
- * is parsed here. Pay has two rules: a minimum is a hard floor, a target
- * is what you hope for.
+ * is parsed here.
  */
 export function AddPreference({ set }: { set: (input: PreferenceInput) => Promise<ActionResult<PreferenceUpdateResult>> }) {
   const [kind, setKind] = useState<Kind>("role");
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const ids = { kind: useId(), rule: useId(), value: useId(), currency: useId(), help: useId() };
+  const ids = { kind: useId(), rule: useId(), value: useId(), help: useId() };
   const current = KINDS.find((k) => k.kind === kind)!;
-
-  const submit = (input: PreferenceInput) =>
-    startTransition(async () => {
-      const r = await set(input);
-      setMessage(r.ok ? { ok: true, text: r.data.unchanged ? "Already in effect." : "Saved." } : { ok: false, text: `${r.title}. ${r.message}` });
-    });
 
   return (
     <form
@@ -103,24 +74,12 @@ export function AddPreference({ set }: { set: (input: PreferenceInput) => Promis
         setMessage(null);
         const data = new FormData(e.currentTarget);
         const value = String(data.get("value") ?? "").trim();
-        const rule = String(data.get("rule") ?? "");
+        const rule = String(data.get("rule") ?? "want") as Stance;
         if (!value) return;
-        if (kind === "compensation") {
-          const amount = Number(value.replace(/[,_\s]/g, ""));
-          if (!Number.isFinite(amount) || amount <= 0) {
-            setMessage({ ok: false, text: "Enter the amount as a number, like 120000." });
-            return;
-          }
-          submit({
-            kind: "compensation",
-            minimum: rule === "minimum" ? amount : null,
-            target: rule === "target" ? amount : null,
-            currency: String(data.get("currency") ?? "USD").trim().toUpperCase(),
-            period: "year",
-          });
-        } else {
-          submit(toInput(kind, value, (rule || "want") as Stance));
-        }
+        startTransition(async () => {
+          const r = await set(toInput(kind, value, rule));
+          setMessage(r.ok ? { ok: true, text: r.data.unchanged ? "Already in effect." : "Saved." } : { ok: false, text: `${r.title}. ${r.message}` });
+        });
       }}
     >
       <div className="min-w-0">
@@ -140,60 +99,26 @@ export function AddPreference({ set }: { set: (input: PreferenceInput) => Promis
           <label htmlFor={ids.rule} className={labelClass}>
             Rule
           </label>
-          {kind === "location" ? (
-            <p id={ids.rule} className="flex h-10 items-center text-[14px] text-fg-secondary max-sm:h-11">
-              I live in
-            </p>
-          ) : (
-            <select
-              key={kind === "compensation" ? "pay" : "stance"}
-              id={ids.rule}
-              name="rule"
-              defaultValue={kind === "compensation" ? "minimum" : "want"}
-              className={`${selectClass} h-10 text-[14px]`}
-            >
-              {(kind === "compensation" ? PAY_RULES : STANCES).map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          )}
+          <select id={ids.rule} name="rule" defaultValue="want" className={`${selectClass} h-10 text-[14px]`}>
+            {STANCES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="min-w-0">
           <label htmlFor={ids.value} className={labelClass}>
-            Value{kind === "compensation" && <span className="text-fg-muted"> (per year)</span>}
+            Value
           </label>
-          {kind === "work_mode" ? (
-            <select id={ids.value} name="value" className={`${selectClass} h-10 text-[14px]`}>
-              <option value="remote">Remote</option>
-              <option value="hybrid">Hybrid</option>
-              <option value="onsite">On-site</option>
-            </select>
-          ) : kind === "compensation" ? (
-            <div className="flex gap-2">
-              <input id={ids.value} name="value" required inputMode="numeric" placeholder={current.placeholder} className={`${inputClass} h-10 text-[14px]`} />
-              <label htmlFor={ids.currency} className="sr-only">
-                Currency
-              </label>
-              <input
-                id={ids.currency}
-                name="currency"
-                defaultValue="USD"
-                maxLength={3}
-                className={`${inputClass} h-10 w-20 shrink-0 text-[14px] uppercase`}
-              />
-            </div>
-          ) : (
-            <input id={ids.value} name="value" required placeholder={current.placeholder} className={`${inputClass} h-10 text-[14px]`} />
-          )}
+          <input id={ids.value} name="value" required placeholder={current.placeholder} className={`${inputClass} h-10 text-[14px]`} />
         </div>
       </div>
       <Button type="submit" variant="primary" size="lg" disabled={pending} loading={pending} className="max-sm:h-11 max-sm:w-full">
         Add preference
       </Button>
       <p id={ids.help} className={`${helpClass} md:col-span-3 ${message?.ok === false ? "text-danger" : ""}`} aria-live="polite">
-        {message?.text ?? "What you tell Narrow always outranks what it has learned. A pay minimum is a hard floor: below it, roles are left out."}
+        {message?.text ?? "What you tell Narrow always outranks what it has learned. Must have is a requirement; the others only change the order."}
       </p>
     </form>
   );

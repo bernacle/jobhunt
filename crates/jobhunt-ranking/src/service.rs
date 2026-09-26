@@ -89,8 +89,13 @@ pub struct Excluded {
     pub closed: usize,
     pub ineligible: usize,
     pub below_minimum: usize,
-    /// The posting contradicts a required company or team kind.
+    /// The posting contradicts something the person requires (company or
+    /// team kind, work setup, relocation, remote geography).
     pub unmet_requirement: usize,
+    /// Pay unknown, and the person hides such jobs.
+    pub pay_unknown: usize,
+    /// Eligibility not confirmed, and the person hides such jobs.
+    pub eligibility_unconfirmed: usize,
 }
 
 impl Excluded {
@@ -102,6 +107,8 @@ impl Excluded {
             Exclusion::Ineligible { .. } => self.ineligible += 1,
             Exclusion::BelowMinimum { .. } => self.below_minimum += 1,
             Exclusion::UnmetRequirement { .. } => self.unmet_requirement += 1,
+            Exclusion::PayUnknown { .. } => self.pay_unknown += 1,
+            Exclusion::EligibilityUnconfirmed { .. } => self.eligibility_unconfirmed += 1,
         }
     }
 
@@ -112,6 +119,8 @@ impl Excluded {
             + self.ineligible
             + self.below_minimum
             + self.unmet_requirement
+            + self.pay_unknown
+            + self.eligibility_unconfirmed
     }
 }
 
