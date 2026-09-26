@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens: the one place colors, type and spacing are decided.
+ * BRU-305 (brand and design system) replaces these values; components use
+ * only the semantic names below (bg-surface, text-muted, border-line, …).
+ * Contrast: every text/background pair here meets WCAG AA (4.5:1) in both
+ * themes; `muted` on `canvas` and `surface` is ≥ 5.5:1.
+ */
+:root {
+  --canvas: #f7f5f0;
+  --surface: #ffffff;
+  --sunken: #efece5;
+  --ink: #1d1c1a;
+  --muted: #5c574f;
+  --faint: #6f6a61;
+  --line: #e2ddd3;
+  --line-strong: #c9c2b5;
+  --accent: #245347;
+  --accent-ink: #ffffff;
+  --accent-soft: #e5efe9;
+  --caution: #7a4d00;
+  --caution-soft: #fbf1dc;
+  --negative: #9a2a2a;
+  --negative-soft: #f9e6e3;
+  --focus: #1f5fbf;
+  --learned: #f1eee6;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #141311;
+    --surface: #1c1b18;
+    --sunken: #23211e;
+    --ink: #ece8e0;
+    --muted: #b1aa9e;
+    --faint: #a39c90;
+    --line: #34312c;
+    --line-strong: #4a463f;
+    --accent: #8cc7b2;
+    --accent-ink: #10231d;
+    --accent-soft: #1f2f29;
+    --caution: #e8bf6f;
+    --caution-soft: #2d2415;
+    --negative: #f0a19a;
+    --negative-soft: #331c1a;
+    --focus: #8ab4ff;
+    --learned: #211f1b;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-caution: var(--caution);
+  --color-caution-soft: var(--caution-soft);
+  --color-negative: var(--negative);
+  --color-negative-soft: var(--negative-soft);
+  --color-learned: var(--learned);
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Charter, "Bitstream Charter", Georgia, ui-serif, serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html {
+  background: var(--canvas);
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  font-family: var(--font-sans);
+  line-height: 1.55;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+a {
+  text-underline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+dialog::backdrop {
+  background: rgb(20 19 17 / 45%);
+}

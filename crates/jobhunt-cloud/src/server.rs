@@ -1,5 +1,5 @@
 //! Process entry points: `jobhunt server`, `jobhunt migrate`,
-//! `jobhunt worker …`.
+//! `jobhunt worker discovery|verification|notify`.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -92,6 +92,25 @@ pub async fn verification_worker(config: CloudConfig) -> Result<VerificationSumm
     let store = connect(&config, keys_or_ephemeral(&config)).await?;
     store.migrate().await?;
     let result = worker::verify(&store, &config).await;
+    store.close().await;
+    Ok(result?)
+}
+
+/// `jobhunt worker notify`: one notification run (retries, then new strong
+/// recommendations).
+pub async fn notification_worker(
+    config: CloudConfig,
+) -> Result<crate::notify::NotifySummary, CloudError> {
+    let config = config.require(Role::Notifier)?;
+    let keys = config
+        .keyring()
+        .map_err(|e| ConfigProblems(vec![format!("JOBHUNT_ENCRYPTION_KEYS: {e}")]))?;
+    let sender = crate::email::sender(config.email.as_ref())
+        .map_err(|e| ConfigProblems(vec![format!("email: {e}")]))?
+        .ok_or_else(|| ConfigProblems(vec!["email is not configured".into()]))?;
+    let store = connect(&config, keys).await?;
+    store.migrate().await?;
+    let result = crate::notify::notify(&store, &config, sender.as_ref()).await;
     store.close().await;
     Ok(result?)
 }

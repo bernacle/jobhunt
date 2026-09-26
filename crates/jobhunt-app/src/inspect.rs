@@ -13,7 +13,7 @@ use crate::resolve::{Opportunity, short_id};
 use crate::verify::Checked;
 use crate::views::{
     ApplicationState, CompensationView, DecisionView, EligibilityDetail, ListingState,
-    PipelineStateView, SourceRecordView, VerificationBrief, time,
+    PipelineStateView, SourceRecordView, VerificationBrief, best_record, locations, time,
 };
 
 /// Characters of the description [`JobDetail`] includes unless asked for
@@ -130,12 +130,12 @@ fn summarize(text: &str, limit: usize) -> (String, bool) {
 
 impl JobDetail {
     pub fn of(i: &Inspection, include_sources: bool, full_description: bool) -> Self {
-        let record = i
-            .checked
-            .trust
-            .best
-            .and_then(|b| i.checked.verified.get(b))
-            .map_or_else(|| i.opportunity.main(), |v| &v.record);
+        let record = best_record(
+            &i.checked.verified,
+            &i.checked.trust,
+            Some(i.opportunity.main()),
+        )
+        .unwrap_or_else(|| i.opportunity.main());
         let p = &record.posting;
         let (description, truncated) = summarize(
             p.description_text.as_deref().unwrap_or(""),
@@ -145,14 +145,6 @@ impl JobDetail {
                 DESCRIPTION_SUMMARY
             },
         );
-        let mut locations: Vec<String> = p.location.iter().cloned().collect();
-        for l in &p.locations {
-            if let Some(name) = &l.name
-                && !locations.contains(name)
-            {
-                locations.push(name.clone());
-            }
-        }
         Self {
             id: record.opportunity_id.to_string(),
             short_id: short_id(&record.opportunity_id),
@@ -161,7 +153,7 @@ impl JobDetail {
             company: p.company.clone(),
             url: p.url.to_string(),
             apply_url: p.apply_url.as_ref().map(ToString::to_string),
-            locations,
+            locations: locations(record),
             workplace: p.workplace_type.as_ref().map(|w| w.as_str().to_owned()),
             remote: p.is_remote,
             employment: p.employment_type.as_ref().map(|e| e.as_str().to_owned()),

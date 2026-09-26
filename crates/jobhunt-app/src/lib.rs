@@ -41,14 +41,17 @@ pub mod context;
 pub mod discover;
 pub mod doctor;
 pub mod error;
+pub mod feed;
 pub mod feedback;
 pub mod inspect;
 pub mod preferences;
+pub mod profile_edit;
 pub mod profile_view;
 pub mod resolve;
 pub mod shortlist;
 pub mod state;
 pub mod sync;
+pub mod taste_view;
 pub mod verify;
 pub mod views;
 

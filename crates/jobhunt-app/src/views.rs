@@ -23,6 +23,35 @@ pub(crate) fn time(at: DateTime<Utc>) -> String {
     at.to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
+/// Every location a posting lists, primary first, without repeats.
+pub(crate) fn locations(record: &JobRecord) -> Vec<String> {
+    let p = &record.posting;
+    let mut out: Vec<String> = p.location.iter().cloned().collect();
+    for l in &p.locations {
+        if let Some(name) = &l.name
+            && !out.contains(name)
+        {
+            out.push(name.clone());
+        }
+    }
+    out
+}
+
+/// The record an opportunity's state rests on: the most trusted one, else
+/// the first.
+pub(crate) fn best_record<'a>(
+    verified: &'a [jobhunt_jobs::verification::RecordVerification],
+    trust: &OpportunityTrust,
+    fallback: Option<&'a JobRecord>,
+) -> Option<&'a JobRecord> {
+    trust
+        .best
+        .and_then(|b| verified.get(b))
+        .map(|v| &v.record)
+        .or(fallback)
+        .or_else(|| verified.first().map(|v| &v.record))
+}
+
 /// How worth the person's time a job looks. Deliberately coarse: there is
 /// no percentage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

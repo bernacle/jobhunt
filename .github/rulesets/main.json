@@ -40,6 +40,8 @@
           { "context": "cloud", "integration_id": 15368 },
           { "context": "docs", "integration_id": 15368 },
           { "context": "msrv", "integration_id": 15368 },
+          { "context": "web", "integration_id": 15368 },
+          { "context": "e2e", "integration_id": 15368 },
           { "context": "ci-passed", "integration_id": 15368 }
         ]
       }

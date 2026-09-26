@@ -1,0 +1,154 @@
+"use server";
+
+import { refresh } from "next/cache";
+import { redirect } from "next/navigation";
+
+import { ApiError, api } from "@/lib/api";
+import type {
+  ClaimDecisionResult,
+  CreatedToken,
+  FeedbackResult,
+  NotificationSettingsView,
+  PreferenceInput,
+  PreferenceUpdateResult,
+  ResumeImportResult,
+} from "@/lib/api-types";
+import { describeError } from "@/lib/errors";
+import { clearSession } from "@/lib/session";
+
+/**
+ * Every mutation the web makes, as server actions over the JobHunt API.
+ * Nothing here decides anything: it forwards the person's action and
+ * returns the API's answer, or a stable error code.
+ */
+export type ActionResult<T> = { ok: true; data: T } | { ok: false; code: string; title: string; message: string };
+
+async function attempt<T>(work: () => Promise<T>): Promise<ActionResult<T>> {
+  try {
+    return { ok: true, data: await work() };
+  } catch (error) {
+    const code = error instanceof ApiError ? error.code : "internal_error";
+    if (!(error instanceof ApiError)) console.error("action failed", error);
+    const described = describeError(code);
+    // A preference the domain refused says why in terms the person can act
+    // on ("use one of: startup, …"); other messages are never shown raw.
+    if (error instanceof ApiError && code === "invalid_preference") {
+      described.message = error.message;
+    }
+    return { ok: false, ...described };
+  }
+}
+
+export type FeedbackKind = "save" | "unsave" | "reject" | "applied" | "interview" | "offer" | "like" | "dislike";
+
+export async function recordFeedback(
+  id: string,
+  action: FeedbackKind,
+  reason?: string,
+): Promise<ActionResult<FeedbackResult>> {
+  const trimmed = reason?.trim();
+  return attempt(() => api.feedback(id, { action, reason: trimmed ? trimmed : null }));
+}
+
+/** "Not now": off Today, nothing learned. */
+export async function putAside(id: string): Promise<ActionResult<FeedbackResult>> {
+  return attempt(() => api.dismiss(id));
+}
+
+/** Stage changes on the Applications page, then a fresh page. */
+export async function changeStage(id: string, action: FeedbackKind, reason?: string): Promise<ActionResult<FeedbackResult>> {
+  const result = await recordFeedback(id, action, reason);
+  if (result.ok) refresh();
+  return result;
+}
+
+export interface StatementState {
+  result?: PreferenceUpdateResult;
+  error?: { title: string; message: string };
+  submitted?: string;
+}
+
+export async function tellPreferences(_: StatementState, form: FormData): Promise<StatementState> {
+  const statement = String(form.get("statement") ?? "").trim();
+  if (!statement) return { error: { title: "Say what you want", message: "Write a sentence or two first." } };
+  const result = await attempt(() => api.preferences({ statement }));
+  if (!result.ok) return { error: result, submitted: statement };
+  refresh();
+  return { result: result.data, submitted: statement };
+}
+
+export async function setPreference(input: PreferenceInput): Promise<ActionResult<PreferenceUpdateResult>> {
+  const result = await attempt(() => api.preferences({ set: [input] }));
+  if (result.ok) refresh();
+  return result;
+}
+
+export async function removePreference(id: string): Promise<ActionResult<PreferenceUpdateResult>> {
+  const result = await attempt(() => api.preferences({ remove: [id] }));
+  if (result.ok) refresh();
+  return result;
+}
+
+export async function decideClaim(
+  id: string,
+  decision: "confirm" | "reject" | "reset",
+  note?: string,
+): Promise<ActionResult<ClaimDecisionResult>> {
+  return attempt(() => api.decideClaims([id], decision, note?.trim() || undefined));
+}
+
+export interface ResumeState {
+  result?: ResumeImportResult;
+  error?: { title: string; message: string };
+}
+
+const MAX_RESUME = 10 * 1024 * 1024;
+
+export async function uploadResume(_: ResumeState, form: FormData): Promise<ResumeState> {
+  const file = form.get("resume");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: { title: "Choose a file", message: "A PDF, .txt or .md resume." } };
+  }
+  if (file.size > MAX_RESUME) {
+    return { error: { title: "That file is too large", message: "Resumes up to 10 MB." } };
+  }
+  const result = await attempt(async () => api.uploadResume(await file.arrayBuffer(), file.name, file.type));
+  if (!result.ok) {
+    return {
+      error:
+        result.code === "invalid_arguments"
+          ? { title: "That file couldn't be read", message: "Use a text-based PDF (not a scan), or a .txt or .md file." }
+          : result,
+    };
+  }
+  refresh();
+  return { result: result.data };
+}
+
+export async function saveNotifications(
+  request: { email_enabled?: boolean; cadence?: string; email?: string; resend_confirmation?: boolean },
+): Promise<ActionResult<NotificationSettingsView>> {
+  return attempt(() => api.updateNotifications(request));
+}
+
+export async function createToken(name: string, days: number): Promise<ActionResult<CreatedToken>> {
+  const result = await attempt(() => api.createToken(name.trim() || "AI assistant", days));
+  if (result.ok) refresh();
+  return result;
+}
+
+export async function revokeToken(id: string): Promise<ActionResult<void>> {
+  const result = await attempt(() => api.revokeToken(id));
+  if (result.ok) refresh();
+  return result;
+}
+
+export async function signOutEverywhere(): Promise<void> {
+  await attempt(() => api.logoutEverywhere());
+  await clearSession();
+  redirect("/signin?signed_out=everywhere");
+}
+
+export async function refreshPage(): Promise<void> {
+  refresh();
+}

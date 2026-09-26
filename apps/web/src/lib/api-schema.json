@@ -1,0 +1,4372 @@
+{
+  "$defs": {
+    "AccountView": {
+      "description": "`GET /api/v1/account`.",
+      "properties": {
+        "authenticated_with": {
+          "description": "How this request authenticated: `oidc`, `token` or `dev`.",
+          "type": "string"
+        },
+        "cloud": {
+          "$ref": "#/$defs/CloudStateView"
+        },
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "description": "`usr_…`: the internal account id.",
+          "type": "string"
+        },
+        "identities": {
+          "items": {
+            "$ref": "#/$defs/IdentityView"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "created_at",
+        "authenticated_with",
+        "identities",
+        "cloud"
+      ],
+      "type": "object"
+    },
+    "ApplicationContext": {
+      "description": "The answer of `prepare_application_context`.",
+      "properties": {
+        "caveats": {
+          "description": "What to be careful about: the brief's caveats and unknowns,\neligibility conditions, verification state.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "contact": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ContactDetails"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Only when requested."
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DecisionView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "eligibility": {
+          "$ref": "#/$defs/EligibilityBrief"
+        },
+        "general": {
+          "description": "Usable facts about the person as a whole (skills lists,\ncertifications) that bear on the job.",
+          "items": {
+            "$ref": "#/$defs/Fact"
+          },
+          "type": "array"
+        },
+        "headline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "job": {
+          "$ref": "#/$defs/ContextJob"
+        },
+        "job_asks": {
+          "$ref": "#/$defs/JobAsks"
+        },
+        "location": {
+          "description": "Where the person lives, as they wrote it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "missing_evidence": {
+          "description": "What the job asks for that no usable evidence covers.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "policy": {
+          "description": "How to use this context.",
+          "type": "string"
+        },
+        "relevant_experience": {
+          "description": "Most relevant first.",
+          "items": {
+            "$ref": "#/$defs/EvidenceGroup"
+          },
+          "type": "array"
+        },
+        "relevant_projects": {
+          "items": {
+            "$ref": "#/$defs/EvidenceGroup"
+          },
+          "type": "array"
+        },
+        "verification": {
+          "$ref": "#/$defs/VerificationBrief"
+        },
+        "withheld": {
+          "$ref": "#/$defs/Withheld"
+        }
+      },
+      "required": [
+        "policy",
+        "job",
+        "verification",
+        "eligibility",
+        "job_asks",
+        "relevant_experience",
+        "relevant_projects",
+        "general",
+        "missing_evidence",
+        "caveats",
+        "withheld"
+      ],
+      "type": "object"
+    },
+    "ApplicationState": {
+      "description": "Whether the job can be applied to, as last checked.",
+      "enum": [
+        "active",
+        "closed",
+        "unavailable",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "ArrangementInput": {
+      "description": "Which arrangement a pay preference applies to.",
+      "enum": [
+        "employment",
+        "contract"
+      ],
+      "type": "string"
+    },
+    "AttemptView": {
+      "description": "One verification attempt of one source record.",
+      "properties": {
+        "application": {
+          "$ref": "#/$defs/ApplicationState"
+        },
+        "application_basis": {
+          "description": "`probed`, `published`, `listing_page` or `not_checked`.",
+          "type": "string"
+        },
+        "application_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "at": {
+          "type": "string"
+        },
+        "authority": {
+          "type": "string"
+        },
+        "checked_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "failure": {
+          "description": "Why it could not reach an answer, when it couldn't.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "listing": {
+          "$ref": "#/$defs/ListingState"
+        },
+        "method": {
+          "description": "How it was checked (`greenhouse_job_api`, `ashby_board_api`, …).",
+          "type": "string"
+        },
+        "unknowns": {
+          "description": "What this attempt could not establish.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "at",
+        "listing",
+        "application",
+        "application_basis",
+        "authority",
+        "method"
+      ],
+      "type": "object"
+    },
+    "AuthConfigView": {
+      "description": "`GET /api/v1/auth/config`: how to sign in (public).",
+      "properties": {
+        "audience": {
+          "description": "The audience to request tokens for.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "audience_parameter": {
+          "description": "The request parameter that carries it (`resource`, RFC 8707, or\n`audience`); absent means none is sent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cli_client_id": {
+          "description": "The public client the CLI signs in with (device authorization).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "device_authorization_endpoint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "issuer": {
+          "description": "The identity provider (OIDC issuer URL), when `oidc`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "description": "`oidc` or `dev`.",
+          "type": "string"
+        },
+        "revocation_endpoint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scopes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "token_endpoint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    },
+    "ClaimDecision": {
+      "description": "A decision about claims.",
+      "oneOf": [
+        {
+          "const": "confirm",
+          "description": "True: it may be used as evidence.",
+          "type": "string"
+        },
+        {
+          "const": "reject",
+          "description": "Not true: never used, and stays rejected across re-imports.",
+          "type": "string"
+        },
+        {
+          "const": "reset",
+          "description": "Back to unreviewed.",
+          "type": "string"
+        }
+      ]
+    },
+    "ClaimDecisionResult": {
+      "description": "The answer of a claim decision.",
+      "properties": {
+        "decided": {
+          "items": {
+            "$ref": "#/$defs/DecidedClaim"
+          },
+          "type": "array"
+        },
+        "needs_review_total": {
+          "description": "Claims still waiting for review.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "decided",
+        "needs_review_total"
+      ],
+      "type": "object"
+    },
+    "ClaimReview": {
+      "description": "The claims waiting for the person's decision, with the words behind\neach.",
+      "properties": {
+        "claims": {
+          "items": {
+            "$ref": "#/$defs/UnresolvedClaim"
+          },
+          "type": "array"
+        },
+        "total": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "claims",
+        "total"
+      ],
+      "type": "object"
+    },
+    "CloudStateView": {
+      "description": "Where the account's data stands in the cloud.",
+      "properties": {
+        "change_seq": {
+          "description": "Changes recorded so far (the sync cursor's upper bound).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "feedback": {
+          "description": "Feedback events (not counting \"seen\" marks).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "last_shortlist_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_sync_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notification_cursor": {
+          "description": "For notifications (BRU-295): the last recommendation change covered.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "profile_revision": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "change_seq",
+        "profile_revision",
+        "feedback",
+        "notification_cursor"
+      ],
+      "type": "object"
+    },
+    "CompensationView": {
+      "description": "Published pay, as facts.",
+      "properties": {
+        "ranges": {
+          "description": "Each published range in words (\"USD 140,000 – 180,000 per year\").\nA range whose currency is only an ambiguous symbol says so; it is\nnever read as a low number.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "status": {
+          "description": "`published`, `not_published` or `not_observed`.",
+          "type": "string"
+        },
+        "summary": {
+          "description": "The source's own summary text, verbatim.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verified": {
+          "description": "Whether the facts come from a verification (`true`) or from\ndiscovery (`false`).",
+          "type": "boolean"
+        },
+        "verified_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "ranges",
+        "verified"
+      ],
+      "type": "object"
+    },
+    "ConfirmEmailRequest": {
+      "additionalProperties": false,
+      "description": "`POST /api/v1/notifications/confirm`.",
+      "properties": {
+        "token": {
+          "description": "The token from the confirmation link.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "type": "object"
+    },
+    "ContactDetails": {
+      "description": "Contact details, included only when explicitly requested.",
+      "properties": {
+        "contacts": {
+          "items": {
+            "$ref": "#/$defs/ContactView"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "contacts"
+      ],
+      "type": "object"
+    },
+    "ContactView": {
+      "description": "One way to reach the person.",
+      "properties": {
+        "kind": {
+          "description": "`email`, `phone`, `linkedin`, `github` or `website`.",
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "type": "object"
+    },
+    "ContextJob": {
+      "description": "The job, briefly.",
+      "properties": {
+        "apply_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "company": {
+          "type": "string"
+        },
+        "compensation": {
+          "$ref": "#/$defs/CompensationView"
+        },
+        "description_excerpt": {
+          "description": "The start of the posting's description, verbatim.",
+          "type": "string"
+        },
+        "employment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`opp_…`.",
+          "type": "string"
+        },
+        "locations": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "workplace": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "company",
+        "url",
+        "locations",
+        "compensation",
+        "description_excerpt"
+      ],
+      "type": "object"
+    },
+    "CreateTokenRequest": {
+      "additionalProperties": false,
+      "description": "`POST /api/v1/tokens`.",
+      "properties": {
+        "expires_in_days": {
+          "default": null,
+          "description": "Days until it expires (default 90, at most 365).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "What the token is for (\"Claude Desktop\").",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "CreatedToken": {
+      "description": "A token just created: the only time its secret is shown.",
+      "properties": {
+        "secret": {
+          "description": "`jh_pat_…`: send it as `Authorization: Bearer <secret>`.",
+          "type": "string"
+        },
+        "token": {
+          "$ref": "#/$defs/TokenView"
+        }
+      },
+      "required": [
+        "token",
+        "secret"
+      ],
+      "type": "object"
+    },
+    "DecideClaimsRequest": {
+      "additionalProperties": false,
+      "description": "`POST /api/v1/profile/claims`: confirm, reject or reset claims.",
+      "properties": {
+        "decision": {
+          "$ref": "#/$defs/ClaimDecision"
+        },
+        "ids": {
+          "description": "`clm_…` ids.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "note": {
+          "default": null,
+          "description": "Why (kept on the claims verbatim).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "ids",
+        "decision"
+      ],
+      "type": "object"
+    },
+    "DecidedClaim": {
+      "description": "One claim after a decision.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "state": {
+          "description": "`confirmed`, `rejected`, `extracted`, `inferred`, …",
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "usable": {
+          "description": "Whether it may now be used as evidence.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "state",
+        "usable"
+      ],
+      "type": "object"
+    },
+    "DecisionView": {
+      "description": "The decision brief: what someone needs to decide whether a job is\nworth their time.",
+      "properties": {
+        "caveats": {
+          "description": "What counts against it, and conditions.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "history": {
+          "description": "The person's history with it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "recommendation": {
+          "$ref": "#/$defs/Recommendation"
+        },
+        "recommendation_note": {
+          "description": "Why it is not recommended, or what to check first, when it applies.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "description": "Role · level · stack · domain · pay · where.",
+          "type": "string"
+        },
+        "tier": {
+          "$ref": "#/$defs/FitTier"
+        },
+        "unknowns": {
+          "description": "What the posting doesn't say that matters to the person.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "verdict": {
+          "description": "One sentence.",
+          "type": "string"
+        },
+        "worth": {
+          "description": "Why it may be worth the person's time, strongest first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "tier",
+        "recommendation",
+        "verdict",
+        "summary",
+        "worth",
+        "caveats",
+        "unknowns",
+        "history"
+      ],
+      "type": "object"
+    },
+    "DeliveryView": {
+      "description": "One notification email, for the settings page (never its content).",
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "description": "`recommendations` or `confirmation`.",
+          "type": "string"
+        },
+        "opportunities": {
+          "description": "Opportunities in it.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sent_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "`pending`, `sent`, `failed` or `abandoned`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "status",
+        "opportunities",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "DevTokenResponse": {
+      "description": "A token issued by a development server.",
+      "properties": {
+        "access_token": {
+          "type": "string"
+        },
+        "expires_in": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "access_token",
+        "expires_in"
+      ],
+      "type": "object"
+    },
+    "DiscoveryStatus": {
+      "description": "Where background discovery stands.",
+      "properties": {
+        "last_read_at": {
+          "description": "When a job board was last read.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mode": {
+          "description": "`background` (JobHunt Cloud reads job boards on a schedule) or\n`on_demand` (searches read them when stale).",
+          "type": "string"
+        },
+        "next_read_at": {
+          "description": "When the next scheduled read is due (background only).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    },
+    "DocumentSummary": {
+      "description": "A resume imported into the profile (never its text).",
+      "properties": {
+        "current": {
+          "description": "The most recently imported one: the resume the profile follows.",
+          "type": "boolean"
+        },
+        "file_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "first_imported_at": {
+          "type": "string"
+        },
+        "id": {
+          "description": "`doc_…`.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`pdf`, `text` or `markdown`.",
+          "type": "string"
+        },
+        "last_imported_at": {
+          "type": "string"
+        },
+        "pages": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "first_imported_at",
+        "last_imported_at",
+        "current"
+      ],
+      "type": "object"
+    },
+    "EducationSummary": {
+      "description": "An education entry.",
+      "properties": {
+        "degree": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "field": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`edu_…`.",
+          "type": "string"
+        },
+        "institution": {
+          "type": "string"
+        },
+        "period": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stale": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "institution",
+        "stale"
+      ],
+      "type": "object"
+    },
+    "EligibilityBrief": {
+      "description": "Eligibility at a glance.",
+      "properties": {
+        "headline": {
+          "description": "One line: why.",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/EligibilityStatus"
+        }
+      },
+      "required": [
+        "status",
+        "headline"
+      ],
+      "type": "object"
+    },
+    "EligibilityDetail": {
+      "description": "An eligibility decision with its reasons.",
+      "properties": {
+        "conflicts": {
+          "description": "Contradictions between statements, kept visible.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "disclaimer": {
+          "description": "A compatibility signal, not legal advice about work authorization.",
+          "type": "string"
+        },
+        "headline": {
+          "type": "string"
+        },
+        "option": {
+          "description": "The way of doing the job the status is about (\"Remote (Americas)\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reasons": {
+          "items": {
+            "$ref": "#/$defs/EligibilityReason"
+          },
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/EligibilityStatus"
+        }
+      },
+      "required": [
+        "status",
+        "headline",
+        "reasons",
+        "disclaimer"
+      ],
+      "type": "object"
+    },
+    "EligibilityReason": {
+      "description": "One step of an eligibility decision.",
+      "properties": {
+        "conclusion": {
+          "type": "string"
+        },
+        "evidence": {
+          "description": "The posting's own words behind it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rule": {
+          "description": "The rule (`country_constraint`, `authorization`, `timezone`, …).",
+          "type": "string"
+        },
+        "verdict": {
+          "description": "`pass`, `conditional`, `unknown`, `fail` or `not_applicable`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule",
+        "verdict",
+        "conclusion"
+      ],
+      "type": "object"
+    },
+    "EligibilityStatus": {
+      "description": "Whether the person appears able to work the job.",
+      "oneOf": [
+        {
+          "enum": [
+            "eligible",
+            "uncertain",
+            "ineligible"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "conditional",
+          "description": "Eligible if a condition holds (relocating, sponsorship offered).",
+          "type": "string"
+        },
+        {
+          "const": "not_checked",
+          "description": "There is no profile to check against.",
+          "type": "string"
+        }
+      ]
+    },
+    "EngagementInput": {
+      "description": "Hired as an employee or as a contractor (B2B, freelance).",
+      "enum": [
+        "employee",
+        "contractor"
+      ],
+      "type": "string"
+    },
+    "ErrorBody": {
+      "description": "Every error: `{\"error\": {\"code\", \"message\", \"hint\", \"request_id\"}}`.",
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/ErrorDetail"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "type": "object"
+    },
+    "ErrorDetail": {
+      "description": "An error, with a stable `code` (the same codes as the CLI and the MCP\ntools: `unknown_opportunity`, `no_profile`, `conflict`, …, plus\n`unauthenticated`, `forbidden`, `not_found`, `invalid_request`).",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "hint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "EvidenceGroup": {
+      "description": "An experience or project, with its usable facts.",
+      "properties": {
+        "facts": {
+          "items": {
+            "$ref": "#/$defs/Fact"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "`exp_…` or `proj_…`.",
+          "type": "string"
+        },
+        "label": {
+          "description": "\"Senior Engineer at Acme\", or the project name.",
+          "type": "string"
+        },
+        "period": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "relevance": {
+          "description": "What connects it to this job (\"uses PostgreSQL, which the job\nrequires\").",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "relevance",
+        "facts"
+      ],
+      "type": "object"
+    },
+    "ExperienceSummary": {
+      "description": "One experience.",
+      "properties": {
+        "company": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current": {
+          "type": "boolean"
+        },
+        "domains": {
+          "description": "Domains worked in there.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "`exp_…`.",
+          "type": "string"
+        },
+        "period": {
+          "description": "\"Mar 2021 – Present\".",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stale": {
+          "description": "No longer in the latest resume.",
+          "type": "boolean"
+        },
+        "technologies": {
+          "description": "Technologies used there (evidence that is not rejected).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "current",
+        "technologies",
+        "domains",
+        "stale"
+      ],
+      "type": "object"
+    },
+    "Fact": {
+      "description": "One usable fact about the person.",
+      "properties": {
+        "claim_id": {
+          "description": "`clm_…`.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "`employment`, `responsibility`, `accomplishment`, `technology`,\n`domain`, `role`, `ownership`, `project`, `skill`, `education`, `other`.",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FactSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "description": "The claim, as written (the resume's words, or the person's).",
+          "type": "string"
+        },
+        "topic": {
+          "description": "Normalized topic for technology, domain and role facts.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "usable_because": {
+          "$ref": "#/$defs/UsableBasis"
+        }
+      },
+      "required": [
+        "claim_id",
+        "kind",
+        "text",
+        "usable_because"
+      ],
+      "type": "object"
+    },
+    "FactSource": {
+      "description": "Where a fact comes from.",
+      "properties": {
+        "document": {
+          "description": "`doc_…` of the resume.",
+          "type": "string"
+        },
+        "section": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "snippet": {
+          "description": "The resume's own words.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document",
+        "snippet"
+      ],
+      "type": "object"
+    },
+    "FeedItem": {
+      "description": "One item on the feed: a shortlist item, with why it is on the feed.",
+      "properties": {
+        "changes": {
+          "description": "What changed, for `changed` items.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "company": {
+          "type": "string"
+        },
+        "compensation": {
+          "$ref": "#/$defs/CompensationView",
+          "description": "Published pay: verified facts when there are any, else what the\nlisting said when discovered."
+        },
+        "consider": {
+          "description": "What to consider: caveats, then unknowns (up to 3).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "department": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "eligibility": {
+          "$ref": "#/$defs/EligibilityBrief"
+        },
+        "first_shown_at": {
+          "description": "When a feed or shortlist first showed it to the person.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`opp_…`: the logical opportunity (one job, however many sources\nlist it). Use it with every other tool.",
+          "type": "string"
+        },
+        "locations": {
+          "default": [],
+          "description": "Every location the listing names, primary first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "next_step": {
+          "description": "The suggested next step, as a CLI command.",
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/FeedReason",
+          "description": "`new`, or `changed` (reviewed before, changed materially since)."
+        },
+        "recommendation": {
+          "$ref": "#/$defs/Recommendation"
+        },
+        "recommendation_note": {
+          "description": "What to check first, when it applies.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remote": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "short_id": {
+          "description": "Shown by the CLI (`opp_1a2b3c4d`); accepted back while unique.",
+          "type": "string"
+        },
+        "sources": {
+          "description": "How many sources list it.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stage": {
+          "$ref": "#/$defs/PipelineStage",
+          "description": "Where it is in the person's pipeline (`unseen`, `seen`, `saved`)."
+        },
+        "summary": {
+          "description": "Role · level · stack · domain · pay · where.",
+          "type": "string"
+        },
+        "team": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tier": {
+          "$ref": "#/$defs/FitTier"
+        },
+        "title": {
+          "type": "string"
+        },
+        "verification": {
+          "$ref": "#/$defs/VerificationBrief"
+        },
+        "why": {
+          "description": "Why it may be worth the person's time (up to 4; verification and\neligibility are in their own fields).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workplace": {
+          "description": "`remote`, `hybrid` or `onsite`, as the listing says.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "short_id",
+        "title",
+        "company",
+        "tier",
+        "recommendation",
+        "summary",
+        "verification",
+        "eligibility",
+        "compensation",
+        "why",
+        "consider",
+        "sources",
+        "next_step",
+        "reason",
+        "stage"
+      ],
+      "type": "object"
+    },
+    "FeedReason": {
+      "description": "Why an item is on the feed.",
+      "oneOf": [
+        {
+          "const": "new",
+          "description": "The person has not dealt with it yet.",
+          "type": "string"
+        },
+        {
+          "const": "changed",
+          "description": "The person looked at it, put it aside or saved it, and it changed\nmaterially since (see `changes`).",
+          "type": "string"
+        }
+      ]
+    },
+    "FeedSummary": {
+      "description": "From every open job to what is on the feed. Every number is counted,\nnone estimated.",
+      "properties": {
+        "changed": {
+          "description": "Reviewed before and changed materially since.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "checked": {
+          "description": "Open opportunities checked.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "new": {
+          "description": "Of those, new to the person.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed_eligibility": {
+          "description": "Left after eligibility, closed listings, pay minimums and what the\nperson already decided (rejected, applied).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "shown": {
+          "description": "On the feed now.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "worth_reviewing": {
+          "description": "Of those, strong fits and jobs worth reviewing.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "checked",
+        "passed_eligibility",
+        "worth_reviewing",
+        "new",
+        "changed",
+        "shown"
+      ],
+      "type": "object"
+    },
+    "FeedView": {
+      "description": "The answer of `get_feed` (and `GET /api/v1/feed`).",
+      "properties": {
+        "caught_up": {
+          "description": "Nothing new is worth the person's time right now.",
+          "type": "boolean"
+        },
+        "discovery": {
+          "$ref": "#/$defs/DiscoveryStatus"
+        },
+        "generated_at": {
+          "type": "string"
+        },
+        "items": {
+          "description": "Best first. Few on purpose; empty when there is nothing new worth\nthe person's time.",
+          "items": {
+            "$ref": "#/$defs/FeedItem"
+          },
+          "type": "array"
+        },
+        "learning": {
+          "$ref": "#/$defs/Learning"
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "passed_over": {
+          "description": "Recommendations shown earlier that the person let pass (not shown\nagain unless they change).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pipeline": {
+          "$ref": "#/$defs/PipelineCounts"
+        },
+        "refresh": {
+          "$ref": "#/$defs/RefreshSummary"
+        },
+        "summary": {
+          "$ref": "#/$defs/FeedSummary"
+        },
+        "verified_now": {
+          "description": "Listings verified while preparing the feed.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "generated_at",
+        "items",
+        "caught_up",
+        "summary",
+        "passed_over",
+        "pipeline",
+        "discovery",
+        "refresh",
+        "learning",
+        "verified_now"
+      ],
+      "type": "object"
+    },
+    "FeedbackInput": {
+      "description": "Feedback actions accepted by the API.",
+      "oneOf": [
+        {
+          "enum": [
+            "save",
+            "unsave",
+            "reject",
+            "applied",
+            "interview",
+            "offer",
+            "like",
+            "dislike"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "seen",
+          "description": "Looked at it, no opinion. Carries no weight in learned taste.",
+          "type": "string"
+        }
+      ]
+    },
+    "FeedbackRequest": {
+      "additionalProperties": false,
+      "description": "`POST /api/v1/opportunities/{id}/feedback`.",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/FeedbackInput"
+        },
+        "reason": {
+          "default": null,
+          "description": "Why, in the person's own words. Stored verbatim (encrypted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    },
+    "FeedbackResult": {
+      "description": "The answer of `save_job`, `reject_job`, `mark_applied` and\n`record_feedback`.",
+      "properties": {
+        "action": {
+          "description": "`save`, `reject`, `applied`, …",
+          "type": "string"
+        },
+        "company": {
+          "type": "string"
+        },
+        "feedback_id": {
+          "description": "`fb_…` of the stored event (or the earlier one this repeats).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`opp_…`.",
+          "type": "string"
+        },
+        "interpretation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReasonInterpretation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "learned": {
+          "description": "Patterns that now affect ranking.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "previous": {
+          "$ref": "#/$defs/PipelineStateView",
+          "description": "The state before this request."
+        },
+        "recorded": {
+          "description": "Whether a new feedback event was stored. `false` means the request\nrepeated one already in effect (same action, same reason): nothing\nchanged, and retrying is safe.",
+          "type": "boolean"
+        },
+        "state": {
+          "$ref": "#/$defs/PipelineStateView",
+          "description": "The state now."
+        },
+        "taste_changed": {
+          "description": "Whether what JobHunt learned from feedback changed.",
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        },
+        "unlearned": {
+          "description": "Patterns that no longer do.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "company",
+        "action",
+        "recorded",
+        "previous",
+        "state",
+        "taste_changed"
+      ],
+      "type": "object"
+    },
+    "FeedbackView": {
+      "description": "A past action, verbatim.",
+      "properties": {
+        "action": {
+          "description": "`save`, `reject`, `applied`, `like`, …",
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        },
+        "id": {
+          "description": "`fb_…`.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "The person's words, exactly as given.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "action",
+        "at"
+      ],
+      "type": "object"
+    },
+    "FitTier": {
+      "description": "How worth the person's time a job looks. Deliberately coarse: there is\nno percentage.",
+      "enum": [
+        "strong_fit",
+        "worth_reviewing",
+        "maybe",
+        "low_priority"
+      ],
+      "type": "string"
+    },
+    "Freshness": {
+      "description": "How recent the last successful verification is.",
+      "enum": [
+        "fresh",
+        "aging",
+        "stale"
+      ],
+      "type": "string"
+    },
+    "Funnel": {
+      "description": "From every open opportunity to the few shown.",
+      "properties": {
+        "checked": {
+          "description": "Open opportunities checked (matching the query, if any).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed_eligibility": {
+          "description": "Left after eligibility, closed listings, required pay minimums and\nwhat the person already acted on (rejected, applied).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "plausible": {
+          "description": "Of those, the ones ranked maybe or better.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "shown": {
+          "description": "Shown now.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "worth_reviewing": {
+          "description": "Of those, the ones worth reviewing or a strong fit.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "checked",
+        "passed_eligibility",
+        "plausible",
+        "worth_reviewing",
+        "shown"
+      ],
+      "type": "object"
+    },
+    "IdentityView": {
+      "description": "One identity-provider identity linked to the account.",
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "last_login_at": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "issuer",
+        "created_at",
+        "last_login_at"
+      ],
+      "type": "object"
+    },
+    "JobAsks": {
+      "description": "What the job asks for, as read from the posting.",
+      "properties": {
+        "domains": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "level": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "technologies": {
+          "items": {
+            "$ref": "#/$defs/TechnologyMatch"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "roles",
+        "technologies",
+        "domains"
+      ],
+      "type": "object"
+    },
+    "JobDetail": {
+      "description": "The answer of `get_job`.",
+      "properties": {
+        "apply_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "company": {
+          "type": "string"
+        },
+        "compensation": {
+          "$ref": "#/$defs/CompensationView"
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DecisionView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The decision brief (`None` without a profile)."
+        },
+        "department": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "The description as text: the first part, unless the full text was\nrequested.",
+          "type": "string"
+        },
+        "description_truncated": {
+          "type": "boolean"
+        },
+        "eligibility": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EligibilityDetail"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Eligibility with its reasons (`None` without a profile)."
+        },
+        "employment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`opp_…`: the logical opportunity.",
+          "type": "string"
+        },
+        "job_id": {
+          "description": "`job_…` of the record the details are read from.",
+          "type": "string"
+        },
+        "locations": {
+          "description": "Every location the source lists, primary first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pipeline": {
+          "$ref": "#/$defs/PipelineStateView"
+        },
+        "posted_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remote": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "short_id": {
+          "type": "string"
+        },
+        "source_count": {
+          "description": "How many sources list it.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sources": {
+          "description": "Every source record (provenance and per-source verification), when\nrequested.",
+          "items": {
+            "$ref": "#/$defs/SourceRecordView"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "team": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "verification": {
+          "$ref": "#/$defs/VerificationBrief"
+        },
+        "workplace": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "short_id",
+        "job_id",
+        "title",
+        "company",
+        "url",
+        "locations",
+        "compensation",
+        "description",
+        "description_truncated",
+        "verification",
+        "pipeline",
+        "source_count"
+      ],
+      "type": "object"
+    },
+    "JobNoteView": {
+      "description": "A reason about one job only (not generalized).",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        },
+        "direction": {
+          "type": "string"
+        },
+        "opportunity": {
+          "type": "string"
+        },
+        "read_as": {
+          "description": "What it was read as (\"avoid: this domain\").",
+          "type": "string"
+        },
+        "reason": {
+          "description": "The reason, verbatim.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "opportunity",
+        "reason",
+        "read_as",
+        "direction",
+        "action",
+        "at"
+      ],
+      "type": "object"
+    },
+    "LearnedView": {
+      "description": "A pattern learned from feedback.",
+      "properties": {
+        "against": {
+          "description": "Evidence against it, newest first.",
+          "items": {
+            "$ref": "#/$defs/TasteEvidenceView"
+          },
+          "type": "array"
+        },
+        "agrees": {
+          "description": "Whether the feedback agrees with what they said (explicit patterns).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "basis": {
+          "description": "\"2 reasons in your words and 1 action without a reason\".",
+          "type": "string"
+        },
+        "confidence": {
+          "description": "`tentative`, `established` or `strong` (active patterns).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dimension": {
+          "description": "`role`, `domain`, `company`, `technology`, …",
+          "type": "string"
+        },
+        "direction": {
+          "description": "`prefer` or `avoid`: the way the evidence leans.",
+          "type": "string"
+        },
+        "key": {
+          "description": "`role:sre`, `domain:developer_tools`, …",
+          "type": "string"
+        },
+        "last_reinforced": {
+          "type": "string"
+        },
+        "opportunities": {
+          "description": "Distinct jobs behind the support.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reasons": {
+          "description": "Reasons in the person's words among the support.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stated": {
+          "description": "What the person said about it (explicit patterns).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "`active` (used in ranking), `mixed` (contradictory, not used),\n`not_enough` (too little evidence yet) or `explicit` (the person\nsaid something about it, which is used instead).",
+          "type": "string"
+        },
+        "support": {
+          "description": "Evidence for it, newest first.",
+          "items": {
+            "$ref": "#/$defs/TasteEvidenceView"
+          },
+          "type": "array"
+        },
+        "value": {
+          "description": "The value, readable: `SRE / DevOps`, `large companies`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "dimension",
+        "value",
+        "direction",
+        "status",
+        "basis",
+        "reasons",
+        "opportunities",
+        "last_reinforced",
+        "support",
+        "against"
+      ],
+      "type": "object"
+    },
+    "Learning": {
+      "description": "What feedback has taught so far.",
+      "properties": {
+        "active_patterns": {
+          "description": "Patterns learned from it that affect ranking now.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "feedback": {
+          "description": "Pieces of feedback (not counting \"looked at\").",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "has_preferences": {
+          "description": "The person has stated preferences (they always outrank learned\ntaste).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "feedback",
+        "active_patterns",
+        "has_preferences"
+      ],
+      "type": "object"
+    },
+    "ListingState": {
+      "description": "The listing state one verification attempt found.",
+      "enum": [
+        "active",
+        "closed",
+        "unreachable",
+        "ambiguous",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "NotShown": {
+      "description": "Opportunities left out, by why.",
+      "properties": {
+        "below_pay_minimum": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "beyond_limit": {
+          "description": "Beyond the limit.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "closed": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "in_pipeline": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ineligible": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lower_tiers": {
+          "description": "Ranked maybe or low priority (`all_tiers` shows them).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rejected": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ineligible",
+        "below_pay_minimum",
+        "closed",
+        "rejected",
+        "in_pipeline",
+        "lower_tiers",
+        "beyond_limit"
+      ],
+      "type": "object"
+    },
+    "NotificationSettingsView": {
+      "description": "`GET /api/v1/notifications`.",
+      "properties": {
+        "available": {
+          "description": "Whether this service can send email at all.",
+          "type": "boolean"
+        },
+        "cadence": {
+          "description": "`immediate` (soon after a strong match appears, at most one email\nevery few hours) or `daily` (at most one a day).",
+          "type": "string"
+        },
+        "confirmation_sent_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "email_enabled": {
+          "description": "Emails about strong new matches are on.",
+          "type": "boolean"
+        },
+        "email_status": {
+          "description": "`none`, `unconfirmed` (a link was sent; nothing else is sent until\nit is followed) or `confirmed`.",
+          "type": "string"
+        },
+        "max_items": {
+          "description": "Opportunities in one email at most.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "min_interval_hours": {
+          "description": "Hours between emails at most, with the `immediate` cadence.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "recent": {
+          "description": "The latest emails, newest first.",
+          "items": {
+            "$ref": "#/$defs/DeliveryView"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "available",
+        "email_enabled",
+        "cadence",
+        "email_status",
+        "min_interval_hours",
+        "max_items",
+        "recent"
+      ],
+      "type": "object"
+    },
+    "PeriodInput": {
+      "description": "A pay period.",
+      "enum": [
+        "year",
+        "month",
+        "day",
+        "hour"
+      ],
+      "type": "string"
+    },
+    "PipelineCounts": {
+      "description": "Opportunities in the person's pipeline, by stage.",
+      "properties": {
+        "applied": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "interviewing": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "offer": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "saved": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "saved",
+        "applied",
+        "interviewing",
+        "offer"
+      ],
+      "type": "object"
+    },
+    "PipelineEntryView": {
+      "description": "One opportunity in the pipeline.",
+      "properties": {
+        "company": {
+          "type": "string"
+        },
+        "id": {
+          "description": "`opp_…`.",
+          "type": "string"
+        },
+        "last_reason": {
+          "description": "The latest reason the person gave, verbatim.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "listing_closed": {
+          "description": "Every source record of it is closed.",
+          "type": "boolean"
+        },
+        "sentiment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SentimentView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "short_id": {
+          "type": "string"
+        },
+        "since": {
+          "description": "When the current stage was reached.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stage": {
+          "$ref": "#/$defs/PipelineStage"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "short_id",
+        "title",
+        "company",
+        "stage",
+        "listing_closed"
+      ],
+      "type": "object"
+    },
+    "PipelineStage": {
+      "description": "Where the opportunity is in the person's pipeline.",
+      "enum": [
+        "unseen",
+        "seen",
+        "saved",
+        "rejected",
+        "applied",
+        "interviewing",
+        "offer"
+      ],
+      "type": "string"
+    },
+    "PipelineStateView": {
+      "description": "The person's state on an opportunity, folded from their feedback.",
+      "properties": {
+        "feedback": {
+          "description": "Every action other than looking at it, oldest first.",
+          "items": {
+            "$ref": "#/$defs/FeedbackView"
+          },
+          "type": "array"
+        },
+        "furthest": {
+          "$ref": "#/$defs/PipelineStage",
+          "description": "The furthest application stage reached (kept after withdrawing)."
+        },
+        "sentiment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SentimentView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "since": {
+          "description": "When the current stage was reached.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stage": {
+          "$ref": "#/$defs/PipelineStage"
+        }
+      },
+      "required": [
+        "stage",
+        "furthest",
+        "feedback"
+      ],
+      "type": "object"
+    },
+    "PipelineView": {
+      "description": "The answer of `get_pipeline`.",
+      "properties": {
+        "entries": {
+          "description": "Offers first, then interviewing, applied, saved (and rejected, when\nasked for); latest first within a stage.",
+          "items": {
+            "$ref": "#/$defs/PipelineEntryView"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "entries"
+      ],
+      "type": "object"
+    },
+    "PreferenceInput": {
+      "description": "One precise preference.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "A kind of role: \"backend\", \"full stack\", \"founding engineer\".",
+          "properties": {
+            "kind": {
+              "const": "role",
+              "type": "string"
+            },
+            "role": {
+              "type": "string"
+            },
+            "stance": {
+              "$ref": "#/$defs/StanceInput",
+              "default": "want"
+            }
+          },
+          "required": [
+            "kind",
+            "role"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Pay: a minimum (a hard floor) and/or a target, in an ISO currency.",
+          "properties": {
+            "applies_to": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ArrangementInput"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Applies to employment only or contracts only (both when absent)."
+            },
+            "currency": {
+              "description": "ISO 4217 code (USD, EUR, BRL). Never assumed.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "compensation",
+              "type": "string"
+            },
+            "minimum": {
+              "default": null,
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "period": {
+              "$ref": "#/$defs/PeriodInput",
+              "default": "year"
+            },
+            "target": {
+              "default": null,
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "currency"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Remote, hybrid or on-site.",
+          "properties": {
+            "kind": {
+              "const": "work_mode",
+              "type": "string"
+            },
+            "mode": {
+              "$ref": "#/$defs/WorkModeInput"
+            },
+            "stance": {
+              "$ref": "#/$defs/StanceInput",
+              "default": "want"
+            }
+          },
+          "required": [
+            "kind",
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Where the person lives now (\"São Paulo, Brazil\").",
+          "properties": {
+            "kind": {
+              "const": "location",
+              "type": "string"
+            },
+            "place": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "place"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A region the person can (or can't) work in.",
+          "properties": {
+            "kind": {
+              "const": "region",
+              "type": "string"
+            },
+            "region": {
+              "type": "string"
+            },
+            "stance": {
+              "$ref": "#/$defs/StanceInput",
+              "default": "want"
+            }
+          },
+          "required": [
+            "kind",
+            "region"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A time zone the person can work in (\"UTC-3\", \"US hours\").",
+          "properties": {
+            "kind": {
+              "const": "timezone",
+              "type": "string"
+            },
+            "stance": {
+              "$ref": "#/$defs/StanceInput",
+              "default": "want"
+            },
+            "zone": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "zone"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Whether the person would relocate.",
+          "properties": {
+            "kind": {
+              "const": "relocation",
+              "type": "string"
+            },
+            "willing": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "willing"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Whether the person needs visa sponsorship to work where they live.",
+          "properties": {
+            "kind": {
+              "const": "sponsorship",
+              "type": "string"
+            },
+            "needed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "needed"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A country (or \"the EU\") the person may already work in without\nsponsorship.",
+          "properties": {
+            "kind": {
+              "const": "authorized_in",
+              "type": "string"
+            },
+            "place": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "place"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Employee or contractor; `require` for the only one accepted, `avoid`\nto rule one out.",
+          "properties": {
+            "engagement": {
+              "$ref": "#/$defs/EngagementInput"
+            },
+            "kind": {
+              "const": "engagement",
+              "type": "string"
+            },
+            "stance": {
+              "$ref": "#/$defs/StanceInput",
+              "default": "accept"
+            }
+          },
+          "required": [
+            "kind",
+            "engagement"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A kind of company or team: startup, early-stage, scaleup,\nlarge-company, founder-led, product-company, agency, consulting,\npublic-company, private-company, small-team, large-team,\nremote-first, open-source.",
+          "properties": {
+            "company": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "company",
+              "type": "string"
+            },
+            "stance": {
+              "$ref": "#/$defs/StanceInput",
+              "default": "want"
+            }
+          },
+          "required": [
+            "kind",
+            "company"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A domain: \"developer tools\", \"fintech\", \"gambling\".",
+          "properties": {
+            "domain": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "domain",
+              "type": "string"
+            },
+            "stance": {
+              "$ref": "#/$defs/StanceInput",
+              "default": "want"
+            }
+          },
+          "required": [
+            "kind",
+            "domain"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "How the person likes to work: ownership, individual-contributor,\nmanagement, greenfield, maintenance, async-communication, meetings,\nproduct-closeness, on-call.",
+          "properties": {
+            "aspect": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "work_style",
+              "type": "string"
+            },
+            "stance": {
+              "$ref": "#/$defs/StanceInput",
+              "default": "want"
+            }
+          },
+          "required": [
+            "kind",
+            "aspect"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PreferenceUpdateResult": {
+      "description": "The answer of `update_preferences`.",
+      "properties": {
+        "active": {
+          "description": "Every preference in effect now.",
+          "items": {
+            "$ref": "#/$defs/PreferenceView"
+          },
+          "type": "array"
+        },
+        "interpreted": {
+          "description": "What was understood, from the statement and structured values.",
+          "items": {
+            "$ref": "#/$defs/PreferenceView"
+          },
+          "type": "array"
+        },
+        "not_understood": {
+          "description": "Parts of the statement that were not understood, verbatim.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "removed": {
+          "description": "Ids removed (or, for a resume-derived record, rejected).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "replaced": {
+          "description": "Earlier preferences these replaced.",
+          "items": {
+            "$ref": "#/$defs/PreferenceView"
+          },
+          "type": "array"
+        },
+        "statement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatementView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The statement, as stored."
+        },
+        "uncertain": {
+          "description": "The interpretations JobHunt is unsure about (also in\n`interpreted`), for the person to confirm or correct.",
+          "items": {
+            "$ref": "#/$defs/PreferenceView"
+          },
+          "type": "array"
+        },
+        "unchanged": {
+          "description": "Everything asked was already in effect; nothing changed.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "interpreted",
+        "uncertain",
+        "not_understood",
+        "replaced",
+        "removed",
+        "unchanged",
+        "active"
+      ],
+      "type": "object"
+    },
+    "PreferenceView": {
+      "description": "One preference.",
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "category": {
+          "description": "`role`, `compensation`, `location`, `company`, `domain`, `work_style`.",
+          "type": "string"
+        },
+        "certainty": {
+          "description": "`certain`, or `uncertain` when JobHunt read it with doubts.",
+          "type": "string"
+        },
+        "id": {
+          "description": "`pref_…`.",
+          "type": "string"
+        },
+        "note": {
+          "description": "How an ambiguous part was read, for the person to check.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "origin": {
+          "description": "`statement` (read from the person's words) or `user_entered`.",
+          "type": "string"
+        },
+        "snippet": {
+          "description": "The words it was read from, verbatim.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stance": {
+          "description": "`required`, `wanted`, `acceptable` or `unwanted`.",
+          "type": "string"
+        },
+        "statement_id": {
+          "description": "`stmt_…` it was read from.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "description": "The value, readable (\"backend roles\", \"at least USD 120,000 per year\").",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "stance",
+        "value",
+        "certainty",
+        "origin",
+        "active"
+      ],
+      "type": "object"
+    },
+    "ProfileView": {
+      "description": "The answer of `get_profile`.",
+      "properties": {
+        "contact_details_omitted": {
+          "description": "Always true: names and contact details are not part of this view.",
+          "type": "boolean"
+        },
+        "documents": {
+          "default": [],
+          "description": "Imported resumes, the current one first.",
+          "items": {
+            "$ref": "#/$defs/DocumentSummary"
+          },
+          "type": "array"
+        },
+        "domains": {
+          "items": {
+            "$ref": "#/$defs/Signal"
+          },
+          "type": "array"
+        },
+        "education": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/EducationSummary"
+          },
+          "type": "array"
+        },
+        "experiences": {
+          "items": {
+            "$ref": "#/$defs/ExperienceSummary"
+          },
+          "type": "array"
+        },
+        "gaps": {
+          "description": "What is missing or uncertain.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "headline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "location": {
+          "description": "Where the person lives, as they wrote it (eligibility depends on it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "needs_review": {
+          "description": "Claims needing the person's review (the first few).",
+          "items": {
+            "$ref": "#/$defs/UnresolvedClaim"
+          },
+          "type": "array"
+        },
+        "needs_review_total": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ownership_signals": {
+          "description": "Seniority and ownership signals (led, mentored, founding).",
+          "items": {
+            "$ref": "#/$defs/Signal"
+          },
+          "type": "array"
+        },
+        "preferences": {
+          "description": "Preferences in effect.",
+          "items": {
+            "$ref": "#/$defs/PreferenceView"
+          },
+          "type": "array"
+        },
+        "projects": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProjectSummary"
+          },
+          "type": "array"
+        },
+        "role_signals": {
+          "description": "Kinds of engineering role the experience shows (backend, platform).",
+          "items": {
+            "$ref": "#/$defs/Signal"
+          },
+          "type": "array"
+        },
+        "statements": {
+          "description": "What the person said, verbatim.",
+          "items": {
+            "$ref": "#/$defs/StatementView"
+          },
+          "type": "array"
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "technologies": {
+          "description": "Strongest evidence first.",
+          "items": {
+            "$ref": "#/$defs/TechnologyEvidence"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "experiences",
+        "technologies",
+        "domains",
+        "role_signals",
+        "ownership_signals",
+        "preferences",
+        "statements",
+        "needs_review",
+        "needs_review_total",
+        "gaps",
+        "contact_details_omitted"
+      ],
+      "type": "object"
+    },
+    "ProjectSummary": {
+      "description": "A project.",
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`proj_…`.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "period": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stale": {
+          "type": "boolean"
+        },
+        "technologies": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "technologies",
+        "stale"
+      ],
+      "type": "object"
+    },
+    "ReasonInterpretation": {
+      "description": "How a reason was read.",
+      "properties": {
+        "read_as": {
+          "description": "What was recognized (\"avoid company: large companies\").",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reader": {
+          "description": "Which reader read it (`rules/1`).",
+          "type": "string"
+        },
+        "reason": {
+          "description": "The reason, verbatim (it is always kept as written).",
+          "type": "string"
+        },
+        "understood": {
+          "description": "Something in it was recognized.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "reason",
+        "understood",
+        "read_as",
+        "reader"
+      ],
+      "type": "object"
+    },
+    "Recommendation": {
+      "description": "Whether JobHunt recommends spending time on it now.",
+      "oneOf": [
+        {
+          "const": "recommended",
+          "description": "Verified recently at an authoritative source, and the person appears\nable to take it.",
+          "type": "string"
+        },
+        {
+          "const": "verify_first",
+          "description": "Looks eligible, but the listing is not verified recently enough:\nverify it before spending time on it.",
+          "type": "string"
+        },
+        {
+          "const": "eligibility_unclear",
+          "description": "Nothing rules the person out, but nothing confirms they can take it.",
+          "type": "string"
+        },
+        {
+          "const": "not_recommended",
+          "description": "Rejected, already in the pipeline, closed, ineligible or below a\nrequired pay minimum.",
+          "type": "string"
+        }
+      ]
+    },
+    "RefreshInput": {
+      "description": "Whether to read job boards before answering.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Refresh only when the stored jobs are older than the configured\nfreshness window (the default; usually a few hours).",
+          "type": "string"
+        },
+        {
+          "const": "always",
+          "description": "Read every configured job board now (slower: many requests).",
+          "type": "string"
+        },
+        {
+          "const": "never",
+          "description": "Work only from stored jobs: no network at all, including\nverification.",
+          "type": "string"
+        }
+      ]
+    },
+    "RefreshSummary": {
+      "description": "How discovery was (or wasn't) refreshed for a search.",
+      "properties": {
+        "closed_jobs": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "new_jobs": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "performed": {
+          "description": "Sources were read during this search.",
+          "type": "boolean"
+        },
+        "reason": {
+          "description": "Why (\"sources last read 2 days ago\", \"every source read 3 hours ago\").",
+          "type": "string"
+        },
+        "sources_failed": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sources_read": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "updated_jobs": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "warnings": {
+          "description": "Problems that did not stop the refresh.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "performed",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "ResumeImportResult": {
+      "description": "What importing a resume changed.",
+      "properties": {
+        "claims": {
+          "$ref": "#/$defs/TallyView"
+        },
+        "education": {
+          "$ref": "#/$defs/TallyView"
+        },
+        "experiences": {
+          "$ref": "#/$defs/TallyView"
+        },
+        "file_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "first_import": {
+          "description": "The profile had no resume before.",
+          "type": "boolean"
+        },
+        "ignored_lines": {
+          "description": "Lines of the resume that were not understood.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kept_confirmed": {
+          "description": "Confirmed claims found again (still confirmed).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kept_rejected": {
+          "description": "Rejected claims found again (still rejected).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "needs_review": {
+          "description": "Claims now waiting for the person's review.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "notes": {
+          "description": "Doubts about particular records (\"Freelance: no dates found\").",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pages": {
+          "format": "uint",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "preserved_edits": {
+          "description": "Records where the person's own edits were kept over the resume.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileView",
+          "description": "The profile after the import."
+        },
+        "projects": {
+          "$ref": "#/$defs/TallyView"
+        },
+        "reconfirm": {
+          "description": "Confirmed claims whose wording changed: they need confirming again.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "same_file": {
+          "description": "This exact file was imported before (nothing new to read).",
+          "type": "boolean"
+        },
+        "skills": {
+          "$ref": "#/$defs/TallyView"
+        },
+        "stale_confirmed": {
+          "description": "Confirmed claims whose source left the resume.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "first_import",
+        "same_file",
+        "experiences",
+        "projects",
+        "education",
+        "skills",
+        "claims",
+        "kept_confirmed",
+        "kept_rejected",
+        "reconfirm",
+        "stale_confirmed",
+        "preserved_edits",
+        "notes",
+        "ignored_lines",
+        "needs_review",
+        "profile"
+      ],
+      "type": "object"
+    },
+    "SearchJobsParams": {
+      "additionalProperties": false,
+      "description": "Arguments of `search_jobs`.",
+      "properties": {
+        "include_lower_tiers": {
+          "default": false,
+          "description": "Also return opportunities ranked maybe or low priority (default\nfalse).",
+          "type": "boolean"
+        },
+        "limit": {
+          "default": null,
+          "description": "How many opportunities to return, 1 to 25. Default 5: the short\nlist is meant to be short.",
+          "format": "uint8",
+          "maximum": 25,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "query": {
+          "default": null,
+          "description": "Words every job must contain (in its title, company, location,\ndepartment or team), e.g. \"rust backend\". Omit to search everything.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refresh": {
+          "$ref": "#/$defs/RefreshInput",
+          "description": "Whether to read job boards first. Default \"auto\"."
+        },
+        "verify": {
+          "default": null,
+          "description": "Verify the best candidates at their employers' sources when their\nlast verification isn't recent (default true; ignored with refresh\n\"never\").",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "SearchResults": {
+      "description": "The answer of `search_jobs` (and `jobhunt find --json`).",
+      "properties": {
+        "funnel": {
+          "$ref": "#/$defs/Funnel"
+        },
+        "learning": {
+          "$ref": "#/$defs/Learning"
+        },
+        "not_shown": {
+          "$ref": "#/$defs/NotShown"
+        },
+        "notes": {
+          "description": "Things worth knowing about these results.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "query": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refresh": {
+          "$ref": "#/$defs/RefreshSummary"
+        },
+        "results": {
+          "description": "Best first. Small on purpose.",
+          "items": {
+            "$ref": "#/$defs/ShortlistItem"
+          },
+          "type": "array"
+        },
+        "verified_now": {
+          "description": "Listings verified during this search.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "refresh",
+        "funnel",
+        "results",
+        "not_shown",
+        "learning",
+        "verified_now"
+      ],
+      "type": "object"
+    },
+    "SentimentView": {
+      "description": "Liked or disliked, independent of the pipeline stage.",
+      "enum": [
+        "liked",
+        "disliked"
+      ],
+      "type": "string"
+    },
+    "ShortlistItem": {
+      "description": "One shortlisted opportunity.",
+      "properties": {
+        "company": {
+          "type": "string"
+        },
+        "compensation": {
+          "$ref": "#/$defs/CompensationView",
+          "description": "Published pay: verified facts when there are any, else what the\nlisting said when discovered."
+        },
+        "consider": {
+          "description": "What to consider: caveats, then unknowns (up to 3).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "department": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "eligibility": {
+          "$ref": "#/$defs/EligibilityBrief"
+        },
+        "id": {
+          "description": "`opp_…`: the logical opportunity (one job, however many sources\nlist it). Use it with every other tool.",
+          "type": "string"
+        },
+        "locations": {
+          "default": [],
+          "description": "Every location the listing names, primary first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "next_step": {
+          "description": "The suggested next step, as a CLI command.",
+          "type": "string"
+        },
+        "recommendation": {
+          "$ref": "#/$defs/Recommendation"
+        },
+        "recommendation_note": {
+          "description": "What to check first, when it applies.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remote": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "short_id": {
+          "description": "Shown by the CLI (`opp_1a2b3c4d`); accepted back while unique.",
+          "type": "string"
+        },
+        "sources": {
+          "description": "How many sources list it.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "summary": {
+          "description": "Role · level · stack · domain · pay · where.",
+          "type": "string"
+        },
+        "team": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tier": {
+          "$ref": "#/$defs/FitTier"
+        },
+        "title": {
+          "type": "string"
+        },
+        "verification": {
+          "$ref": "#/$defs/VerificationBrief"
+        },
+        "why": {
+          "description": "Why it may be worth the person's time (up to 4; verification and\neligibility are in their own fields).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workplace": {
+          "description": "`remote`, `hybrid` or `onsite`, as the listing says.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "short_id",
+        "title",
+        "company",
+        "tier",
+        "recommendation",
+        "summary",
+        "verification",
+        "eligibility",
+        "compensation",
+        "why",
+        "consider",
+        "sources",
+        "next_step"
+      ],
+      "type": "object"
+    },
+    "Signal": {
+      "description": "A domain or role kind and how much evidence backs it.",
+      "properties": {
+        "evidence": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "SourceRecordView": {
+      "description": "One source record of an opportunity (provenance).",
+      "properties": {
+        "authority": {
+          "type": "string"
+        },
+        "closed_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "first_seen_at": {
+          "type": "string"
+        },
+        "job_id": {
+          "description": "`job_…`: this source's record.",
+          "type": "string"
+        },
+        "last_attempt": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AttemptView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_seen_at": {
+          "type": "string"
+        },
+        "last_success_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "`greenhouse:stripe`.",
+          "type": "string"
+        },
+        "source_record_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "`open` or `closed` (as discovery last saw it).",
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "verification": {
+          "$ref": "#/$defs/VerificationState"
+        }
+      },
+      "required": [
+        "job_id",
+        "source",
+        "url",
+        "status",
+        "first_seen_at",
+        "last_seen_at",
+        "verification",
+        "authority"
+      ],
+      "type": "object"
+    },
+    "StanceInput": {
+      "description": "How strongly a preference holds.",
+      "oneOf": [
+        {
+          "const": "require",
+          "description": "A hard requirement.",
+          "type": "string"
+        },
+        {
+          "const": "want",
+          "description": "Wanted (the default).",
+          "type": "string"
+        },
+        {
+          "const": "accept",
+          "description": "Acceptable.",
+          "type": "string"
+        },
+        {
+          "const": "avoid",
+          "description": "Not wanted.",
+          "type": "string"
+        }
+      ]
+    },
+    "StatementView": {
+      "description": "A statement in the person's words.",
+      "properties": {
+        "at": {
+          "type": "string"
+        },
+        "id": {
+          "description": "`stmt_…`.",
+          "type": "string"
+        },
+        "not_understood": {
+          "description": "Parts of the text that produced no preference (kept, never dropped).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reading": {
+          "description": "`understood`, `partial` or `not_understood`.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Verbatim.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "reading",
+        "not_understood",
+        "at"
+      ],
+      "type": "object"
+    },
+    "TallyView": {
+      "description": "Counts of one kind of record in an import.",
+      "properties": {
+        "added": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "restored": {
+          "description": "Back in the resume after being stale.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stale": {
+          "description": "No longer in the resume (kept, marked stale).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unchanged": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "updated": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "added",
+        "updated",
+        "unchanged",
+        "stale",
+        "restored"
+      ],
+      "type": "object"
+    },
+    "TasteEvidenceView": {
+      "description": "One piece of feedback behind a learned pattern.",
+      "properties": {
+        "action": {
+          "description": "`save`, `reject`, `applied`, `like`, …",
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        },
+        "company": {
+          "type": "string"
+        },
+        "kind": {
+          "description": "`reason` (the person's words) or `behavior` (what they did).",
+          "type": "string"
+        },
+        "opportunity": {
+          "description": "`opp_…` the feedback was about.",
+          "type": "string"
+        },
+        "read_as": {
+          "description": "The fact of the job it counted for (behavior), or the part of the\nreason that was read.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "The reason, verbatim (reasons only).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "description": "One line, for display.",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "opportunity",
+        "title",
+        "company",
+        "action",
+        "at",
+        "kind",
+        "read_as",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "TasteView": {
+      "description": "The answer of `get_taste`.",
+      "properties": {
+        "contradictory": {
+          "description": "Patterns the evidence contradicts: not used.",
+          "items": {
+            "$ref": "#/$defs/LearnedView"
+          },
+          "type": "array"
+        },
+        "covered_by_stated": {
+          "description": "Patterns about something the person also stated: what they said is\nused.",
+          "items": {
+            "$ref": "#/$defs/LearnedView"
+          },
+          "type": "array"
+        },
+        "emerging": {
+          "description": "Patterns with too little evidence to use yet.",
+          "items": {
+            "$ref": "#/$defs/LearnedView"
+          },
+          "type": "array"
+        },
+        "feedback_events": {
+          "description": "Pieces of feedback (not counting \"looked at\").",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "job_notes": {
+          "description": "Reasons about single jobs, not generalized.",
+          "items": {
+            "$ref": "#/$defs/JobNoteView"
+          },
+          "type": "array"
+        },
+        "learned": {
+          "description": "Patterns learned from feedback that affect ranking now.",
+          "items": {
+            "$ref": "#/$defs/LearnedView"
+          },
+          "type": "array"
+        },
+        "opportunities": {
+          "description": "Jobs with feedback.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stated": {
+          "description": "What the person said: preferences in effect (they always win over\nanything learned).",
+          "items": {
+            "$ref": "#/$defs/PreferenceView"
+          },
+          "type": "array"
+        },
+        "statements": {
+          "description": "The person's statements, verbatim, with what was not understood.",
+          "items": {
+            "$ref": "#/$defs/StatementView"
+          },
+          "type": "array"
+        },
+        "unread_reasons": {
+          "description": "Reasons nothing could be read from, kept as written.",
+          "items": {
+            "$ref": "#/$defs/UnreadReasonView"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "stated",
+        "statements",
+        "learned",
+        "contradictory",
+        "covered_by_stated",
+        "emerging",
+        "job_notes",
+        "unread_reasons",
+        "feedback_events",
+        "opportunities"
+      ],
+      "type": "object"
+    },
+    "TechnologyEvidence": {
+      "description": "A technology or skill and what backs it.",
+      "properties": {
+        "evidence": {
+          "description": "Claims backing it (not rejected).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "last_used": {
+          "description": "`current`, or the last year it was used (\"2023\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "strength": {
+          "description": "`demonstrated` (used in an experience or project), `user_stated`,\n`listed` (only in a skills list) or `unsupported`.",
+          "type": "string"
+        },
+        "used_at": {
+          "description": "Where it was used (\"Senior Engineer at Acme\").",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "strength",
+        "evidence",
+        "used_at"
+      ],
+      "type": "object"
+    },
+    "TechnologyMatch": {
+      "description": "A technology the job names, and the person's usable evidence for it.",
+      "properties": {
+        "evidence": {
+          "description": "Usable evidence (empty when there is none).",
+          "items": {
+            "$ref": "#/$defs/Fact"
+          },
+          "type": "array"
+        },
+        "job_requirement": {
+          "description": "`required`, `preferred` or `mentioned`, as the posting says.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "job_requirement",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "TokenList": {
+      "description": "`GET /api/v1/tokens`.",
+      "properties": {
+        "tokens": {
+          "items": {
+            "$ref": "#/$defs/TokenView"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "tokens"
+      ],
+      "type": "object"
+    },
+    "TokenView": {
+      "description": "A personal access token (never its secret).",
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`tok_…`.",
+          "type": "string"
+        },
+        "last_used_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "revoked_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "UnreadReasonView": {
+      "description": "A reason nothing could be read from, kept as written.",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string"
+        },
+        "company": {
+          "type": "string"
+        },
+        "opportunity": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "opportunity",
+        "title",
+        "company",
+        "action",
+        "reason",
+        "at"
+      ],
+      "type": "object"
+    },
+    "UnresolvedClaim": {
+      "description": "A claim waiting for the person's decision. Not usable as a fact until\nconfirmed.",
+      "properties": {
+        "about": {
+          "description": "What it is about (\"Senior Engineer at Acme\", a project's name);\nabsent for the profile in general.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "about_id": {
+          "description": "`exp_…`, `proj_…` or `edu_…` it is about.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "basis": {
+          "description": "For inferred claims: what the inference rests on.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confidence": {
+          "default": "",
+          "description": "How sure the reading is: `high`, `medium` or `low`.",
+          "type": "string"
+        },
+        "document": {
+          "description": "The file the words are from.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`clm_…` (confirm with `jobhunt claims confirm <id>`).",
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "provenance": {
+          "default": "",
+          "description": "`extracted` (read from the resume), `inferred` (concluded by\nJobHunt) or `user_entered`.",
+          "type": "string"
+        },
+        "section": {
+          "description": "The resume section the words are from.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "snippet": {
+          "description": "The resume's own words behind it, verbatim.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "why": {
+          "description": "Why it needs review.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "text",
+        "why"
+      ],
+      "type": "object"
+    },
+    "UpdateNotificationsRequest": {
+      "additionalProperties": false,
+      "description": "`PUT /api/v1/notifications`. Absent fields are left as they are.",
+      "properties": {
+        "cadence": {
+          "default": null,
+          "description": "`immediate` or `daily`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "email": {
+          "default": null,
+          "description": "The address to notify. A new address is sent a confirmation link;\nnothing else is sent to it until it is confirmed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "email_enabled": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "resend_confirmation": {
+          "default": false,
+          "description": "Send the confirmation link again.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "UpdatePreferencesParams": {
+      "additionalProperties": false,
+      "description": "Arguments of `update_preferences`. Give at least one of `statement`,\n`set` or `remove`.",
+      "properties": {
+        "remove": {
+          "default": [],
+          "description": "Preference (pref_…) or statement (stmt_…) ids to remove.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "set": {
+          "default": [],
+          "description": "Precise preferences to set.",
+          "items": {
+            "$ref": "#/$defs/PreferenceInput"
+          },
+          "type": "array"
+        },
+        "statement": {
+          "default": null,
+          "description": "What the person wants, in their own words, e.g. \"I want small\nproduct teams, backend or platform work, remote from Brazil, at\nleast USD 120k\". Stored verbatim; what JobHunt understands from it\nis returned, including the parts it didn't understand.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "UsableBasis": {
+      "description": "Why a fact may be used.",
+      "oneOf": [
+        {
+          "const": "confirmed_by_you",
+          "description": "The person confirmed it.",
+          "type": "string"
+        },
+        {
+          "const": "entered_by_you",
+          "description": "The person entered it.",
+          "type": "string"
+        },
+        {
+          "const": "quoted_from_resume",
+          "description": "Quoted directly from the current resume, with high confidence.",
+          "type": "string"
+        }
+      ]
+    },
+    "VerificationBrief": {
+      "description": "Verification at a glance.",
+      "properties": {
+        "authority": {
+          "description": "Who publishes the listing the state rests on\n(`employer_configured_ats`, `employer_first_party`, …).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "freshness": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Freshness"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "not_trusted_because": {
+          "description": "Why it is not trusted, when it isn't.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "The source the state rests on (`greenhouse:stripe`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/VerificationState"
+        },
+        "trusted": {
+          "description": "Recent enough, from an authoritative source, to recommend on.",
+          "type": "boolean"
+        },
+        "verified_at": {
+          "description": "When the last successful verification happened (RFC 3339).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "state",
+        "trusted"
+      ],
+      "type": "object"
+    },
+    "VerificationReport": {
+      "description": "The answer of `verify_job` (and `jobhunt verify --json`).",
+      "properties": {
+        "application": {
+          "$ref": "#/$defs/ApplicationState"
+        },
+        "application_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "authority": {
+          "description": "Who publishes the listing (`employer_configured_ats`, …).",
+          "type": "string"
+        },
+        "company": {
+          "type": "string"
+        },
+        "compensation": {
+          "$ref": "#/$defs/CompensationView"
+        },
+        "eligibility": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EligibilityDetail"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`None` without a profile."
+        },
+        "id": {
+          "description": "`opp_…`.",
+          "type": "string"
+        },
+        "last_attempt_at": {
+          "description": "The latest attempt at the record the state rests on.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_success_at": {
+          "description": "The latest attempt that reached an answer.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "listing": {
+          "$ref": "#/$defs/ListingState",
+          "description": "The listing state of the record the opportunity rests on."
+        },
+        "recommendable": {
+          "description": "Trusted and the person appears able to take it.",
+          "type": "boolean"
+        },
+        "reused": {
+          "description": "Records whose recent attempt (within the reuse window) was reused\ninstead of asking the source again.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sources": {
+          "description": "Every source record with its latest attempt.",
+          "items": {
+            "$ref": "#/$defs/SourceRecordView"
+          },
+          "type": "array"
+        },
+        "title": {
+          "type": "string"
+        },
+        "uncertainty": {
+          "description": "What is uncertain: unknowns from the attempts, failures, and\ndisagreements between sources.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "verification": {
+          "$ref": "#/$defs/VerificationBrief"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "company",
+        "reused",
+        "listing",
+        "application",
+        "authority",
+        "verification",
+        "compensation",
+        "recommendable",
+        "uncertainty",
+        "sources"
+      ],
+      "type": "object"
+    },
+    "VerificationState": {
+      "description": "What JobHunt believes about the listing, from verification and\ndiscovery.",
+      "enum": [
+        "verified_active",
+        "verified_closed",
+        "closed_by_discovery",
+        "could_not_verify",
+        "not_verified"
+      ],
+      "type": "string"
+    },
+    "Withheld": {
+      "description": "Claims left out, by why. Their text is never included.",
+      "properties": {
+        "how_to_review": {
+          "description": "How the person can review them.",
+          "type": "string"
+        },
+        "needs_review": {
+          "description": "Inferred, uncertain, or no longer in the resume: usable once the\nperson confirms them.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rejected": {
+          "description": "Rejected by the person: never used.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "needs_review",
+        "rejected",
+        "how_to_review"
+      ],
+      "type": "object"
+    },
+    "WorkModeInput": {
+      "description": "Remote, hybrid or on-site.",
+      "enum": [
+        "remote",
+        "hybrid",
+        "onsite"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Every body the JobHunt HTTP API (/api/v1) accepts or answers with. Generated from the Rust types by crates/jobhunt-cloud/tests/api_schema.rs; do not edit.",
+  "properties": {
+    "AccountView": {
+      "$ref": "#/$defs/AccountView"
+    },
+    "ApplicationContext": {
+      "$ref": "#/$defs/ApplicationContext"
+    },
+    "AuthConfigView": {
+      "$ref": "#/$defs/AuthConfigView"
+    },
+    "ClaimDecisionResult": {
+      "$ref": "#/$defs/ClaimDecisionResult"
+    },
+    "ClaimReview": {
+      "$ref": "#/$defs/ClaimReview"
+    },
+    "ConfirmEmailRequest": {
+      "$ref": "#/$defs/ConfirmEmailRequest"
+    },
+    "CreateTokenRequest": {
+      "$ref": "#/$defs/CreateTokenRequest"
+    },
+    "CreatedToken": {
+      "$ref": "#/$defs/CreatedToken"
+    },
+    "DecideClaimsRequest": {
+      "$ref": "#/$defs/DecideClaimsRequest"
+    },
+    "DevTokenResponse": {
+      "$ref": "#/$defs/DevTokenResponse"
+    },
+    "ErrorBody": {
+      "$ref": "#/$defs/ErrorBody"
+    },
+    "FeedView": {
+      "$ref": "#/$defs/FeedView"
+    },
+    "FeedbackRequest": {
+      "$ref": "#/$defs/FeedbackRequest"
+    },
+    "FeedbackResult": {
+      "$ref": "#/$defs/FeedbackResult"
+    },
+    "JobDetail": {
+      "$ref": "#/$defs/JobDetail"
+    },
+    "NotificationSettingsView": {
+      "$ref": "#/$defs/NotificationSettingsView"
+    },
+    "PipelineView": {
+      "$ref": "#/$defs/PipelineView"
+    },
+    "PreferenceUpdateResult": {
+      "$ref": "#/$defs/PreferenceUpdateResult"
+    },
+    "ProfileView": {
+      "$ref": "#/$defs/ProfileView"
+    },
+    "ResumeImportResult": {
+      "$ref": "#/$defs/ResumeImportResult"
+    },
+    "SearchJobsParams": {
+      "$ref": "#/$defs/SearchJobsParams"
+    },
+    "SearchResults": {
+      "$ref": "#/$defs/SearchResults"
+    },
+    "TasteView": {
+      "$ref": "#/$defs/TasteView"
+    },
+    "TokenList": {
+      "$ref": "#/$defs/TokenList"
+    },
+    "UpdateNotificationsRequest": {
+      "$ref": "#/$defs/UpdateNotificationsRequest"
+    },
+    "UpdatePreferencesParams": {
+      "$ref": "#/$defs/UpdatePreferencesParams"
+    },
+    "VerificationReport": {
+      "$ref": "#/$defs/VerificationReport"
+    }
+  },
+  "title": "JobHuntApi",
+  "type": "object"
+}

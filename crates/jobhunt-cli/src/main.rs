@@ -522,6 +522,7 @@ mod tests {
             vec!["jobhunt", "server"],
             vec!["jobhunt", "worker", "discovery", "--budget-minutes", "5"],
             vec!["jobhunt", "worker", "verification"],
+            vec!["jobhunt", "worker", "notify"],
             vec!["jobhunt", "migrate"],
             vec!["jobhunt", "admin", "status", "--json"],
             vec!["jobhunt", "admin", "reencrypt"],

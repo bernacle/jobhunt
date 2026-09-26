@@ -2,9 +2,11 @@
 # for every push to main.
 #
 # Everything here is offline: no job talks to Ashby, Greenhouse, Lever or
-# YC. Live source checks run separately in live.yml and never block merges.
+# YC, and no job sends email (the web's end-to-end tests serve fixture job
+# boards locally and write email to a file). Live source checks run
+# separately in live.yml and never block merges.
 #
-# The job names (fmt, clippy, test, cloud, docs, msrv, ci-passed) are the status
+# The job names (fmt, clippy, test, cloud, docs, msrv, web, e2e, ci-passed) are the status
 # check names used by branch protection. Renaming a job means updating the
 # protection rule (see CONTRIBUTING.md and .github/rulesets/main.json).
 #
@@ -261,6 +263,109 @@ jobs:
       - name: Check workspace on MSRV (cargo check --all-targets)
         run: cargo check --workspace --all-targets --locked
 
+  web:
+    # The web app on its own: its TypeScript types match the committed API
+    # schema (which the Rust `test` job checks against the server's types),
+    # type-check, lint, component tests (with automated accessibility
+    # checks), and a production build.
+    name: web
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: API types match the schema (npm run types:check)
+        run: npm run types:check
+      - name: Type-check
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Component tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+  e2e:
+    # The product loop in a real browser against the real stack: Postgres,
+    # `jobhunt migrate`, the discovery, verification and notification
+    # workers, `jobhunt server`, and the built web app, with fixture job
+    # boards served locally and email written to a file. Only the binary is
+    # compiled here (the Rust suites run in `test` and `cloud`).
+    name: e2e
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: jobhunt
+          POSTGRES_PASSWORD: jobhunt
+          POSTGRES_DB: jobhunt
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jobhunt"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      JOBHUNT_E2E_DATABASE_URL: postgres://jobhunt:jobhunt@127.0.0.1:5432/jobhunt
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Rust (stable)
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: e2e
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Build the jobhunt binary
+        run: cargo build --locked -p jobhunt-cli
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install web dependencies and Chromium
+        working-directory: apps/web
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Build the web app
+        working-directory: apps/web
+        run: npm run build
+      - name: End-to-end tests (desktop and mobile)
+        working-directory: apps/web
+        run: npx playwright test
+      - name: Keep the report of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7
+
   ci-passed:
     # A single check that is green only when every job above succeeded.
     # Require this one (or all of the above) in branch protection.
@@ -268,7 +373,7 @@ jobs:
     # drafts like the rest (otherwise the skipped jobs would fail it).
     name: ci-passed
     if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
-    needs: [fmt, clippy, test, cloud, docs, msrv]
+    needs: [fmt, clippy, test, cloud, docs, msrv, web, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

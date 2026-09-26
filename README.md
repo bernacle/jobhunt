@@ -1357,6 +1357,8 @@ exits when the client disconnects (stdin closes).
 | Tool | Kind | Does |
 | --- | --- | --- |
 | `search_jobs` | refreshes caches, network | The shortlist (`find`): `query`, `limit` (1–25, default 5), `refresh` (`auto` \| `always` \| `never`), `verify` (default true), `include_lower_tiers`. Returns the funnel, and per opportunity: `id`, `title`, `company`, `tier`, `recommendation`, `verification` (state, trusted, verified_at, authority), `eligibility` (status, headline), `why`, `consider`, `next_step`; plus what was not shown and why |
+| `get_feed` | refreshes caches, network | What's new since the person last looked (the web's Today): up to `limit` (1–10, default 5) strong fits and jobs worth reviewing they haven't dealt with, plus reviewed ones that changed materially (pay published or changed, remote policy, work authorization, reopened), each with why and what to consider; `caught_up: true` and an empty list when nothing new is worth their time. Never padded with weaker matches |
+| `get_taste` | read | What JobHunt believes the person wants, kept apart: stated preferences and statements (which always win), and patterns learned from feedback with their confidence and evidence (contradictory and weak ones listed, not used) |
 | `get_job` | read | One opportunity: locations, workplace, compensation facts, description summary (`full_description` for all of it), verification, eligibility with reasons, the decision brief, pipeline state; `include_sources` adds every source record with its provenance and latest attempt. Does not mark it seen |
 | `verify_job` | network | Asks the authoritative sources now (`force`, or reuse an attempt from the last few minutes): listing and application state, authority, last attempt and success, compensation facts, eligibility, what remains uncertain, per source |
 | `get_profile` | read | Professional profile: headline, location, experiences, technologies with evidence strength, domains, role and ownership signals, preferences and statements, claims awaiting review, gaps. Never names or contact details |
@@ -1370,7 +1372,7 @@ exits when the client disconnects (stdin closes).
 
 Tools declare this in their annotations (`readOnlyHint`,
 `destructiveHint: false`, `idempotentHint`, `openWorldHint` for the two
-that reach job boards). Every tool has an input schema (unknown arguments
+that reach job boards, and `get_feed`, which may verify its candidates). Every tool has an input schema (unknown arguments
 are rejected) and an output schema; results come as structured content,
 with the same JSON as text for clients that read only text.
 
@@ -1476,10 +1478,33 @@ is not supported directly today.
 ## JobHunt Cloud
 
 The same application, hosted: an account your machines sync with,
-scheduled discovery and re-verification of one shared job corpus, an HTTP
-API (`/api/v1`) and a hosted MCP endpoint (`/mcp`) for remote assistants.
-The full design, deployment and configuration reference is in
-[docs/cloud.md](docs/cloud.md).
+scheduled discovery and re-verification of one shared job corpus, a web
+app, email notifications about strong new matches, an HTTP API
+(`/api/v1`) and a hosted MCP endpoint (`/mcp`) for remote assistants. The
+full design, deployment and configuration reference is in
+[docs/cloud.md](docs/cloud.md); the web app is described in
+[apps/web/README.md](apps/web/README.md).
+
+### The web app
+
+A small product on purpose: **Today**, **Applications**, **Preferences**,
+**Profile** (and Settings). A visit should be short: open Today, see the
+two to five opportunities that are new and worth your time, each with why
+it may matter and what to consider (verification, eligibility and pay in
+plain words, never a match percentage), save, reject with a reason, mark
+applied or put aside, and leave. When nothing new is worth your time,
+Today says you're caught up instead of showing weaker jobs. Everything the
+web shows comes from the same use cases and views as the CLI and MCP
+tools; nothing about ranking, eligibility, verification or taste is
+decided in the browser.
+
+### Email notifications
+
+Off by default; on in Settings for a confirmed address. An email means
+"probably worth interrupting you for": only strong fits, verified at the
+employer, that you haven't seen, acted on or been emailed about, at most
+three per email and at most one email every few hours (or a day). Nothing
+found means no email.
 
 ```bash
 jobhunt login --server https://jobhunt.example.com   # sign in in the browser (device code)
@@ -1508,9 +1533,9 @@ jobhunt logout [--everywhere]
   reasons, eligibility decisions, rankings) is isolated per account and
   encrypted by the application (AES-256-GCM) before it reaches Postgres.
 - **Deployment**: one binary with process modes (`jobhunt server`,
-  `jobhunt migrate`, `jobhunt worker discovery|verification`), a
-  Dockerfile, and Railway Infrastructure as Code in
-  [.railway/railway.ts](.railway/railway.ts).
+  `jobhunt migrate`, `jobhunt worker discovery|verification|notify`), the
+  web app ([apps/web](apps/web)), two Dockerfiles, and Railway
+  Infrastructure as Code in [.railway/railway.ts](.railway/railway.ts).
 
 ## Your data: export and import
 
@@ -1654,6 +1679,7 @@ place where they meet.
 
 ```bash
 ./scripts/check.sh                  # the full local quality gate (what CI requires)
+./scripts/check.sh --cloud --e2e    # also Postgres, the web app and the browser tests
 cargo test                          # everything offline
 JOBHUNT_TEST_DATABASE_URL=postgres://postgres:postgres@127.0.0.1/postgres \
   cargo test                        # also the cloud tests against a real Postgres
@@ -1696,7 +1722,23 @@ with `JOBHUNT_REQUIRE_POSTGRES=1`, which turns a skip into a failure.
   personal tokens and logout, every API endpoint's view and error codes,
   account isolation, sync over HTTP, the device flow, and hosted MCP
   through the official MCP client (same tools, per-account data,
-  401 challenge).
+  401 challenge). BRU-295 (`web.rs`, `email.rs`, `api_schema.rs`): the
+  Today feed (a small set of new recommendations, reloads stable, acted-on
+  jobs gone, caught up without padding, passed-over items leaving,
+  material changes resurfacing and cosmetic ones not, cross-source
+  duplicates once), resume upload and claim review over the API, taste,
+  expired sessions, email notifications through the outbox (only strong,
+  verified, unseen, unnotified matches; grouped; sent once across retries,
+  crashes after the provider accepted, and concurrent workers; provider
+  failures retryable, permanent ones failed, stale ones abandoned; the
+  cursor moving only after a send; nothing crossing accounts), the Resend
+  sender against a mock, and the web app's API schema being current.
+- `apps/web`: component tests (Vitest, Testing Library, axe) for the
+  recommendation card, decision brief, eligibility and pay wording,
+  actions with rollback, the reject dialog, preference interpretation,
+  learned vs stated taste, claim review and the caught-up state; and
+  Playwright end-to-end tests of the whole loop against the real stack
+  (see [apps/web/README.md](apps/web/README.md)).
 - `jobhunt-cli` (`cloud_e2e`): the binary's `migrate`, `server`, two
   concurrent discovery workers against recorded boards, verification,
   `login`, `sync` from two machines, `token`, offline behavior, `logout`.

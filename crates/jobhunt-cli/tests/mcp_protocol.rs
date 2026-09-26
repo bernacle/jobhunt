@@ -19,10 +19,11 @@ use serde_json::{Value, json};
 
 use common::{Env, McpClient};
 
-const READ_TOOLS: [&str; 4] = [
+const READ_TOOLS: [&str; 5] = [
     "get_job",
     "get_pipeline",
     "get_profile",
+    "get_taste",
     "prepare_application_context",
 ];
 const MUTATING_TOOLS: [&str; 5] = [
@@ -32,7 +33,7 @@ const MUTATING_TOOLS: [&str; 5] = [
     "save_job",
     "update_preferences",
 ];
-const NETWORK_TOOLS: [&str; 2] = ["search_jobs", "verify_job"];
+const NETWORK_TOOLS: [&str; 3] = ["get_feed", "search_jobs", "verify_job"];
 
 #[tokio::test(flavor = "multi_thread")]
 async fn handshake_tools_errors_and_clean_shutdown_with_logs_on_stderr() {

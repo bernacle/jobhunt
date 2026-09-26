@@ -15,6 +15,9 @@ application layer.
 - [Encryption](#encryption)
 - [HTTP API](#http-api)
 - [Hosted MCP](#hosted-mcp)
+- [The web app](#the-web-app)
+- [The Today feed](#the-today-feed)
+- [Email notifications](#email-notifications)
 - [Sync](#sync)
 - [Scheduled discovery](#scheduled-discovery)
 - [Scheduled verification](#scheduled-verification)
@@ -32,6 +35,7 @@ application layer.
  jobhunt mcp (stdio)─┤                       │ jobs: lifecycle, identity, discovery,│
                      ├── jobhunt-app ────────┤       verification                   │
  HTTP API /api/v1 ───┤   (use cases, views)  │ eligibility · profile · ranking      │
+   └ web (Next.js) ──┘                       │                                      │
  hosted MCP /mcp ────┤          │            └──────────────────────────────────────┘
  workers (cron) ─────┘          │
                          Store (repository traits)
@@ -64,6 +68,8 @@ One binary (`jobhunt`), one Docker image, several modes:
 | `jobhunt migrate` | `api` pre-deploy | applies pending migrations, exits |
 | `jobhunt worker discovery` | `worker-discovery` (cron) | reads the sources that are due, exits |
 | `jobhunt worker verification` | `worker-verification` (cron) | re-verifies jobs that matter, exits |
+| `jobhunt worker notify` | `worker-notify` (cron) | emails strong new recommendations (and retries failed emails), exits |
+| `node server.js` (apps/web) | `web` | the web app; calls `api` over the private network |
 | `jobhunt admin status` / `reencrypt` | (run by an operator) | configuration report, schedule, usage; key rotation |
 
 The cloud modes read their configuration from environment variables
@@ -86,6 +92,7 @@ workers.
 | `source_schedule`, `verification_leases`, `worker_runs` | `user_opportunities` (what shortlists showed), `user_state` |
 | | `users`, `user_identities`, `api_tokens` (hashed) |
 | | `usage_events` (analytics, kept apart) |
+| | `notification_settings` (the address sealed), `notification_deliveries` (the outbox; rendered messages sealed), `notification_items` |
 
 - A Greenhouse job is discovered, stored and verified once, however many
   people it concerns. Each person's eligibility and ranking of it are
@@ -197,8 +204,16 @@ Versioned under `/api/v1`. Every endpoint is one use case for the
 authenticated account and answers with the same view the MCP tool of the
 same name returns (`SearchResults`, `JobDetail`, `VerificationReport`,
 `FeedbackResult`, `ProfileView`, `PreferenceUpdateResult`, `PipelineView`,
-`ApplicationContext`, `StateExport`). Request bodies reuse the MCP tools'
-argument types, and reject unknown fields.
+`ApplicationContext`, `StateExport`, and for BRU-295 `FeedView`,
+`TasteView`, `ClaimReview`, `ResumeImportResult`). Request bodies reuse
+the MCP tools' argument types, and reject unknown fields. The JSON Schema
+of every body is generated from these Rust types into
+[`apps/web/src/lib/api-schema.json`](../apps/web/src/lib/api-schema.json)
+(a test fails when it is stale), and the web app's TypeScript types are
+generated from it, so the web cannot drift from the server.
+
+Clients may name themselves with `x-jobhunt-client: web | cli | mcp`; it
+only tags usage events.
 
 | Method | Path | |
 | --- | --- | --- |
@@ -219,6 +234,13 @@ argument types, and reject unknown fields.
 | POST | `/api/v1/preferences` | `update_preferences` arguments |
 | GET | `/api/v1/pipeline` | `?include_rejected` |
 | GET | `/api/v1/export` | the portable `jobhunt.state` file |
+| GET | `/api/v1/feed` | the Today feed (`get_feed`; `?limit` 1–10, default 5): `FeedView` |
+| POST | `/api/v1/opportunities/{id}/dismiss` | "not now": off the feed, recorded as looked at (no taste signal) |
+| GET | `/api/v1/taste` | stated preferences and learned taste (`get_taste`): `TasteView` |
+| GET / POST | `/api/v1/profile/claims` | claims needing review, with their source words / `{"ids", "decision": "confirm" \| "reject" \| "reset", "note"}` |
+| PUT | `/api/v1/profile/resume` | import or re-import a resume: the body is the file (`?file_name=resume.pdf`; PDF, text or Markdown, 10 MB) |
+| GET / PUT | `/api/v1/notifications` | email notification settings (`email_enabled`, `cadence`, `email`, `resend_confirmation`) |
+| POST | `/api/v1/notifications/confirm` | `{"token"}` from the confirmation link |
 
 Errors are always `{"error": {"code", "message", "hint"}}` with the stable
 codes the CLI and MCP use (`unknown_opportunity` 404, `ambiguous_id` 409,
@@ -255,6 +277,135 @@ remote clients such as ChatGPT or Claude's connectors.
 - The evidence policy is unchanged: `get_profile` never includes name or
   contacts, `prepare_application_context` only usable evidence, contacts
   only when asked.
+- BRU-295 added two tools, over the same use cases as the web:
+  `get_feed` (what's new: the Today feed, and it records what it showed,
+  exactly like the web) and `get_taste` (stated vs learned). A web
+  account, a CLI login and an MCP client signing in with the same identity
+  are one account (`usr_…`), so "find me new jobs" in an assistant and
+  Today in the browser show the same state.
+
+### Connecting an assistant (for people using JobHunt)
+
+1. In the assistant (Claude: Settings → Connectors → Add custom connector;
+   ChatGPT: a custom connector in developer mode), add the remote MCP
+   server `https://<api domain>/mcp`.
+2. Sign in when asked: it is the same sign-in as the web app (OAuth with
+   dynamic client registration). Assistants that can't do OAuth take a
+   personal access token instead (Settings → "Use JobHunt from your AI
+   assistant" → Create token, sent as `Authorization: Bearer jh_pat_…`).
+3. Ask in plain words. How the requests map to tools:
+
+| You say | The assistant uses |
+| --- | --- |
+| "Find me new jobs" | `get_feed` |
+| "Show only small teams" | `update_preferences` with your words, then `get_feed` / `search_jobs` |
+| "Don't show jobs like this again" | `reject_job` with your reason, verbatim (learned from) |
+| "Why is this worth my time?" | `get_job` (the decision brief) |
+| "Help me apply to the second one" | `prepare_application_context`: only evidence you confirmed or that is quoted from your resume; nothing is invented, no letter is written by JobHunt |
+
+## The web app
+
+[`apps/web`](../apps/web) is a Next.js 16 app (React 19, TypeScript,
+Tailwind 4) that renders on the server and calls the API from the server
+only: the browser never sees an access token, and there is no
+browser-to-API traffic (so CORS is not needed for it). Details, local
+development and tests: [apps/web/README.md](../apps/web/README.md).
+
+- **Sign-in** is the API's identity provider (from
+  `/api/v1/auth/config`): the OAuth 2.0 authorization code flow with
+  PKCE, from the web server, asking for the API's audience. The tokens go
+  into one encrypted, HttpOnly, `SameSite=Lax` cookie (AES-256-GCM JWE);
+  a Next.js proxy renews the access token with the refresh token before
+  it expires; a 401 from the API clears the session and asks to sign in
+  again. Sign-out revokes the refresh token at the provider (and ends the
+  provider's session when it has an end-session endpoint); "sign out
+  everywhere" is the API's. There is no web-side user database: the
+  account is the API's.
+- **Mutations** are server actions that call the API and return its view
+  or a stable error code, which the UI turns into words (a missing
+  profile, JobHunt unreachable, a conflict, an expired session).
+- **Development sign-in** (`JOBHUNT_WEB_AUTH_MODE=dev`) works only against
+  an API in development auth mode, which refuses to start in production.
+
+## The Today feed
+
+`GET /api/v1/feed` (the `get_feed` tool) answers "what is worth my time
+that I haven't dealt with?", so a visit can end. It is built from the
+product's ranking (tiers, gates, briefs); only the selection is its own
+(`jobhunt_app::feed`):
+
+| The person's state | On the feed |
+| --- | --- |
+| never acted on it, never shown it | **new** |
+| never acted on it, first shown less than 24 hours ago | **new** (reloading doesn't make it vanish) |
+| never acted on it, shown longer ago | passed over: counted, not shown |
+| looked at, put aside ("not now") or saved | only if it **changed** materially since |
+| rejected, applied, interviewing, offer, closed, ineligible | never (the ranking's gate) |
+
+- Only strong fits and jobs worth reviewing are candidates. With nothing
+  new, the feed is **caught up**: empty, with when job boards were last
+  read and when the next scheduled read is due, never padded with maybes.
+- A **material change** is one the job's history records (UPDATED /
+  REOPENED) in a field that changes whether someone would want or could
+  take the job: pay published or changed, location or remote policy, work
+  authorization, employment type, a closed job reopening. Title,
+  description or link edits never bring a job back. A resurfaced job
+  stays 24 hours and is not brought back twice for the same change.
+- **"Not now"** (`POST …/dismiss`) records the opportunity as looked at
+  (which carries no weight in learned taste) and puts it aside; **"Not for
+  me"** is a rejection, with an optional reason in the person's words,
+  which teaches. The two are kept apart on purpose.
+- The summary counts are the ranking's own (open jobs checked, left after
+  eligibility, worth reviewing, new, on the feed now); nothing is
+  estimated.
+- The feed verifies its best candidates whose listings aren't trusted yet
+  (at most 12), like a search; it never reads job boards (the workers do).
+- What it showed is recorded per account (`user_opportunities`:
+  first/last shown, resurfaced, put aside). Locally (SQLite) there is no
+  such state, so "new" means "not acted on yet".
+
+## Email notifications
+
+`jobhunt worker notify` (every 15 minutes) emails people about strong new
+recommendations, from the product's ranking
+(`App::notification_candidates`). Precision over recall:
+
+- **Who**: accounts with email notifications on and a confirmed address.
+  An address is confirmed by following a link sent to it (48 hours); until
+  then nothing else is sent to it. The address is stored sealed and
+  deleted with the account.
+- **What**: strong fits, recommended outright (verified recently at an
+  authoritative source, eligible or conditionally eligible), never acted
+  on, never shown in the app or put aside, never in an earlier email. At
+  most `JOBHUNT_NOTIFY_MAX_ITEMS` (3) per email: "A strong new match:
+  Senior Platform Engineer at X" or "3 new jobs worth your time", each with
+  pay when known, where, why (two lines), one caveat, and a link.
+- **When**: at most one email per `JOBHUNT_NOTIFY_MIN_INTERVAL_HOURS` (4)
+  with the `immediate` cadence, or per day with `daily`. Nothing found
+  means no email: no "nothing new", no digests of maybes.
+- **Idempotency**: an outbox. The rendered message and its opportunities
+  are committed first (`notification_deliveries`,
+  `notification_items`, whose primary key `(account, opportunity)` makes a
+  second email about the same opportunity impossible), then sent with the
+  delivery id as the provider's `Idempotency-Key`, then marked `sent`
+  (only by the worker holding its lease), which moves the account's
+  `notification_cursor` to it in the same transaction.
+- **Failures**: a retryable failure (network, 429, 5xx) leaves it pending,
+  retried with backoff (5 min, doubling, capped at 3 h) up to 6 attempts;
+  a permanent refusal marks it `failed`. Never `sent` unless the provider
+  accepted it. A crash after the provider accepted it is retried with the
+  same stored message and key, which Resend answers with the original
+  result instead of sending again (it keeps keys 24 hours); a delivery
+  still pending after 20 hours is `abandoned` rather than sent late.
+- **Coordination**: accounts and deliveries are claimed with leases
+  (`FOR UPDATE SKIP LOCKED`), as for discovery and verification; runs are
+  recorded in `worker_runs` (`kind = 'notification'`).
+- **Provider**: behind `jobhunt_cloud::email::EmailSender`. Production
+  uses [Resend](https://resend.com) (`JOBHUNT_EMAIL_PROVIDER=resend`): a
+  plain HTTPS API, idempotency keys, and sender-domain verification. The
+  file provider (`file`, refused in production) appends JSON lines for
+  development and the end-to-end tests; tests use an in-memory sender. No
+  required test sends real email.
 
 ## Sync
 
@@ -413,9 +564,12 @@ process-local state across instances.
   Workers log counts per run and per source.
 - **Usage events** (`usage_events`, separate from product data): `login`,
   `logout`, `sync_pull`, `sync_push`, `find`, `verify`, `feedback`,
-  `preferences`, `token_created`, `mcp_tool` — with the account id and
-  small safe metadata (counts, the tool name, whether a reason was given,
-  never the reason). They are written in batches off the request path
+  `preferences`, `token_created`, `mcp_tool`, and for the web
+  `feed_opened`, `opportunity_viewed`, `dismiss`, `claims_decided`,
+  `resume_imported`, `notifications_updated`, `email_confirmed` — with the account id and
+  small safe metadata (counts, the tool name, the client, the action,
+  whether a reason was given — never the reason, a preference, a file
+  name or anything from the resume). They are written in batches off the request path
   (dropped rather than slowing a request when the writer is behind), can
   be turned off (`JOBHUNT_USAGE_EVENTS=false`), and are deleted with the
   account. `jobhunt admin status` summarizes the last 7 days.
@@ -426,8 +580,11 @@ Railway's `railway.json` / `railway.toml` config-as-code is deprecated
 (new services cannot use it); the deployment is described as
 Infrastructure as Code in [`.railway/railway.ts`](../.railway/railway.ts):
 a Postgres database, the `api` service (`jobhunt server`, pre-deploy
-`jobhunt migrate`, healthcheck `/ready`, 30 s draining on SIGTERM), and
-two cron services for the workers. All services build the repository's
+`jobhunt migrate`, healthcheck `/ready`, 30 s draining on SIGTERM), the
+`web` service (the Next.js app from
+[`apps/web/Dockerfile`](../apps/web/Dockerfile), healthcheck `/healthz`,
+calling `api` at `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080`), and three
+cron services for the workers (discovery, verification, notify). All services build the repository's
 [`Dockerfile`](../Dockerfile) (a multi-stage build; Railpack's Rust
 provider assumes the binary is named like its package, which is not the
 case here).
@@ -477,7 +634,29 @@ First deployment:
    whose identifier is the audience, a native application with the device
    code grant and refresh token rotation, and
    `JOBHUNT_OIDC_AUDIENCE_PARAMETER=audience`.
-7. Deploy (pushes to `main`, or `railway up`), then
+7. The web app (BRU-295):
+   - give `web` a public domain (`railway domain -s web`);
+   - in WorkOS, create an **OAuth application for the web app**
+     (confidential, with a secret, or public with PKCE), with the redirect
+     URI `https://<web domain>/auth/callback` and the sign-out redirect
+     `https://<web domain>/signin`; add its client id to
+     `JOBHUNT_OIDC_AUDIENCE` on `api` when AuthKit issues it as the
+     audience (as for the CLI);
+   - set on `web`: `JOBHUNT_WEB_URL=https://<web domain>`,
+     `JOBHUNT_API_PUBLIC_URL=https://<api domain>`,
+     `JOBHUNT_WEB_SESSION_SECRET` (`openssl rand -base64 48`, sealed),
+     `JOBHUNT_WEB_OIDC_CLIENT_ID` and, for a confidential client,
+     `JOBHUNT_WEB_OIDC_CLIENT_SECRET` (sealed);
+   - set on `api`: `JOBHUNT_WEB_URL=https://<web domain>` (links in the
+     confirmation email). `JOBHUNT_ALLOWED_ORIGINS` is not needed for the
+     web app (it calls the API from its server).
+8. Email (BRU-295): in Resend, verify a sending domain and create an API
+   key restricted to sending; set on both `api` and `worker-notify`:
+   `JOBHUNT_EMAIL_PROVIDER=resend`, `JOBHUNT_RESEND_API_KEY` (sealed),
+   `JOBHUNT_EMAIL_FROM="JobHunt <notifications@<your domain>>"`,
+   `JOBHUNT_WEB_URL`; and on `worker-notify` the same
+   `JOBHUNT_ENCRYPTION_KEYS` as `api` (it reads addresses and rankings).
+9. Deploy (pushes to `main`, or `railway up`), then
    [validate](#validating-a-deployment).
 
 Applying the IaC file deletes variables it does not list; every
@@ -524,6 +703,28 @@ startup with every problem listed.
 | `JOBHUNT_VERIFY_BATCH` | verification | no | 100 jobs per run |
 | `JOBHUNT_VERIFICATION_FRESH_HOURS` / `_STALE_HOURS` | all | no | from the config file (24 / 72) |
 | `JOBHUNT_USAGE_EVENTS` | server | no | `true` |
+| `JOBHUNT_WEB_URL` | server, notify | for email | the web app's https URL (links in emails) |
+| `JOBHUNT_EMAIL_PROVIDER` | server, notify | for email | `resend`, `file` (development; refused in production) or `none` (default) |
+| `JOBHUNT_RESEND_API_KEY` | server, notify | with `resend` | Secret |
+| `JOBHUNT_EMAIL_FROM` | server, notify | with `resend` | `JobHunt <notifications@example.com>`, on a domain verified in Resend |
+| `JOBHUNT_RESEND_API_URL` | server, notify | no | `https://api.resend.com` (tests point it at a mock) |
+| `JOBHUNT_EMAIL_FILE` | server, notify | with `file` | where the file provider appends messages |
+| `JOBHUNT_NOTIFY_MIN_INTERVAL_HOURS` | notify | no | 4: at most one email per account this often (`immediate` cadence) |
+| `JOBHUNT_NOTIFY_MAX_ITEMS` | notify | no | 3 (1–5) opportunities per email |
+| `JOBHUNT_NOTIFY_BATCH` | notify | no | 50 accounts per claim |
+
+The web app (`web` service) reads its own variables:
+
+| Variable | Required | Default / notes |
+| --- | --- | --- |
+| `JOBHUNT_API_URL` | yes | where the web server reaches the API (`http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080`) |
+| `JOBHUNT_API_PUBLIC_URL` | no | the API's public URL, shown in the MCP connection instructions; defaults to `JOBHUNT_API_URL` |
+| `JOBHUNT_WEB_URL` | yes | this app's https URL (OAuth redirect URIs); `http://localhost:3000` by default |
+| `JOBHUNT_WEB_SESSION_SECRET` | yes | 32+ characters; encrypts the session cookie. Secret |
+| `JOBHUNT_WEB_AUTH_MODE` | no | `oidc` (default) or `dev` (development sign-in against a dev-mode API) |
+| `JOBHUNT_WEB_OIDC_CLIENT_ID` | with `oidc` | the web app's OAuth client at the identity provider |
+| `JOBHUNT_WEB_OIDC_CLIENT_SECRET` | no | for a confidential client (else PKCE only). Secret |
+| `JOBHUNT_WEB_OIDC_SCOPES` | no | `openid profile email offline_access` |
 
 On the laptop: `[cloud] server = "https://…"` in the config file (or
 `JOBHUNT_CLOUD_URL`), `JOBHUNT_CREDENTIALS_FILE` to choose where the
@@ -558,6 +759,19 @@ curl -fsS -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' 
   -d '{"limit":3}' $API/api/v1/search
 # MCP: point an MCP client at $API/mcp with the token (or OAuth)
 jobhunt token revoke <tok_…>
+
+# The web app (BRU-295)
+WEB=https://<web domain>
+curl -fsS $WEB/healthz                         # {"status":"ok"}
+# In a browser: sign in, upload a resume, add a preference, open Today,
+# save / reject (with a reason) / mark applied, check Applications,
+# Preferences (stated vs learned) and Profile (claims to review).
+curl -fsS -H "Authorization: Bearer $TOKEN" $API/api/v1/feed | jq '.summary, .caught_up'
+
+# Notifications to a controlled test recipient
+#   Settings → Email notifications → your address → follow the link → on
+railway run -s worker-notify jobhunt worker notify   # or trigger the cron
+curl -fsS -H "Authorization: Bearer $TOKEN" $API/api/v1/notifications | jq .recent
 ```
 
 (`railway run` runs locally with the service's variables; the private
@@ -589,5 +803,13 @@ jobhunt token revoke <tok_…>
   last use on every request.
 - Usage events are basic counts for operating the beta, not an analytics
   product; there is no dashboard.
-- Not built here (BRU-295/296): web UI, hosted feed, notifications,
-  billing and plans, application assistance.
+- The feed's "shown" state lives in the cloud only; the local product
+  (SQLite) treats "new" as "not acted on yet".
+- Notifications are email only, with an on/off switch and two cadences;
+  the unsubscribe link goes to Settings (signed in), not a one-click
+  token. A delivery that stays pending for 20 hours is abandoned (its
+  opportunities are not emailed later; they are on Today).
+- An address is confirmed by a link, not by the identity provider's
+  verified email claim.
+- Not built here (BRU-296): billing and plans, application assistance
+  (answers, tailored resumes, letters).

@@ -29,6 +29,13 @@
 //! | POST | `/api/v1/preferences` | `update_preferences` |
 //! | GET | `/api/v1/pipeline` | `get_pipeline` |
 //! | GET | `/api/v1/export` | the portable state file |
+//! | GET | `/api/v1/feed` | the Today feed (`get_feed`) |
+//! | POST | `/api/v1/opportunities/{id}/dismiss` | put it aside ("not now") |
+//! | GET | `/api/v1/taste` | stated preferences and learned taste (`get_taste`) |
+//! | GET, POST | `/api/v1/profile/claims` | claims needing review; confirm / reject them |
+//! | PUT | `/api/v1/profile/resume` | import or re-import a resume (the body is the file) |
+//! | GET, PUT | `/api/v1/notifications` | email notification settings |
+//! | POST | `/api/v1/notifications/confirm` | confirm the address |
 //! | * | `/mcp` | hosted MCP (Streamable HTTP) |
 
 pub mod error;
@@ -46,17 +53,23 @@ use axum::{Json, Router};
 use chrono::Utc;
 use http::StatusCode;
 use jobhunt_app::context::ApplicationContext;
+use jobhunt_app::feed::{FeedRequest, FeedView, MAX_FEED_LIMIT};
 use jobhunt_app::feedback::{FeedbackResult, PipelineView};
 use jobhunt_app::inspect::{JobDetail, VerificationReport};
 use jobhunt_app::preferences::{PreferenceUpdate, PreferenceUpdateResult};
+use jobhunt_app::profile_edit::{ClaimDecisionResult, ClaimReview, ResumeImportResult};
 use jobhunt_app::profile_view::ProfileView;
 use jobhunt_app::shortlist::MAX_LIMIT;
 use jobhunt_app::state::StateExport;
+use jobhunt_app::taste_view::TasteView;
 use jobhunt_app::{App, AppError, DiscoveryMode, FindRequest, Quiet, RefreshMode, SearchResults};
 use jobhunt_jobs::verification::VerifyMode;
 use jobhunt_mcp::{SearchJobsParams, UpdatePreferencesParams};
 use jobhunt_ranking::FeedbackAction;
-use jobhunt_storage::postgres::{PgStore, PgUserStore};
+use jobhunt_storage::postgres::{
+    Cadence, DeliveryKind, NewDelivery, PgStore, PgUserStore, SettingsChange,
+    new_confirmation_token, new_delivery_id,
+};
 use jobhunt_storage::sync::{PullRequest, PullResponse, PushError, PushRequest, PushResponse};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -71,6 +84,7 @@ use self::error::ApiError;
 use self::types::*;
 use crate::auth::{Authenticator, DevVerifier, Method, OidcVerifier, Principal};
 use crate::config::{AuthConfig, CloudConfig};
+use crate::email::EmailSender;
 use crate::observability::{REQUEST_ID, RandomRequestId, make_span, on_response};
 use crate::usage::UsageLog;
 
@@ -87,6 +101,7 @@ struct Inner {
     oidc: Option<Arc<OidcVerifier>>,
     dev: Option<DevVerifier>,
     usage: UsageLog,
+    email: Option<Arc<dyn EmailSender>>,
 }
 
 impl std::fmt::Debug for ApiState {
@@ -96,11 +111,25 @@ impl std::fmt::Debug for ApiState {
 }
 
 impl ApiState {
-    /// The shared state: the authenticator for the configured mode.
+    /// The shared state: the authenticator for the configured mode, and
+    /// the configured email provider.
     pub fn new(
         store: PgStore,
         config: Arc<CloudConfig>,
         usage: UsageLog,
+    ) -> Result<Self, crate::config::ConfigProblems> {
+        let email = crate::email::sender(config.email.as_ref())
+            .map_err(|e| crate::config::ConfigProblems(vec![format!("email: {e}")]))?;
+        Self::with_email(store, config, usage, email)
+    }
+
+    /// Like [`ApiState::new`], with this email sender (tests use an
+    /// in-memory one).
+    pub fn with_email(
+        store: PgStore,
+        config: Arc<CloudConfig>,
+        usage: UsageLog,
+        email: Option<Arc<dyn EmailSender>>,
     ) -> Result<Self, crate::config::ConfigProblems> {
         let (auth, oidc, dev) = match &config.auth {
             Some(AuthConfig::Oidc(settings)) => {
@@ -136,6 +165,7 @@ impl ApiState {
                 oidc,
                 dev,
                 usage,
+                email,
             }),
         })
     }
@@ -272,6 +302,21 @@ async fn authenticate(State(state): State<ApiState>, mut request: Request, next:
 }
 
 type Auth = axum::Extension<Principal>;
+
+/// Which kind of client made a request (`x-jobhunt-client`), for usage
+/// events: `web`, `cli`, `mcp` or `other`. Never anything identifying.
+fn client_of(headers: &http::HeaderMap) -> &'static str {
+    match headers
+        .get("x-jobhunt-client")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+    {
+        Some("web") => "web",
+        Some("cli") => "cli",
+        Some("mcp") => "mcp",
+        _ => "other",
+    }
+}
 
 async fn health() -> Json<Health> {
     Json(Health {
@@ -632,9 +677,11 @@ struct DetailQuery {
 async fn opportunity(
     State(state): State<ApiState>,
     axum::Extension(principal): Auth,
+    headers: http::HeaderMap,
     Path(id): Path<String>,
     Params(q): Params<DetailQuery>,
 ) -> Result<Json<JobDetail>, ApiError> {
+    let client = client_of(&headers);
     let detail = run(state.app_for(&principal), move |app| async move {
         let opportunity = app.resolve(&id).await?;
         let inspection = app.inspect(&opportunity, false, Utc::now()).await?;
@@ -645,6 +692,11 @@ async fn opportunity(
         ))
     })
     .await?;
+    state.usage().record(
+        Some(&principal.user),
+        "opportunity_viewed",
+        serde_json::json!({"client": client, "tier": detail.decision.as_ref().map(|d| d.tier)}),
+    );
     Ok(Json(detail))
 }
 
@@ -676,10 +728,13 @@ async fn verify(
 async fn feedback(
     State(state): State<ApiState>,
     axum::Extension(principal): Auth,
+    headers: http::HeaderMap,
     Path(id): Path<String>,
     Body(request): Body<FeedbackRequest>,
 ) -> Result<Json<FeedbackResult>, ApiError> {
+    let client = client_of(&headers);
     let action = match request.action {
+        FeedbackInput::Seen => FeedbackAction::Seen,
         FeedbackInput::Save => FeedbackAction::Save,
         FeedbackInput::Unsave => FeedbackAction::Unsave,
         FeedbackInput::Reject => FeedbackAction::Reject,
@@ -706,6 +761,7 @@ async fn feedback(
             "action": action.as_str(),
             "with_reason": with_reason,
             "recorded": result.recorded,
+            "client": client,
         }),
     );
     Ok(Json(result))
@@ -804,6 +860,376 @@ async fn export(
     Ok(Json(export))
 }
 
+async fn feed(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+    headers: http::HeaderMap,
+    Params(q): Params<FeedQuery>,
+) -> Result<Json<FeedView>, ApiError> {
+    let limit = q.limit.unwrap_or(jobhunt_app::feed::DEFAULT_FEED_LIMIT);
+    if limit == 0 || limit > MAX_FEED_LIMIT {
+        return Err(ApiError::invalid(format!(
+            "limit must be between 1 and {MAX_FEED_LIMIT}"
+        )));
+    }
+    let request = FeedRequest {
+        limit,
+        verify: true,
+        // Discovery runs in the background.
+        refresh: RefreshMode::Never,
+    };
+    let now = Utc::now();
+    let view = run(state.app_for(&principal), move |app| async move {
+        let feed = app.feed(&request, &Quiet, now).await?;
+        Ok(FeedView::of(&feed, now))
+    })
+    .await?;
+    state.usage().record(
+        Some(&principal.user),
+        "feed_opened",
+        serde_json::json!({
+            "client": client_of(&headers),
+            "items": view.items.len(),
+            "new": view.summary.new,
+            "changed": view.summary.changed,
+            "caught_up": view.caught_up,
+        }),
+    );
+    Ok(Json(view))
+}
+
+async fn dismiss(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+    headers: http::HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<FeedbackResult>, ApiError> {
+    let result = run(state.app_for(&principal), move |app| async move {
+        let opportunity = app.resolve(&id).await?;
+        let outcome = app.dismiss(&opportunity, Utc::now()).await?;
+        Ok(FeedbackResult::of(&outcome))
+    })
+    .await?;
+    state.usage().record(
+        Some(&principal.user),
+        "dismiss",
+        serde_json::json!({"client": client_of(&headers)}),
+    );
+    Ok(Json(result))
+}
+
+async fn taste(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+) -> Result<Json<TasteView>, ApiError> {
+    let view = run(state.app_for(&principal), |app| async move {
+        app.taste_view().await
+    })
+    .await?;
+    Ok(Json(view))
+}
+
+async fn claims(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+    Params(q): Params<ClaimsQuery>,
+) -> Result<Json<ClaimReview>, ApiError> {
+    let review = run(state.app_for(&principal), move |app| async move {
+        app.claims_for_review(q.limit).await
+    })
+    .await?;
+    Ok(Json(review))
+}
+
+async fn decide_claims(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+    headers: http::HeaderMap,
+    Body(request): Body<DecideClaimsRequest>,
+) -> Result<Json<ClaimDecisionResult>, ApiError> {
+    let count = request.ids.len();
+    let decision = request.decision;
+    let with_note = request.note.is_some();
+    let result = run(state.app_for(&principal), move |app| async move {
+        app.decide_claims(&request.ids, request.decision, request.note, Utc::now())
+            .await
+    })
+    .await?;
+    state.usage().record(
+        Some(&principal.user),
+        "claims_decided",
+        serde_json::json!({
+            "client": client_of(&headers),
+            "decision": decision,
+            "count": count,
+            "with_note": with_note,
+        }),
+    );
+    Ok(Json(result))
+}
+
+/// The most a resume upload may be (the extractor refuses larger files).
+const MAX_RESUME_BYTES: usize = 10 * 1024 * 1024;
+
+async fn import_resume(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+    headers: http::HeaderMap,
+    Params(q): Params<ResumeQuery>,
+    body: axum::body::Bytes,
+) -> Result<Json<ResumeImportResult>, ApiError> {
+    if body.is_empty() {
+        return Err(ApiError::invalid("the body must be the resume file"));
+    }
+    if body.len() > MAX_RESUME_BYTES {
+        return Err(ApiError::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "invalid_request",
+            "the resume is larger than 10 MB",
+        ));
+    }
+    let content_type = headers
+        .get(http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let file_name = q
+        .file_name
+        .map(|n| n.trim().to_owned())
+        .filter(|n| !n.is_empty() && n.len() <= 200)
+        .or_else(|| {
+            let default = if content_type.starts_with("application/pdf") {
+                "resume.pdf"
+            } else if content_type.starts_with("text/markdown") {
+                "resume.md"
+            } else if content_type.starts_with("text/plain") {
+                "resume.txt"
+            } else {
+                return None;
+            };
+            Some(default.to_owned())
+        })
+        .ok_or_else(|| {
+            ApiError::invalid(
+                "name the file (?file_name=resume.pdf) or send a PDF, text or Markdown content type",
+            )
+        })?;
+    let result = run(state.app_for(&principal), move |app| async move {
+        app.import_resume(&body, Some(file_name), Utc::now()).await
+    })
+    .await?;
+    // Counts only: never the resume's content or its file name.
+    state.usage().record(
+        Some(&principal.user),
+        "resume_imported",
+        serde_json::json!({
+            "client": client_of(&headers),
+            "first_import": result.first_import,
+            "same_file": result.same_file,
+            "experiences": result.experiences.added + result.experiences.updated + result.experiences.unchanged,
+            "claims_added": result.claims.added,
+            "needs_review": result.needs_review,
+        }),
+    );
+    Ok(Json(result))
+}
+
+/// A plausible email address (the confirmation link proves it works).
+fn valid_email(email: &str) -> bool {
+    let Some((local, domain)) = email.split_once('@') else {
+        return false;
+    };
+    (3..=254).contains(&email.len())
+        && !local.is_empty()
+        && domain.contains('.')
+        && !domain.starts_with('.')
+        && !domain.ends_with('.')
+        && !domain.contains('@')
+        && !email.chars().any(|c| c.is_whitespace() || c.is_control())
+}
+
+async fn notification_view(
+    state: &ApiState,
+    principal: &Principal,
+) -> Result<NotificationSettingsView, ApiError> {
+    let settings = state.store().notification_settings(&principal.user).await?;
+    let recent = state.store().recent_deliveries(&principal.user, 5).await?;
+    Ok(NotificationSettingsView {
+        available: state.inner.email.is_some() && state.config().web_url.is_some(),
+        email_enabled: settings.email_enabled,
+        cadence: settings.cadence.as_str().to_owned(),
+        email_status: match (&settings.email, settings.email_confirmed_at) {
+            (None, _) => "none",
+            (Some(_), None) => "unconfirmed",
+            (Some(_), Some(_)) => "confirmed",
+        }
+        .to_owned(),
+        email: settings.email,
+        confirmation_sent_at: settings.confirmation_sent_at,
+        min_interval_hours: state.config().notify.min_interval.as_secs() / 3600,
+        max_items: state.config().notify.max_items,
+        recent: recent
+            .into_iter()
+            .map(|d| DeliveryView {
+                id: d.id,
+                kind: d.kind.as_str().to_owned(),
+                status: d.status,
+                opportunities: d.items,
+                created_at: d.created_at,
+                sent_at: d.sent_at,
+            })
+            .collect(),
+    })
+}
+
+async fn notifications(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+) -> Result<Json<NotificationSettingsView>, ApiError> {
+    Ok(Json(notification_view(&state, &principal).await?))
+}
+
+/// Sends a confirmation link to the account's unconfirmed address.
+async fn send_confirmation(
+    state: &ApiState,
+    principal: &Principal,
+    email: &str,
+) -> Result<(), ApiError> {
+    let (Some(sender), Some(config), Some(web)) = (
+        state.inner.email.as_ref(),
+        state.config().email.as_ref(),
+        state.config().web_url.as_ref(),
+    ) else {
+        return Err(unavailable_email());
+    };
+    let now = Utc::now();
+    let token = new_confirmation_token();
+    state
+        .store()
+        .set_confirmation_token(&principal.user, &token, now)
+        .await?;
+    let message =
+        crate::notify::render_confirmation(crate::email::from_address(config), email, web, &token);
+    let delivery = NewDelivery {
+        id: new_delivery_id(),
+        user: principal.user.clone(),
+        kind: DeliveryKind::Confirmation,
+        message: serde_json::to_vec(&message).map_err(|_| ApiError::internal())?,
+        items: Vec::new(),
+    };
+    state.store().enqueue_delivery(&delivery, now).await?;
+    // Sent now; if the provider fails, the notification worker retries it.
+    let owner = format!("api:{}", state.config().instance);
+    let mut summary = crate::notify::NotifySummary::default();
+    if let Err(e) = crate::notify::deliver_due(
+        state.store(),
+        sender.as_ref(),
+        &owner,
+        Some(&principal.user),
+        &mut summary,
+    )
+    .await
+    {
+        tracing::warn!(error = %e.public_message(), "could not send a confirmation now");
+    }
+    Ok(())
+}
+
+fn unavailable_email() -> ApiError {
+    ApiError::new(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "email_unavailable",
+        "This JobHunt service cannot send email.",
+    )
+}
+
+async fn update_notifications(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+    headers: http::HeaderMap,
+    Body(request): Body<UpdateNotificationsRequest>,
+) -> Result<Json<NotificationSettingsView>, ApiError> {
+    let cadence = match request.cadence.as_deref() {
+        None => None,
+        Some(c) => Some(
+            Cadence::parse(c)
+                .ok_or_else(|| ApiError::invalid("cadence must be \"immediate\" or \"daily\""))?,
+        ),
+    };
+    let email = match request.email.as_deref().map(str::trim) {
+        None => None,
+        Some(e) if valid_email(e) => Some(e.to_owned()),
+        Some(_) => return Err(ApiError::invalid("that is not an email address")),
+    };
+    let available = state.inner.email.is_some() && state.config().web_url.is_some();
+    if !available && (email.is_some() || request.email_enabled == Some(true)) {
+        return Err(unavailable_email());
+    }
+    let change = SettingsChange {
+        email_enabled: request.email_enabled,
+        cadence,
+        email,
+    };
+    let (settings, email_changed) = state
+        .store()
+        .update_notification_settings(&principal.user, &change, Utc::now())
+        .await?;
+    let unconfirmed = settings.email_confirmed_at.is_none();
+    if let Some(address) = settings.email.as_deref()
+        && unconfirmed
+        && (email_changed || request.resend_confirmation)
+    {
+        let recently = settings
+            .confirmation_sent_at
+            .is_some_and(|at| Utc::now() - at < chrono::Duration::seconds(60));
+        if email_changed || !recently {
+            send_confirmation(&state, &principal, address).await?;
+        }
+    }
+    state.usage().record(
+        Some(&principal.user),
+        "notifications_updated",
+        serde_json::json!({
+            "client": client_of(&headers),
+            "email_enabled": settings.email_enabled,
+            "cadence": settings.cadence.as_str(),
+            "email_changed": email_changed,
+        }),
+    );
+    Ok(Json(notification_view(&state, &principal).await?))
+}
+
+async fn confirm_notifications(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+    Body(request): Body<ConfirmEmailRequest>,
+) -> Result<Json<NotificationSettingsView>, ApiError> {
+    let now = Utc::now();
+    let confirmed = state
+        .store()
+        .confirm_email(
+            &principal.user,
+            request.token.trim(),
+            now - chrono::Duration::hours(48),
+            now,
+        )
+        .await?;
+    if !confirmed {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_confirmation",
+            "This confirmation link is not valid for this account, or it expired.",
+        )
+        .with_hint("Send a new link from the notification settings."));
+    }
+    state.usage().record(
+        Some(&principal.user),
+        "email_confirmed",
+        serde_json::json!({}),
+    );
+    Ok(Json(notification_view(&state, &principal).await?))
+}
+
 async fn not_found() -> ApiError {
     ApiError::not_found("route")
 }
@@ -829,6 +1255,16 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v1/preferences", post(preferences))
         .route("/api/v1/pipeline", get(pipeline))
         .route("/api/v1/export", get(export))
+        .route("/api/v1/feed", get(feed))
+        .route("/api/v1/opportunities/{id}/dismiss", post(dismiss))
+        .route("/api/v1/taste", get(taste))
+        .route("/api/v1/profile/claims", get(claims).post(decide_claims))
+        .route("/api/v1/profile/resume", axum::routing::put(import_resume))
+        .route(
+            "/api/v1/notifications",
+            get(notifications).put(update_notifications),
+        )
+        .route("/api/v1/notifications/confirm", post(confirm_notifications))
         .nest_service("/mcp", crate::mcp::service(state.clone()))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -858,8 +1294,17 @@ pub fn router(state: ApiState) -> Router {
             .collect();
         CorsLayer::new()
             .allow_origin(AllowOrigin::list(origins))
-            .allow_methods([http::Method::GET, http::Method::POST, http::Method::DELETE])
-            .allow_headers([http::header::AUTHORIZATION, http::header::CONTENT_TYPE])
+            .allow_methods([
+                http::Method::GET,
+                http::Method::POST,
+                http::Method::PUT,
+                http::Method::DELETE,
+            ])
+            .allow_headers([
+                http::header::AUTHORIZATION,
+                http::header::CONTENT_TYPE,
+                http::HeaderName::from_static("x-jobhunt-client"),
+            ])
     };
     public
         .merge(protected)
