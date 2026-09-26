@@ -23,14 +23,21 @@ use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, Stream
 use crate::api::ApiState;
 use crate::auth::Principal;
 
-/// What hosted clients are told at initialization.
+/// What hosted clients are told at initialization: the local instructions,
+/// under the public name (Narrow) and without the claim of local storage.
 pub fn hosted_instructions() -> String {
-    INSTRUCTIONS.replace(
-        "Everything is stored locally; these tools work on the same state as the `jobhunt` \
+    INSTRUCTIONS
+        .replace(
+            "JobHunt is the person's local job-search assistant",
+            "Narrow is the person's job-search assistant",
+        )
+        .replace(
+            "Everything is stored locally; these tools work on the same state as the `jobhunt` \
 command.",
-        "This is JobHunt Cloud: the person's account, synced with their `jobhunt` command. Job \
+            "This is the person's Narrow account, synced with their `jobhunt` command. Job \
 boards are read in the background, so searches never wait for them.",
-    )
+        )
+        .replace("what JobHunt believes", "what Narrow believes")
 }
 
 /// One application per authenticated request.
@@ -50,7 +57,7 @@ impl AppProvider for HostedApps {
             None => Err(ToolError::new(
                 "unauthenticated",
                 "This request is not signed in.",
-                Some("Connect with an access token (OAuth or a JobHunt personal access token)."),
+                Some("Connect with an access token (OAuth or a Narrow personal access token)."),
             )),
         }
     }
@@ -74,7 +81,7 @@ impl AppProvider for HostedApps {
 
     fn description(&self) -> &str {
         "High-signal job discovery: your profile, verified opportunities, rankings and \
-         feedback, from your JobHunt Cloud account."
+         feedback, from your Narrow account."
     }
 }
 
@@ -119,7 +126,12 @@ mod tests {
     #[test]
     fn hosted_instructions_do_not_claim_local_storage() {
         let text = super::hosted_instructions();
-        assert!(text.contains("JobHunt Cloud"));
+        assert!(text.starts_with("Narrow is the person's job-search assistant"));
+        assert!(text.contains("the person's Narrow account"));
         assert!(!text.contains("Everything is stored locally"));
+        assert!(
+            !text.contains("JobHunt"),
+            "the public name is Narrow: {text}"
+        );
     }
 }

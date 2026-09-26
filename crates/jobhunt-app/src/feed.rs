@@ -659,7 +659,7 @@ impl FeedView {
         if report.considered == 0 {
             notes.push(match feed.mode {
                 DiscoveryMode::Background => {
-                    "JobHunt has not read any job board yet; its scheduled discovery will.".into()
+                    "Narrow has not read any job board yet; its scheduled discovery will.".into()
                 }
                 DiscoveryMode::OnDemand => {
                     "No jobs discovered yet: configure sources and refresh.".into()
