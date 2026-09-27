@@ -350,10 +350,38 @@ fn has_any(ws: &[Word], cues: &[&str]) -> bool {
     cues.iter().any(|c| Pattern::new(c).find(ws).is_some())
 }
 
+/// Words that negate the cue right after them: "not okay", "isn't fine"
+/// ("isn t"), "never acceptable".
+const NEGATIONS: [&str; 3] = ["not", "t", "never"];
+
+/// Whether the clause accepts something: `Some(true)` for an acceptance
+/// cue as said ("hybrid is okay", "I don't mind on-site"), `Some(false)`
+/// when every acceptance cue is negated ("hybrid is not okay": a rule-out,
+/// never an acceptance), `None` without one. Positive constructions that
+/// contain a negation word ("don't mind", "not opposed", "no problem") are
+/// cues of their own, matched whole, so they stay acceptances.
+fn acceptance(ws: &[Word]) -> Option<bool> {
+    let mut negated = false;
+    for cue in ACCEPTABLE_CUES {
+        for range in Pattern::new(cue).find_all(ws) {
+            let before = range.start.checked_sub(1).map(|i| ws[i].lower.as_str());
+            if before.is_some_and(|w| NEGATIONS.contains(&w)) {
+                negated = true;
+            } else {
+                return Some(true);
+            }
+        }
+    }
+    negated.then_some(false)
+}
+
 fn polarity(ws: &[Word]) -> Polarity {
-    if has_any(ws, &ACCEPTABLE_CUES) {
-        Polarity::Acceptable
-    } else if has_any(ws, &UNWANTED_CUES) {
+    match acceptance(ws) {
+        Some(true) => return Polarity::Acceptable,
+        Some(false) => return Polarity::Unwanted,
+        None => {}
+    }
+    if has_any(ws, &UNWANTED_CUES) {
         Polarity::Unwanted
     } else if has_any(ws, &REQUIRED_CUES) {
         Polarity::Required
@@ -1541,6 +1569,53 @@ mod tests {
                     .any(|p| p.value.key() == "current_location"),
                 "{home}"
             );
+        }
+    }
+
+    /// Codex review (e88868c): an acceptance word never overrides the
+    /// negation right before it, while "don't mind" stays an acceptance.
+    #[test]
+    fn negated_acceptance_is_a_rule_out() {
+        let reading = |text: &str, key: &str| {
+            let out = read(text);
+            let p = find(&out, key);
+            (p.stance, p.certainty)
+        };
+        use Certainty::Certain;
+        for (text, key, stance) in [
+            ("hybrid is okay", "work_mode:hybrid", Stance::Acceptable),
+            ("hybrid is not okay", "work_mode:hybrid", Stance::Unwanted),
+            ("Hybrid is not okay", "work_mode:hybrid", Stance::Unwanted),
+            ("hybrid isn't okay", "work_mode:hybrid", Stance::Unwanted),
+            ("on-site is fine", "work_mode:onsite", Stance::Acceptable),
+            ("on-site is not fine", "work_mode:onsite", Stance::Unwanted),
+            (
+                "on-site is never acceptable",
+                "work_mode:onsite",
+                Stance::Unwanted,
+            ),
+            (
+                "I don't mind hybrid",
+                "work_mode:hybrid",
+                Stance::Acceptable,
+            ),
+            (
+                "I don't mind working on-site",
+                "work_mode:onsite",
+                Stance::Acceptable,
+            ),
+            (
+                "I'm not opposed to hybrid",
+                "work_mode:hybrid",
+                Stance::Acceptable,
+            ),
+            (
+                "hybrid is no problem",
+                "work_mode:hybrid",
+                Stance::Acceptable,
+            ),
+        ] {
+            assert_eq!(reading(text, key), (stance, Certain), "{text}");
         }
     }
 

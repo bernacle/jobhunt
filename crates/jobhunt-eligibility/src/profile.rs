@@ -10,7 +10,7 @@
 
 use jobhunt_profile::{Engagement, PreferenceValue, ProfileData, Stance, WorkMode};
 
-use crate::geo::{Area, Country, Membership, parse_places};
+use crate::geo::{Area, COUNTRIES, Country, Membership, parse_places};
 use crate::zones::{Offsets, span, zones_in};
 
 /// Where a profile fact came from.
@@ -247,10 +247,30 @@ impl ProfileFacts {
     }
 }
 
-/// Whether an office in `place` is within a relocation destination.
+/// Whether an office in `place` is within a relocation destination:
+/// `Yes` when certainly, `No` only when certainly not, and `Maybe` when the
+/// places Narrow knows can't settle it (a city against its own country or
+/// state, or an office named only by a broad region that may include the
+/// destination). Missing detail is never a conflict.
 fn destination(allowed: Area, place: Area) -> Membership {
     if allowed == place || allowed == Area::Worldwide {
         return Membership::Yes;
+    }
+    // An office named only by a region (or "anywhere"): it may be in the
+    // destination if the region may include any country of it.
+    if place.country().is_none() {
+        let possible = |c: &Country| place.contains(c) != Membership::No;
+        let may = match allowed.country() {
+            Some(c) => possible(c),
+            None => COUNTRIES
+                .iter()
+                .any(|c| allowed.contains(c) != Membership::No && possible(c)),
+        };
+        return if may {
+            Membership::Maybe
+        } else {
+            Membership::No
+        };
     }
     match (allowed, place) {
         // Another city is another place.

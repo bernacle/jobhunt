@@ -745,3 +745,47 @@ async fn pay_periods_round_trip() {
         assert_eq!(controls(&app).await.pay.minimum[0].period, name);
     }
 }
+
+/// Codex review (e88868c): a statement that only rules a mode out adds to
+/// the work setup; it never erases the requirement already there.
+#[tokio::test]
+async fn ruling_a_mode_out_keeps_the_work_setup() {
+    let app = app_with(WorkSetupInput::RemoteOnly).await;
+    say(&app, "Hybrid is not okay").await;
+    assert_eq!(
+        work_modes(&app).await,
+        modes(&[("hybrid work", "unwanted"), ("remote work", "required")])
+    );
+    assert_eq!(controls(&app).await.work.setup, "remote_only");
+    say(&app, "on-site is not fine").await;
+    assert_eq!(
+        work_modes(&app).await,
+        modes(&[
+            ("hybrid work", "unwanted"),
+            ("onsite work", "unwanted"),
+            ("remote work", "required")
+        ])
+    );
+    assert_eq!(controls(&app).await.work.setup, "remote_only");
+
+    // Hybrid okay keeps its answer when on-site is ruled out too.
+    let app = app_with(WorkSetupInput::HybridOkay).await;
+    say(&app, "on-site is not fine").await;
+    assert_eq!(controls(&app).await.work.setup, "hybrid_okay");
+    // A rule-out that changes what a preference means is shown as said.
+    let app = app_with(WorkSetupInput::PreferRemote).await;
+    say(&app, "hybrid is not okay").await;
+    assert_eq!(
+        work_modes(&app).await,
+        modes(&[("hybrid work", "unwanted"), ("remote work", "wanted")])
+    );
+    assert_eq!(controls(&app).await.work.setup, "custom");
+
+    // "I don't mind hybrid" is an acceptance, and a new setup: it replaces.
+    let app = app_with(WorkSetupInput::RemoteOnly).await;
+    say(&app, "I don't mind hybrid").await;
+    assert_eq!(
+        work_modes(&app).await,
+        modes(&[("hybrid work", "acceptable")])
+    );
+}

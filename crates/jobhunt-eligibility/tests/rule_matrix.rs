@@ -915,3 +915,82 @@ fn relocation_only_to_selected_places() {
         Some(Membership::No)
     );
 }
+
+/// Codex review (e88868c): an office named only by a broad region may be in
+/// the city someone would move to: unresolved, never a conflict. Missing
+/// detail is never turned into "no".
+#[test]
+fn broad_office_locations_leave_relocation_unresolved() {
+    use jobhunt_eligibility::geo::Membership::{Maybe, No, Yes};
+    use jobhunt_eligibility::profile::place_area;
+    let only = |places: &[&str]| {
+        let mut p = at("São Paulo, Brazil");
+        p.relocation = Some(true);
+        p.relocation_only_to = places
+            .iter()
+            .map(|place| (place_area(place), (*place).to_owned()))
+            .collect();
+        p
+    };
+    let area = |place: &str| place_area(place).unwrap_or_else(|| panic!("{place} is recognized"));
+    let lisbon = only(&["Lisbon"]);
+    assert_eq!(lisbon.would_relocate_to(area("Lisbon")), Some(Yes));
+    assert_eq!(lisbon.would_relocate_to(area("Madrid")), Some(No));
+    assert_eq!(lisbon.would_relocate_to(area("Europe")), Some(Maybe));
+    assert_eq!(lisbon.would_relocate_to(area("Portugal")), Some(Maybe));
+    assert_eq!(
+        lisbon.would_relocate_to(area("Asia")),
+        Some(No),
+        "Asia can't hold Lisbon"
+    );
+    let portugal = only(&["Portugal"]);
+    assert_eq!(portugal.would_relocate_to(area("Europe")), Some(Maybe));
+    assert_eq!(portugal.would_relocate_to(area("Lisbon")), Some(Yes));
+    assert_eq!(portugal.would_relocate_to(area("Latin America")), Some(No));
+    // Several destinations: any certain match, all certain conflicts,
+    // otherwise unresolved.
+    assert_eq!(
+        only(&["Madrid", "Lisbon"]).would_relocate_to(area("Lisbon")),
+        Some(Yes)
+    );
+    assert_eq!(
+        only(&["Madrid", "Berlin"]).would_relocate_to(area("Lisbon")),
+        Some(No)
+    );
+    assert_eq!(
+        only(&["Madrid", "Lisbon"]).would_relocate_to(area("Europe")),
+        Some(Maybe)
+    );
+    assert_eq!(
+        only(&["Tokyo", "Lisbon"]).would_relocate_to(area("Asia")),
+        Some(Maybe)
+    );
+    assert_eq!(
+        only(&["Madrid", "Lisbon"]).would_relocate_to(area("Asia")),
+        Some(No)
+    );
+
+    // Through the rules: a hybrid office "in Europe" is uncertain, not
+    // ineligible, for someone who'd only move to Lisbon.
+    let europe = job("lever:example", "Europe", Some(WorkplaceType::Hybrid), "");
+    let d = decide(&europe, &lisbon);
+    assert_eq!(d.status, Uncertain, "{:?}", d.reasons);
+    assert!(
+        !d.reasons.iter().any(|r| r.verdict == Verdict::Fail),
+        "{:?}",
+        d.reasons
+    );
+    assert!(has_reason(
+        &d,
+        RuleId::Presence,
+        Verdict::Unknown,
+        "can't tell whether it is among the places you'd relocate to (Lisbon)"
+    ));
+    let madrid = job(
+        "lever:example",
+        "Madrid, Spain",
+        Some(WorkplaceType::Hybrid),
+        "",
+    );
+    assert_eq!(status(&madrid, &lisbon), Ineligible);
+}

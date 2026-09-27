@@ -116,8 +116,21 @@ impl WorkSetupInput {
     }
 
     /// The answer stored work-mode preferences amount to, if they are
-    /// exactly one of the five.
+    /// exactly one of the five. Ruling out a mode the answer already leaves
+    /// out ("remote only" and "hybrid is not okay") is the same answer.
     pub fn of(modes: &[(WorkMode, Stance)]) -> Option<Self> {
+        let required: Vec<WorkMode> = modes
+            .iter()
+            .filter(|(_, s)| *s == Stance::Required)
+            .map(|(m, _)| *m)
+            .collect();
+        let modes: Vec<(WorkMode, Stance)> = modes
+            .iter()
+            .copied()
+            .filter(|(m, s)| {
+                !(*s == Stance::Unwanted && !required.is_empty() && !required.contains(m))
+            })
+            .collect();
         let mut sorted = modes.to_vec();
         sorted.sort_by_key(|(m, s)| (m.as_str(), *s));
         [
