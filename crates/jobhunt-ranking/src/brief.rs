@@ -149,10 +149,13 @@ pub fn brief(
             .cmp(&(a.kind == SignalKind::Blocker))
             .then(a.weight.total_cmp(&b.weight))
     });
-    let unknowns: Vec<String> = others()
-        .filter(|s| s.kind == SignalKind::Unknown)
-        .map(|s| s.summary.clone())
-        .collect();
+    // What the person stated comes first: a requirement the posting leaves
+    // unresolved ("Unresolved: you require at least USD 140,000 per year")
+    // matters more than a fact the posting simply omits, and a card may
+    // show only the first unknown.
+    let mut unknowns: Vec<&Signal> = others().filter(|s| s.kind == SignalKind::Unknown).collect();
+    unknowns.sort_by_key(|s| s.basis != Basis::Stated);
+    let unknowns: Vec<String> = unknowns.into_iter().map(|s| s.summary.clone()).collect();
     DecisionBrief {
         verdict: verdict(gate, tier, person),
         summary: summary(facets, pay),

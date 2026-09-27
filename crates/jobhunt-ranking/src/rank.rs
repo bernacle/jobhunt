@@ -45,7 +45,7 @@ use crate::taste::TasteModel;
 
 /// Revision of the signals, weights, gates and tiers. Part of every stored
 /// ranking's key; bump it with any change that can rank a job differently.
-pub const RANKING_VERSION: &str = "3";
+pub const RANKING_VERSION: &str = "4";
 
 /// Why an opportunity is not among the recommendations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
