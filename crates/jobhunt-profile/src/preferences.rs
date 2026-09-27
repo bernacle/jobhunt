@@ -369,8 +369,16 @@ pub enum PreferenceValue {
     Timezone {
         zone: String,
     },
+    /// Whether the user would move for a job, and, when only to some
+    /// places, which (as written). Separate from the work setup: someone
+    /// who wants remote work may still move, and someone open to an
+    /// office may not.
     Relocation {
         willing: bool,
+        /// Only these countries or regions; empty is anywhere (when
+        /// willing).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        only_to: Vec<String>,
     },
     Sponsorship {
         needed: bool,
@@ -392,6 +400,19 @@ pub enum PreferenceValue {
     },
     WorkStyle {
         aspect: WorkAspect,
+    },
+    /// What to do with a job whose pay isn't published (or can't be
+    /// compared with the user's in its currency and period): show it,
+    /// marked unresolved, or leave it out. Unknown pay never meets a
+    /// minimum either way.
+    UnknownPay {
+        show: bool,
+    },
+    /// What to do with a job when Narrow can't confirm the user may take
+    /// it from where they are ("Remote" with no geographic scope): show it,
+    /// marked unresolved, or leave it out until it is confirmed.
+    UnclearEligibility {
+        show: bool,
     },
 }
 
@@ -431,7 +452,9 @@ impl PreferenceValue {
             | Self::Relocation { .. }
             | Self::Sponsorship { .. }
             | Self::WorkAuthorization { .. }
-            | Self::Engagement { .. } => PreferenceCategory::Location,
+            | Self::Engagement { .. }
+            | Self::UnclearEligibility { .. } => PreferenceCategory::Location,
+            Self::UnknownPay { .. } => PreferenceCategory::Compensation,
             Self::Company { .. } => PreferenceCategory::Company,
             Self::Domain { .. } => PreferenceCategory::Domain,
             Self::WorkStyle { .. } => PreferenceCategory::WorkStyle,
@@ -463,6 +486,8 @@ impl PreferenceValue {
             Self::Company { company } => format!("company:{}", company.as_str()),
             Self::Domain { domain } => format!("domain:{}", search_key(domain)),
             Self::WorkStyle { aspect } => format!("work_style:{}", aspect.as_str()),
+            Self::UnknownPay { .. } => "unknown_pay".to_owned(),
+            Self::UnclearEligibility { .. } => "unclear_eligibility".to_owned(),
         }
     }
 }
@@ -505,8 +530,14 @@ impl fmt::Display for PreferenceValue {
             Self::CurrentLocation { place } => write!(f, "based in {place}"),
             Self::Region { region } => write!(f, "work in {region}"),
             Self::Timezone { zone } => write!(f, "time zone {zone}"),
-            Self::Relocation { willing: true } => write!(f, "willing to relocate"),
-            Self::Relocation { willing: false } => write!(f, "not willing to relocate"),
+            Self::Relocation {
+                willing: true,
+                only_to,
+            } if !only_to.is_empty() => {
+                write!(f, "willing to relocate only to {}", only_to.join(", "))
+            }
+            Self::Relocation { willing: true, .. } => write!(f, "willing to relocate"),
+            Self::Relocation { willing: false, .. } => write!(f, "not willing to relocate"),
             Self::Sponsorship { needed: true } => write!(f, "needs visa sponsorship"),
             Self::Sponsorship { needed: false } => write!(f, "does not need visa sponsorship"),
             Self::WorkAuthorization { place } => write!(f, "authorized to work in {place}"),
@@ -521,6 +552,16 @@ impl fmt::Display for PreferenceValue {
             Self::Company { company } => write!(f, "{}", company.label()),
             Self::Domain { domain } => write!(f, "{domain}"),
             Self::WorkStyle { aspect } => write!(f, "{}", aspect.label()),
+            Self::UnknownPay { show: true } => {
+                write!(f, "show jobs that don't publish pay, marked unresolved")
+            }
+            Self::UnknownPay { show: false } => write!(f, "hide jobs that don't publish pay"),
+            Self::UnclearEligibility { show: true } => {
+                write!(f, "show jobs with unclear eligibility, marked unresolved")
+            }
+            Self::UnclearEligibility { show: false } => {
+                write!(f, "hide jobs until eligibility is confirmed")
+            }
         }
     }
 }
@@ -643,6 +684,8 @@ pub struct PreferenceStatement {
 pub struct CompensationView<'a> {
     pub minimum: Vec<&'a Preference>,
     pub target: Vec<&'a Preference>,
+    /// Whether jobs that don't publish pay are shown (unset: shown).
+    pub unknown_pay: Option<&'a Preference>,
 }
 
 /// Location constraints, as the user stated them.
@@ -656,6 +699,8 @@ pub struct LocationView<'a> {
     pub sponsorship: Option<&'a Preference>,
     pub authorizations: Vec<&'a Preference>,
     pub engagements: Vec<&'a Preference>,
+    /// Whether jobs with unclear eligibility are shown (unset: shown).
+    pub unclear_eligibility: Option<&'a Preference>,
 }
 
 /// Typed read access over the active preferences.
@@ -709,11 +754,13 @@ impl<'a> PreferencesView<'a> {
     pub fn compensation(&self) -> CompensationView<'a> {
         let mut view = CompensationView::default();
         for p in self.active() {
-            if let PreferenceValue::Compensation { bound, .. } = &p.value {
-                match bound {
+            match &p.value {
+                PreferenceValue::Compensation { bound, .. } => match bound {
                     CompensationBound::Minimum => view.minimum.push(p),
                     CompensationBound::Target => view.target.push(p),
-                }
+                },
+                PreferenceValue::UnknownPay { .. } => view.unknown_pay = Some(p),
+                _ => {}
             }
         }
         view
@@ -731,6 +778,7 @@ impl<'a> PreferencesView<'a> {
                 PreferenceValue::Sponsorship { .. } => view.sponsorship = Some(p),
                 PreferenceValue::WorkAuthorization { .. } => view.authorizations.push(p),
                 PreferenceValue::Engagement { .. } => view.engagements.push(p),
+                PreferenceValue::UnclearEligibility { .. } => view.unclear_eligibility = Some(p),
                 _ => {}
             }
         }
@@ -760,6 +808,22 @@ impl<'a> PreferencesView<'a> {
                 _ => None,
             })
             .collect()
+    }
+
+    /// Whether jobs that don't publish comparable pay may be shown
+    /// (marked unresolved). Shown unless the user said otherwise.
+    pub fn shows_unknown_pay(&self) -> bool {
+        !self
+            .active()
+            .any(|p| matches!(p.value, PreferenceValue::UnknownPay { show: false }))
+    }
+
+    /// Whether jobs Narrow can't confirm the user may take may be shown
+    /// (marked unresolved). Shown unless the user said otherwise.
+    pub fn shows_unclear_eligibility(&self) -> bool {
+        !self
+            .active()
+            .any(|p| matches!(p.value, PreferenceValue::UnclearEligibility { show: false }))
     }
 
     pub fn work_style(&self) -> Vec<(WorkAspect, Stance)> {
@@ -834,6 +898,43 @@ mod tests {
             serde_json::from_str::<PreferenceValue>(&json).unwrap(),
             contractor
         );
+    }
+
+    #[test]
+    fn policies_and_relocation_places_are_additive() {
+        // Stored before relocation places existed: still reads.
+        let old: PreferenceValue =
+            serde_json::from_str(r#"{"type":"relocation","willing":true}"#).unwrap();
+        assert_eq!(
+            old,
+            PreferenceValue::Relocation {
+                willing: true,
+                only_to: Vec::new()
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&old).unwrap(),
+            r#"{"type":"relocation","willing":true}"#
+        );
+        let only = PreferenceValue::Relocation {
+            willing: true,
+            only_to: vec!["Portugal".into(), "Spain".into()],
+        };
+        assert_eq!(only.key(), "relocation");
+        assert_eq!(
+            only.to_string(),
+            "willing to relocate only to Portugal, Spain"
+        );
+        let hide = PreferenceValue::UnknownPay { show: false };
+        assert_eq!(hide.key(), "unknown_pay");
+        assert_eq!(hide.category(), PreferenceCategory::Compensation);
+        assert_eq!(
+            serde_json::to_string(&hide).unwrap(),
+            r#"{"type":"unknown_pay","show":false}"#
+        );
+        let strict = PreferenceValue::UnclearEligibility { show: false };
+        assert_eq!(strict.key(), "unclear_eligibility");
+        assert_eq!(strict.category(), PreferenceCategory::Location);
     }
 
     #[test]

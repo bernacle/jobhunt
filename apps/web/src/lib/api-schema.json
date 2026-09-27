@@ -393,7 +393,7 @@
           "type": "object"
         },
         {
-          "description": "\"Small teams: must have, or nice to have? The team you'd join, or\nthe company's size?\" Words like these rarely say which.",
+          "description": "\"Small teams: must have, or nice to have? The team you'd join, or\nthe company's size?\" Asked when the words didn't make the stance\nclear (\"small teams\" alone, \"maybe small teams\").",
           "properties": {
             "kind": {
               "const": "size",
@@ -407,6 +407,29 @@
           "required": [
             "kind",
             "value"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "\"Remote: must have, or nice to have?\" Asked when the words didn't\nsay (\"remote, at least USD 140k\"). Until answered it is read as a\nnice-to-have: it changes the order and rules nothing out.",
+          "properties": {
+            "input": {
+              "$ref": "#/$defs/PreferenceInput",
+              "description": "The same preference as an input; answering sets it with the\nchosen stance (`require` or `want`) in place of this reading."
+            },
+            "kind": {
+              "const": "importance",
+              "type": "string"
+            },
+            "value": {
+              "description": "The preference, readable: \"remote work\", \"startups\".",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "value",
+            "input"
           ],
           "type": "object"
         }
@@ -458,6 +481,59 @@
         "profile_revision",
         "feedback",
         "notification_cursor"
+      ],
+      "type": "object"
+    },
+    "CompanyControl": {
+      "description": "One kind of team or company.",
+      "properties": {
+        "importance": {
+          "description": "`must_have`, `nice_to_have`, `avoid` or `off`.",
+          "type": "string"
+        },
+        "layer": {
+          "description": "`requirement`, `preference`, or `none` when off.",
+          "type": "string"
+        },
+        "record": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreferenceView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scope": {
+          "description": "`team`, `company_size` or `stage`: a company's size never stands in\nfor a team's, and neither is a stage.",
+          "type": "string"
+        },
+        "value": {
+          "description": "`small_team`, `small_company`, `large_company`, `early_stage`,\n`startup`, `scaleup`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "scope",
+        "importance",
+        "layer"
+      ],
+      "type": "object"
+    },
+    "CompanyControls": {
+      "description": "Team size, company size and stage, kept apart.",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/CompanyControl"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "items"
       ],
       "type": "object"
     },
@@ -2131,6 +2207,85 @@
       ],
       "type": "string"
     },
+    "LocationControls": {
+      "description": "Where the person lives and may work, and what to do when eligibility\nis unclear. The job's own location, its remote scope, the person's work\nauthorization and relocation are separate things, kept apart.",
+      "properties": {
+        "authorized_in": {
+          "description": "Countries or regions the person stated they may already work in.",
+          "items": {
+            "$ref": "#/$defs/PlaceControl"
+          },
+          "type": "array"
+        },
+        "home": {
+          "description": "Where the person lives, as written (from the preference, else the\nresume header).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "home_basis": {
+          "description": "`preference` or `resume`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "home_country": {
+          "description": "The country Narrow reads it as (\"Brazil\"); absent when unrecognized.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "home_record": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreferenceView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The `current_location` preference, when set."
+        },
+        "remote_geography": {
+          "description": "Geographies remote roles should be open to, with their stance.",
+          "items": {
+            "$ref": "#/$defs/PlaceControl"
+          },
+          "type": "array"
+        },
+        "remote_open_to_you": {
+          "description": "Remote scopes that include where the person lives, broadest first\n(\"anywhere\", \"the Americas\", \"Latin America\", \"South America\",\n\"Brazil\"). A posting that says only \"Remote\" is none of these.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "unclear_eligibility": {
+          "description": "`show` (marked unresolved; the default) or `hide` (until\neligibility is confirmed).",
+          "type": "string"
+        },
+        "unclear_eligibility_record": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreferenceView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "remote_open_to_you",
+        "authorized_in",
+        "remote_geography",
+        "unclear_eligibility"
+      ],
+      "type": "object"
+    },
     "NotShown": {
       "description": "Opportunities left out, by why.",
       "properties": {
@@ -2146,6 +2301,13 @@
           "type": "integer"
         },
         "closed": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "eligibility_unconfirmed": {
+          "default": 0,
+          "description": "Eligibility not confirmed, and the person hides such jobs.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -2166,6 +2328,13 @@
           "minimum": 0,
           "type": "integer"
         },
+        "pay_unknown": {
+          "default": 0,
+          "description": "Pay not published (or not comparable), and the person hides such\njobs.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
         "rejected": {
           "format": "uint",
           "minimum": 0,
@@ -2173,7 +2342,7 @@
         },
         "unmet_requirement": {
           "default": 0,
-          "description": "The posting contradicts a required company or team kind.",
+          "description": "The posting contradicts something the person requires: a company\nor team kind, their work setup, relocation, a remote geography.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -2250,6 +2419,80 @@
         "min_interval_hours",
         "max_items",
         "recent"
+      ],
+      "type": "object"
+    },
+    "PayControl": {
+      "description": "One pay figure.",
+      "properties": {
+        "amount": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "applies_to": {
+          "description": "`employment` or `contract`; absent for both.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "currency": {
+          "description": "ISO code; absent when the person's words didn't say (never\nassumed: until it is set, pay isn't compared).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "period": {
+          "description": "`year`, `month`, `day` or `hour`.",
+          "type": "string"
+        },
+        "record": {
+          "$ref": "#/$defs/PreferenceView"
+        }
+      },
+      "required": [
+        "record",
+        "amount",
+        "period"
+      ],
+      "type": "object"
+    },
+    "PayControls": {
+      "description": "A minimum (a requirement) and a target (a preference), and what to do\nwith jobs whose pay isn't published.",
+      "properties": {
+        "minimum": {
+          "items": {
+            "$ref": "#/$defs/PayControl"
+          },
+          "type": "array"
+        },
+        "target": {
+          "items": {
+            "$ref": "#/$defs/PayControl"
+          },
+          "type": "array"
+        },
+        "unknown_pay": {
+          "description": "`show` (marked unresolved; the default) or `hide`.",
+          "type": "string"
+        },
+        "unknown_pay_record": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreferenceView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "minimum",
+        "target",
+        "unknown_pay"
       ],
       "type": "object"
     },
@@ -2424,6 +2667,61 @@
       ],
       "type": "object"
     },
+    "PlaceControl": {
+      "description": "A place the person named, as written and as Narrow reads it.",
+      "properties": {
+        "code": {
+          "description": "Stable code of the place (`worldwide`, `americas`, `latam`, `BR`),\nwhen recognized.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "place": {
+          "description": "As written.",
+          "type": "string"
+        },
+        "read_as": {
+          "description": "How Narrow reads it (\"Brazil\", \"Latin America\", \"anywhere\"); absent\nwhen it doesn't recognize the place, which then never counts as\nincluding anywhere.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "record": {
+          "$ref": "#/$defs/PreferenceView"
+        }
+      },
+      "required": [
+        "record",
+        "place"
+      ],
+      "type": "object"
+    },
+    "PreferenceControls": {
+      "description": "Every structured control, read from the preferences in effect.",
+      "properties": {
+        "company": {
+          "$ref": "#/$defs/CompanyControls"
+        },
+        "location": {
+          "$ref": "#/$defs/LocationControls"
+        },
+        "pay": {
+          "$ref": "#/$defs/PayControls"
+        },
+        "work": {
+          "$ref": "#/$defs/WorkControls"
+        }
+      },
+      "required": [
+        "work",
+        "location",
+        "pay",
+        "company"
+      ],
+      "type": "object"
+    },
     "PreferenceInput": {
       "description": "One precise preference.",
       "oneOf": [
@@ -2588,11 +2886,18 @@
         },
         {
           "additionalProperties": false,
-          "description": "Whether the person would relocate.",
+          "description": "Whether the person would relocate, and, when willing only to some\nplaces, which countries or regions (\"Portugal\", \"the EU\"). Separate\nfrom the work setup.",
           "properties": {
             "kind": {
               "const": "relocation",
               "type": "string"
+            },
+            "only_to": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
             },
             "willing": {
               "type": "boolean"
@@ -2601,6 +2906,60 @@
           "required": [
             "kind",
             "willing"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Remote only, prefer remote, hybrid okay, on-site okay, or no\npreference: replaces every remote/hybrid/on-site preference.",
+          "properties": {
+            "kind": {
+              "const": "work_setup",
+              "type": "string"
+            },
+            "setup": {
+              "$ref": "#/$defs/WorkSetupInput"
+            }
+          },
+          "required": [
+            "kind",
+            "setup"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Jobs whose pay isn't published (or can't be compared with yours):\n`show` them marked unresolved (the default), or hide them. Unknown\npay never meets a minimum either way.",
+          "properties": {
+            "kind": {
+              "const": "unknown_pay",
+              "type": "string"
+            },
+            "show": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "show"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Jobs Narrow can't confirm you may take (\"Remote\" with no geographic\nscope): `show` them marked unresolved (the default), or hide them\nuntil eligibility is confirmed.",
+          "properties": {
+            "kind": {
+              "const": "unclear_eligibility",
+              "type": "string"
+            },
+            "show": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "show"
           ],
           "type": "object"
         },
@@ -2831,6 +3190,10 @@
           "description": "`pref_…`.",
           "type": "string"
         },
+        "layer": {
+          "description": "`requirement` (a stated conflict can leave a job out; unknown stays\nunresolved) or `preference` (ranking only). See [`layer`].",
+          "type": "string"
+        },
         "note": {
           "description": "How an ambiguous part was read, for the person to check.",
           "type": [
@@ -2872,7 +3235,8 @@
         "value",
         "certainty",
         "origin",
-        "active"
+        "active",
+        "layer"
       ],
       "type": "object"
     },
@@ -3805,6 +4169,10 @@
           },
           "type": "array"
         },
+        "controls": {
+          "$ref": "#/$defs/PreferenceControls",
+          "description": "The same preferences as structured controls (work setup,\nrelocation, location, pay, company and team), each in its layer."
+        },
         "covered_by_stated": {
           "description": "Patterns about something the person also stated: what they said is\nused.",
           "items": {
@@ -3869,6 +4237,7 @@
       },
       "required": [
         "stated",
+        "controls",
         "statements",
         "learned",
         "contradictory",
@@ -4394,12 +4763,79 @@
       ],
       "type": "object"
     },
+    "WorkControls": {
+      "description": "Remote, hybrid or on-site, and relocation: two separate answers.",
+      "properties": {
+        "custom": {
+          "description": "The stored work modes in words, when `setup` is `custom`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "relocation": {
+          "description": "`not_willing`, `open`, `only_selected` or `unset`.",
+          "type": "string"
+        },
+        "relocation_only_to": {
+          "description": "The places, when `only_selected`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "relocation_record": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreferenceView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "setup": {
+          "description": "`remote_only`, `prefer_remote`, `hybrid_okay`, `onsite_okay`,\n`no_preference`, or `custom` when the stored work modes are none of\nthose (a statement said \"hybrid, not on-site\"; see `custom`).",
+          "type": "string"
+        },
+        "setup_layer": {
+          "description": "`requirement`, `preference`, or `none` (no preference).",
+          "type": "string"
+        },
+        "setup_records": {
+          "description": "The work-mode preferences behind the answer.",
+          "items": {
+            "$ref": "#/$defs/PreferenceView"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "setup",
+        "setup_layer",
+        "setup_records",
+        "relocation",
+        "relocation_only_to"
+      ],
+      "type": "object"
+    },
     "WorkModeInput": {
       "description": "Remote, hybrid or on-site.",
       "enum": [
         "remote",
         "hybrid",
         "onsite"
+      ],
+      "type": "string"
+    },
+    "WorkSetupInput": {
+      "description": "How the person wants to work, as one answer. Each is stored as the\nwork-mode preferences it means, replacing any others:\n\n| Answer | Stored | Layer |\n| --- | --- | --- |\n| `remote_only` | remote: required | requirement: hybrid or on-site jobs are a stated conflict |\n| `prefer_remote` | remote: wanted | preference: ranking only |\n| `hybrid_okay` | remote or hybrid: required | requirement: on-site jobs are a stated conflict |\n| `onsite_okay` | on-site: acceptable | preference: nothing is ruled out |\n| `no_preference` | nothing | — |\n\nWork setup is not relocation (a separate answer), nor where the person\nmay legally work.",
+      "enum": [
+        "remote_only",
+        "prefer_remote",
+        "hybrid_okay",
+        "onsite_okay",
+        "no_preference"
       ],
       "type": "string"
     }

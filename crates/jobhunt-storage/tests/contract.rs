@@ -57,6 +57,7 @@ contract!(
     feedback_rankings_and_eligibility_cache,
     state_import_is_atomic_and_idempotent,
     write_lock_serializes_writers,
+    structured_preference_values_round_trip,
 );
 
 async fn round_trips_and_classifies_the_lifecycle(store: &dyn Store) {
@@ -487,6 +488,62 @@ async fn profile_round_trip_revisions_and_claims(store: &dyn Store) {
         ProfileEventKind::ResumeImported
     );
     assert!(events.last().unwrap().detail.contains("ana_lima.md"));
+}
+
+/// The values the structured Preferences controls write (BRU-308) survive
+/// a reload on every backend, beside the older ones.
+async fn structured_preference_values_round_trip(store: &dyn Store) {
+    use jobhunt_profile::{PreferenceValue, Stance};
+    let service = ProfileService::new(store);
+    let values = [
+        PreferenceValue::Relocation {
+            willing: true,
+            only_to: vec!["Portugal".into(), "the EU".into()],
+        },
+        PreferenceValue::UnknownPay { show: false },
+        PreferenceValue::UnclearEligibility { show: true },
+        PreferenceValue::Region {
+            region: "Latin America".into(),
+        },
+    ];
+    for (i, value) in values.iter().enumerate() {
+        service
+            .set_preference(value.clone(), Stance::Required, at(i as i64))
+            .await
+            .unwrap();
+    }
+    let data = service.require().await.unwrap();
+    for value in &values {
+        assert!(
+            data.preferences
+                .iter()
+                .any(|p| p.active && &p.value == value),
+            "{value:?}"
+        );
+    }
+    let view = data.preferences();
+    assert!(!view.shows_unknown_pay());
+    assert!(view.shows_unclear_eligibility());
+    // A newer answer replaces the older one (same key), which is kept.
+    service
+        .set_preference(
+            PreferenceValue::Relocation {
+                willing: false,
+                only_to: Vec::new(),
+            },
+            Stance::Required,
+            at(10),
+        )
+        .await
+        .unwrap();
+    let data = service.require().await.unwrap();
+    let relocation: Vec<_> = data
+        .preferences
+        .iter()
+        .filter(|p| p.value.key() == "relocation")
+        .collect();
+    assert_eq!(relocation.len(), 2);
+    assert_eq!(relocation.iter().filter(|p| p.active).count(), 1);
 }
 
 async fn feedback_rankings_and_eligibility_cache(store: &dyn Store) {

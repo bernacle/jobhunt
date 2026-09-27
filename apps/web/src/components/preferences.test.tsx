@@ -12,12 +12,12 @@ import { NotInUse, TasteTable } from "./taste";
 const result: PreferenceUpdateResult = {
   statement: { id: "stmt_1", text: "…", reading: "partial", not_understood: ["something about vibes"], at: "2026-09-25T12:00:00Z" },
   interpreted: [
-    { id: "pref_1", category: "company", stance: "wanted", value: "small teams", certainty: "certain", origin: "statement", active: true },
-    { id: "pref_2", category: "compensation", stance: "required", value: "at least USD 140,000 per year", certainty: "certain", origin: "statement", active: true },
-    { id: "pref_3", category: "role", stance: "unwanted", value: "SRE roles", certainty: "uncertain", origin: "statement", note: "read 'pure SRE' as SRE roles", active: true },
+    { id: "pref_1", category: "company", stance: "wanted", value: "small teams", certainty: "certain", origin: "statement", active: true, layer: "preference" },
+    { id: "pref_2", category: "compensation", stance: "required", value: "at least USD 140,000 per year", certainty: "certain", origin: "statement", active: true, layer: "preference" },
+    { id: "pref_3", category: "role", stance: "unwanted", value: "SRE roles", certainty: "uncertain", origin: "statement", note: "read 'pure SRE' as SRE roles", active: true, layer: "preference" },
   ],
   uncertain: [
-    { id: "pref_3", category: "role", stance: "unwanted", value: "SRE roles", certainty: "uncertain", origin: "statement", note: "read 'pure SRE' as SRE roles", active: true },
+    { id: "pref_3", category: "role", stance: "unwanted", value: "SRE roles", certainty: "uncertain", origin: "statement", note: "read 'pure SRE' as SRE roles", active: true, layer: "preference" },
   ],
   not_understood: ["something about vibes"],
   replaced: [],
@@ -64,24 +64,13 @@ describe("AddPreference", () => {
     expect(await violations(container)).toEqual([]);
   });
 
-  it("sets a pay minimum precisely, as a hard floor", async () => {
-    const set = vi.fn(async () => ok);
-    render(<AddPreference set={set} />);
-    await userEvent.selectOptions(screen.getByLabelText("About"), "compensation");
-    expect(screen.getByLabelText("Rule")).toHaveValue("minimum");
-    await userEvent.type(screen.getByLabelText(/Value/), "140,000");
-    await userEvent.click(screen.getByRole("button", { name: "Add preference" }));
-    expect(set).toHaveBeenCalledWith({ kind: "compensation", minimum: 140000, target: null, currency: "USD", period: "year" });
-  });
-
-  it("refuses an amount that isn't a number, without calling the API", async () => {
-    const set = vi.fn(async () => ok);
-    render(<AddPreference set={set} />);
-    await userEvent.selectOptions(screen.getByLabelText("About"), "compensation");
-    await userEvent.type(screen.getByLabelText(/Value/), "lots");
-    await userEvent.click(screen.getByRole("button", { name: "Add preference" }));
-    expect(set).not.toHaveBeenCalled();
-    expect(screen.getByText(/Enter the amount as a number/)).toBeInTheDocument();
+  it("leaves work setup, location, pay and company size to the structured settings", async () => {
+    render(<AddPreference set={vi.fn(async () => ok)} />);
+    const about = screen.getByLabelText("About");
+    const kinds = within(about).getAllByRole("option").map((o) => o.getAttribute("value"));
+    expect(kinds).toEqual(["role", "domain", "work_style", "company", "timezone"]);
+    // No currency is ever filled in for the person.
+    expect(screen.queryByLabelText("Currency")).not.toBeInTheDocument();
   });
 });
 

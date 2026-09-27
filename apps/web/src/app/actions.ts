@@ -93,6 +93,17 @@ export async function clarifyPreference(id: string, set: PreferenceInput[]): Pro
   return result;
 }
 
+/**
+ * A change from the structured controls: the preferences to set and the
+ * ones they replace (ids), in one update. The API decides what each value
+ * means; this only forwards the person's choice.
+ */
+export async function updatePreferences(set: PreferenceInput[], remove: string[] = []): Promise<ActionResult<PreferenceUpdateResult>> {
+  const result = await attempt(() => api.preferences({ set, remove }));
+  if (result.ok) refresh();
+  return result;
+}
+
 export async function removePreference(id: string): Promise<ActionResult<PreferenceUpdateResult>> {
   const result = await attempt(() => api.preferences({ remove: [id] }));
   if (result.ok) refresh();

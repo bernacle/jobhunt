@@ -501,7 +501,7 @@ network.
 | `jobhunt claims add "…" [--for <id>] [--kind K]` / `edit <id> "…"` | State or reword a claim yourself |
 | `jobhunt preferences` | Preferences by category, and your statements verbatim |
 | `jobhunt preferences add "…"` | A preference statement in your own words |
-| `jobhunt preferences set role\|compensation\|work-mode\|location\|region\|timezone\|relocation\|sponsorship\|company\|domain\|work-style …` | One structured preference |
+| `jobhunt preferences set role\|compensation\|work-mode\|work-setup\|location\|region\|timezone\|relocation\|sponsorship\|company\|domain\|work-style\|unknown-pay\|unclear-eligibility …` | One structured preference |
 | `jobhunt preferences remove <pref_…\|stmt_…>` | Remove a preference, or a statement and what was read from it |
 
 Ids are printed short (`clm_3fa2b1c4`); any unique prefix works. `claim`
@@ -632,6 +632,29 @@ authorization and engagement preferences (see
 [Verification and eligibility](#verification-and-eligibility)); `jobhunt
 rank` reads the rest (pay, roles, companies, domains, work style; see
 [Ranking, feedback and taste](#ranking-feedback-and-taste)).
+
+The web app's Preferences page shows the same records as structured
+settings, each in one of three layers: **requirements** (a posting that
+states the opposite is left out as a stated conflict; one that doesn't say
+is unresolved, never a strong fit, and never counted as meeting it),
+**preferences** (they only change the order), and **learned** taste (from
+decisions, ranking only). A statement fills the settings in; a setting
+changed directly replaces what the statement set, and the statement stays
+as written. Ambiguous words are asked about, never guessed: a missing
+currency, a floor or a target, the team or the company, a must or a
+nice-to-have.
+
+| Setting | CLI | Stored as |
+| --- | --- | --- |
+| Work setup | `preferences set work-setup remote-only\|prefer-remote\|hybrid-okay\|onsite-okay\|no-preference` | remote required; remote wanted (ranking only); remote or hybrid required; on-site acceptable; nothing. Replaces every work-mode preference |
+| Relocation | `preferences set relocation yes\|no [--only-to PLACE …]` | separate from the work setup; an office outside the named places is a conflict |
+| Remote roles open to | `preferences set region Worldwide\|Americas\|"Latin America"\|<place> --stance require\|want` | a required geography the published remote scope is entirely outside of is a stated conflict; "Remote" with no scope is unresolved |
+| Unclear eligibility | `preferences set unclear-eligibility show\|hide` | `hide` leaves out jobs whose eligibility isn't confirmed |
+| Unknown pay | `preferences set unknown-pay show\|hide` | `hide` leaves out jobs without comparable published pay; either way unknown pay never meets a minimum |
+
+"Remote from Brazil" reads as living in Brazil and requiring remote work.
+A job ruled out only by the work setup or relocation is counted as a
+stated conflict (`not_shown.unmet_requirement`), not as "can't take it".
 
 ### Re-importing a resume
 
@@ -1362,7 +1385,7 @@ exits when the client disconnects (stdin closes).
 | `get_job` | read | One opportunity: locations, workplace, compensation facts, description summary (`full_description` for all of it), verification, eligibility with reasons, the decision brief, pipeline state; `include_sources` adds every source record with its provenance and latest attempt. Does not mark it seen |
 | `verify_job` | network | Asks the authoritative sources now (`force`, or reuse an attempt from the last few minutes): listing and application state, authority, last attempt and success, compensation facts, eligibility, what remains uncertain, per source |
 | `get_profile` | read | Professional profile: headline, location, experiences, technologies with evidence strength, domains, role and ownership signals, preferences and statements, claims awaiting review, gaps. Never names or contact details |
-| `update_preferences` | **writes** | `statement` (your words, kept verbatim), `set` (typed values: `role`, `compensation`, `work_mode`, `location`, `region`, `timezone`, `relocation`, `sponsorship`, `authorized_in`, `engagement`, `company`, `domain`, `work_style`), `remove` (`pref_…`/`stmt_…`). Returns what was understood, what is uncertain, what was not understood (verbatim), what was replaced, and every preference in effect |
+| `update_preferences` | **writes** | `statement` (your words, kept verbatim), `set` (typed values: `role`, `compensation`, `work_mode`, `work_setup`, `location`, `region`, `timezone`, `relocation` (with `only_to`), `sponsorship`, `authorized_in`, `engagement`, `company`, `domain`, `work_style`, `unknown_pay`, `unclear_eligibility`), `remove` (`pref_…`/`stmt_…`). Returns what was understood, what is uncertain, what was not understood (verbatim), what was replaced, and every preference in effect |
 | `save_job` | **writes** | Save (a rejected opportunity comes back) |
 | `reject_job` | **writes** | Not interested, with the person's `reason` verbatim; returns how it was read and whether learned taste changed |
 | `mark_applied` | **writes** | The person applied; nothing else about the application is stored |

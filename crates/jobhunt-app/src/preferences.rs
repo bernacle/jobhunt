@@ -67,6 +67,88 @@ pub enum WorkModeInput {
     Onsite,
 }
 
+/// How the person wants to work, as one answer. Each is stored as the
+/// work-mode preferences it means, replacing any others:
+///
+/// | Answer | Stored | Layer |
+/// | --- | --- | --- |
+/// | `remote_only` | remote: required | requirement: hybrid or on-site jobs are a stated conflict |
+/// | `prefer_remote` | remote: wanted | preference: ranking only |
+/// | `hybrid_okay` | remote or hybrid: required | requirement: on-site jobs are a stated conflict |
+/// | `onsite_okay` | on-site: acceptable | preference: nothing is ruled out |
+/// | `no_preference` | nothing | — |
+///
+/// Work setup is not relocation (a separate answer), nor where the person
+/// may legally work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkSetupInput {
+    RemoteOnly,
+    PreferRemote,
+    HybridOkay,
+    OnsiteOkay,
+    NoPreference,
+}
+
+impl WorkSetupInput {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::RemoteOnly => "remote_only",
+            Self::PreferRemote => "prefer_remote",
+            Self::HybridOkay => "hybrid_okay",
+            Self::OnsiteOkay => "onsite_okay",
+            Self::NoPreference => "no_preference",
+        }
+    }
+
+    /// The work-mode preferences the answer is stored as.
+    pub fn modes(self) -> Vec<(WorkMode, Stance)> {
+        match self {
+            Self::RemoteOnly => vec![(WorkMode::Remote, Stance::Required)],
+            Self::PreferRemote => vec![(WorkMode::Remote, Stance::Wanted)],
+            Self::HybridOkay => vec![
+                (WorkMode::Remote, Stance::Required),
+                (WorkMode::Hybrid, Stance::Required),
+            ],
+            Self::OnsiteOkay => vec![(WorkMode::Onsite, Stance::Acceptable)],
+            Self::NoPreference => Vec::new(),
+        }
+    }
+
+    /// The answer stored work-mode preferences amount to, if they are
+    /// exactly one of the five. Ruling out a mode the answer already leaves
+    /// out ("remote only" and "hybrid is not okay") is the same answer.
+    pub fn of(modes: &[(WorkMode, Stance)]) -> Option<Self> {
+        let required: Vec<WorkMode> = modes
+            .iter()
+            .filter(|(_, s)| *s == Stance::Required)
+            .map(|(m, _)| *m)
+            .collect();
+        let modes: Vec<(WorkMode, Stance)> = modes
+            .iter()
+            .copied()
+            .filter(|(m, s)| {
+                !(*s == Stance::Unwanted && !required.is_empty() && !required.contains(m))
+            })
+            .collect();
+        let mut sorted = modes.to_vec();
+        sorted.sort_by_key(|(m, s)| (m.as_str(), *s));
+        [
+            Self::RemoteOnly,
+            Self::PreferRemote,
+            Self::HybridOkay,
+            Self::OnsiteOkay,
+            Self::NoPreference,
+        ]
+        .into_iter()
+        .find(|a| {
+            let mut want = a.modes();
+            want.sort_by_key(|(m, s)| (m.as_str(), *s));
+            want == sorted
+        })
+    }
+}
+
 /// Hired as an employee or as a contractor (B2B, freelance).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -84,7 +166,7 @@ pub enum ArrangementInput {
 }
 
 /// One precise preference.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PreferenceInput {
     /// A kind of role: "backend", "full stack", "founding engineer".
@@ -127,8 +209,25 @@ pub enum PreferenceInput {
         #[serde(default)]
         stance: StanceInput,
     },
-    /// Whether the person would relocate.
-    Relocation { willing: bool },
+    /// Whether the person would relocate, and, when willing only to some
+    /// places, which countries or regions ("Portugal", "the EU"). Separate
+    /// from the work setup.
+    Relocation {
+        willing: bool,
+        #[serde(default)]
+        only_to: Vec<String>,
+    },
+    /// Remote only, prefer remote, hybrid okay, on-site okay, or no
+    /// preference: replaces every remote/hybrid/on-site preference.
+    WorkSetup { setup: WorkSetupInput },
+    /// Jobs whose pay isn't published (or can't be compared with yours):
+    /// `show` them marked unresolved (the default), or hide them. Unknown
+    /// pay never meets a minimum either way.
+    UnknownPay { show: bool },
+    /// Jobs Narrow can't confirm you may take ("Remote" with no geographic
+    /// scope): `show` them marked unresolved (the default), or hide them
+    /// until eligibility is confirmed.
+    UnclearEligibility { show: bool },
     /// Whether the person needs visa sponsorship to work where they live.
     Sponsorship { needed: bool },
     /// A country (or "the EU") the person may already work in without
@@ -265,8 +364,40 @@ impl PreferenceInput {
                 },
                 (*stance).into(),
             )],
-            Self::Relocation { willing } => vec![(
-                PreferenceValue::Relocation { willing: *willing },
+            Self::Relocation { willing, only_to } => {
+                let mut places: Vec<String> = Vec::new();
+                for place in only_to {
+                    let place = text(place, "relocation place")?;
+                    if !places.iter().any(|p| p.eq_ignore_ascii_case(&place)) {
+                        places.push(place);
+                    }
+                }
+                if !willing && !places.is_empty() {
+                    return Err(invalid(
+                        "relocation places only apply when you're willing to relocate",
+                    ));
+                }
+                vec![(
+                    PreferenceValue::Relocation {
+                        willing: *willing,
+                        only_to: places,
+                    },
+                    Stance::Required,
+                )]
+            }
+            Self::WorkSetup { setup } => setup
+                .modes()
+                .into_iter()
+                .map(|(mode, stance)| (PreferenceValue::WorkMode { mode }, stance))
+                .collect(),
+            Self::UnknownPay { show } => {
+                vec![(
+                    PreferenceValue::UnknownPay { show: *show },
+                    Stance::Required,
+                )]
+            }
+            Self::UnclearEligibility { show } => vec![(
+                PreferenceValue::UnclearEligibility { show: *show },
                 Stance::Required,
             )],
             Self::Sponsorship { needed } => vec![(
@@ -368,8 +499,13 @@ impl LocalApp {
             ));
         }
         let mut values = Vec::new();
+        // A work setup answer replaces every work mode it doesn't keep.
+        let mut work_setup: Option<Vec<(WorkMode, Stance)>> = None;
         for input in &update.set {
             values.extend(input.values()?);
+            if let PreferenceInput::WorkSetup { setup } = input {
+                work_setup = Some(setup.modes());
+            }
         }
         for id in &update.remove {
             let id = id.trim();
@@ -391,6 +527,25 @@ impl LocalApp {
                 }
                 None => None,
             };
+            // Words that say how the person wants to work ("remote only",
+            // "hybrid is okay but I prefer remote") are a whole new work
+            // setup, exactly like a structured answer: what they read
+            // replaces every other work-mode preference. Words that only
+            // rule a mode out ("no on-site") add to the setup instead.
+            if let Some(read) = &statement {
+                let modes: Vec<(WorkMode, Stance)> = read
+                    .preferences
+                    .iter()
+                    .filter(|p| p.active)
+                    .filter_map(|p| match p.value {
+                        PreferenceValue::WorkMode { mode } => Some((mode, p.stance)),
+                        _ => None,
+                    })
+                    .collect();
+                if modes.iter().any(|(_, s)| *s != Stance::Unwanted) {
+                    removed.extend(replace_work_setup(&profiles, &modes, now).await?);
+                }
+            }
             let mut set = Vec::new();
             for (value, stance) in values {
                 let outcome = retry_conflicts(|| async {
@@ -412,6 +567,9 @@ impl LocalApp {
                 .await?;
                 set.push(outcome);
             }
+            if let Some(keep) = &work_setup {
+                removed.extend(replace_work_setup(&profiles, keep, now).await?);
+            }
             let data = profiles.load_or_new(now).await?;
             Ok(PreferenceChanges {
                 statement,
@@ -422,6 +580,36 @@ impl LocalApp {
         })
         .await
     }
+}
+
+/// Makes `keep` the whole work setup: every active work-mode preference
+/// that isn't one of these (mode, stance) pairs is removed, so there is one
+/// work setup whether it came from a structured answer or the person's
+/// words.
+async fn replace_work_setup<R>(
+    profiles: &jobhunt_profile::ProfileService<'_, R>,
+    keep: &[(WorkMode, Stance)],
+    now: DateTime<Utc>,
+) -> Result<Vec<Removal>, AppError>
+where
+    R: jobhunt_profile::ProfileRepository + ?Sized,
+{
+    let data = profiles.load_or_new(now).await?;
+    let stale: Vec<String> = data
+        .preferences
+        .iter()
+        .filter(|p| p.active)
+        .filter(|p| match p.value {
+            PreferenceValue::WorkMode { mode } => !keep.contains(&(mode, p.stance)),
+            _ => false,
+        })
+        .map(|p| p.id.to_string())
+        .collect();
+    let mut removed = Vec::new();
+    for id in stale {
+        removed.push(retry_conflicts(|| profiles.remove(&id, now)).await?);
+    }
+    Ok(removed)
 }
 
 /// Runs a profile change again when another process changed the profile
@@ -471,6 +659,9 @@ pub struct PreferenceView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub statement_id: Option<String>,
     pub active: bool,
+    /// `requirement` (a stated conflict can leave a job out; unknown stays
+    /// unresolved) or `preference` (ranking only). See [`layer`].
+    pub layer: String,
     /// What the person must settle before Narrow relies on it (read from
     /// their words, and ambiguous in a way that matters). Until then it is
     /// unresolved.
@@ -499,10 +690,21 @@ pub enum Clarify {
         applies_to: Option<String>,
     },
     /// "Small teams: must have, or nice to have? The team you'd join, or
-    /// the company's size?" Words like these rarely say which.
+    /// the company's size?" Asked when the words didn't make the stance
+    /// clear ("small teams" alone, "maybe small teams").
     Size {
         /// As read: `small_team` or `small_company`.
         value: String,
+    },
+    /// "Remote: must have, or nice to have?" Asked when the words didn't
+    /// say ("remote, at least USD 140k"). Until answered it is read as a
+    /// nice-to-have: it changes the order and rules nothing out.
+    Importance {
+        /// The preference, readable: "remote work", "startups".
+        value: String,
+        /// The same preference as an input; answering sets it with the
+        /// chosen stance (`require` or `want`) in place of this reading.
+        input: PreferenceInput,
     },
 }
 
@@ -528,12 +730,62 @@ impl Clarify {
             }),
             PreferenceValue::Company {
                 company: company @ (CompanyTrait::SmallTeam | CompanyTrait::SmallCompany),
-            } => Some(Self::Size {
+            } if p.certainty == Certainty::Uncertain => Some(Self::Size {
                 value: company.as_str().to_owned(),
             }),
+            // Whether it is a must or a nice-to-have decides whether a job
+            // can be left out, so a reading with doubts is asked, never
+            // guessed. (Unwanted readings are clear about their stance.)
+            value if p.certainty == Certainty::Uncertain && p.stance != Stance::Unwanted => {
+                let input = match value {
+                    PreferenceValue::WorkMode { mode } => PreferenceInput::WorkMode {
+                        mode: match mode {
+                            WorkMode::Remote => WorkModeInput::Remote,
+                            WorkMode::Hybrid => WorkModeInput::Hybrid,
+                            WorkMode::Onsite => WorkModeInput::Onsite,
+                        },
+                        stance: StanceInput::Want,
+                    },
+                    PreferenceValue::Company { company } => PreferenceInput::Company {
+                        company: company.as_str().to_owned(),
+                        stance: StanceInput::Want,
+                    },
+                    PreferenceValue::Region { region } => PreferenceInput::Region {
+                        region: region.clone(),
+                        stance: StanceInput::Want,
+                    },
+                    _ => return None,
+                };
+                Some(Self::Importance {
+                    value: value.to_string(),
+                    input,
+                })
+            }
             _ => None,
         }
     }
+}
+
+/// Which of the three layers a stated preference is in: a `requirement`
+/// (a posting that states the opposite is left out; one that doesn't say
+/// is unresolved, never a strong fit) or a `preference` (it only changes
+/// the order). The third layer, learned taste, is never a stated record.
+pub fn layer(p: &Preference) -> &'static str {
+    let hard = match &p.value {
+        // Facts and policies eligibility and the gates read as given.
+        PreferenceValue::CurrentLocation { .. }
+        | PreferenceValue::WorkAuthorization { .. }
+        | PreferenceValue::Sponsorship { .. }
+        | PreferenceValue::Relocation { .. }
+        | PreferenceValue::UnknownPay { .. }
+        | PreferenceValue::UnclearEligibility { .. } => true,
+        // Ruling an engagement out is an eligibility rule.
+        PreferenceValue::Engagement { .. } => {
+            matches!(p.stance, Stance::Required | Stance::Unwanted)
+        }
+        _ => p.stance == Stance::Required,
+    };
+    if hard { "requirement" } else { "preference" }
 }
 
 impl PreferenceView {
@@ -553,6 +805,7 @@ impl PreferenceView {
             note: p.note.clone(),
             statement_id: p.statement.map(|s| s.to_string()),
             active: p.active,
+            layer: layer(p).to_owned(),
             clarify: Clarify::of(p),
         }
     }

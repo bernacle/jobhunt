@@ -7,5 +7,16 @@ export function amountText(c: Extract<Clarify, { kind: "pay" }>): string {
 
 /** What a question is about, in a few words (server and client alike). */
 export function clarifyTitle(c: Clarify): string {
-  return c.kind === "pay" ? `Pay: ${amountText(c)}` : c.value === "small_company" ? "Small companies" : "Small teams";
+  switch (c.kind) {
+    case "pay":
+      return `Pay: ${amountText(c)}`;
+    case "size":
+      return c.value === "small_company" ? "Small companies" : "Small teams";
+    case "importance":
+      return capitalize(c.value);
+  }
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }

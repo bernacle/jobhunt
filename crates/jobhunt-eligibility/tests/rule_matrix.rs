@@ -705,3 +705,292 @@ fn decisions_serialize_for_storage() {
     let back: EligibilityDecision = serde_json::from_str(&json).unwrap();
     assert_eq!(back, d);
 }
+
+/// BRU-308: the work setup (remote only, hybrid okay, …) and relocation
+/// are separate answers, and a posting that explicitly requires hybrid
+/// presence in California or New York is a stated conflict for someone in
+/// Brazil who requires remote work, never "unclear".
+#[test]
+fn work_setup_and_relocation_are_separate() {
+    let hybrid_postings = [
+        job(
+            "greenhouse:example",
+            "San Francisco, CA; New York, NY",
+            Some(WorkplaceType::Hybrid),
+            "",
+        ),
+        job(
+            "ashby:example",
+            "",
+            None,
+            "This is a hybrid role: you'll work from our San Francisco or New York office three days a week.",
+        ),
+        job(
+            "lever:example",
+            "San Francisco, California",
+            Some(WorkplaceType::Hybrid),
+            "Hybrid, in the office Tuesday to Thursday.",
+        ),
+    ];
+    let brazil = || at("São Paulo, Brazil");
+
+    for posting in &hybrid_postings {
+        let what = requirements(posting)
+            .options
+            .iter()
+            .map(|o| o.label())
+            .collect::<Vec<_>>()
+            .join(" / ");
+        // Remote only, not willing to relocate: both are stated conflicts.
+        let mut remote_only = brazil();
+        remote_only.work_modes = vec![(WorkMode::Remote, Stance::Required)];
+        remote_only.relocation = Some(false);
+        let d = decide(posting, &remote_only);
+        assert_eq!(d.status, Ineligible, "{what}");
+        assert!(
+            has_reason(&d, RuleId::WorkMode, Verdict::Fail, "you require remote"),
+            "{what}: {:?}",
+            d.reasons
+        );
+        assert!(
+            has_reason(
+                &d,
+                RuleId::Presence,
+                Verdict::Fail,
+                "not willing to relocate"
+            ),
+            "{what}"
+        );
+
+        // Remote only, relocation not said: the work setup alone rules it out.
+        let mut remote_only = brazil();
+        remote_only.work_modes = vec![(WorkMode::Remote, Stance::Required)];
+        let d = decide(posting, &remote_only);
+        assert_eq!(d.status, Ineligible, "{what}");
+
+        // Prefer remote is ranking-only: eligibility says nothing about
+        // it, and relocation (not said) is what is unknown.
+        let mut prefer = brazil();
+        prefer.work_modes = vec![(WorkMode::Remote, Stance::Wanted)];
+        let d = decide(posting, &prefer);
+        assert_eq!(d.status, Uncertain, "{what}");
+        assert!(!d.reasons.iter().any(|r| r.rule == RuleId::WorkMode));
+
+        // Not willing to relocate, without any work-setup requirement:
+        // relocation is its own conflict.
+        let mut stays = brazil();
+        stays.relocation = Some(false);
+        let d = decide(posting, &stays);
+        assert_eq!(d.status, Ineligible, "{what}");
+        assert!(!d.reasons.iter().any(|r| r.rule == RuleId::WorkMode));
+        assert!(has_reason(
+            &d,
+            RuleId::Presence,
+            Verdict::Fail,
+            "not willing to relocate"
+        ));
+    }
+
+    // "Hybrid okay" (remote or hybrid) accepts the setup; relocation and
+    // authorization still decide.
+    let sf = &hybrid_postings[0];
+    let mut hybrid_ok = brazil();
+    hybrid_ok.work_modes = vec![
+        (WorkMode::Remote, Stance::Required),
+        (WorkMode::Hybrid, Stance::Required),
+    ];
+    hybrid_ok.relocation = Some(true);
+    let d = decide(sf, &hybrid_ok);
+    assert!(has_reason(&d, RuleId::WorkMode, Verdict::Pass, "hybrid"));
+    assert!(has_reason(
+        &d,
+        RuleId::Presence,
+        Verdict::Conditional,
+        "relocating to San Francisco"
+    ));
+    // An on-site office is outside "hybrid okay".
+    let onsite = job(
+        "greenhouse:example",
+        "New York, NY",
+        Some(WorkplaceType::OnSite),
+        "",
+    );
+    let d = decide(&onsite, &hybrid_ok);
+    assert_eq!(d.status, Ineligible);
+    assert!(has_reason(&d, RuleId::WorkMode, Verdict::Fail, "on-site"));
+}
+
+#[test]
+fn relocation_only_to_selected_places() {
+    use jobhunt_eligibility::geo::Membership;
+    use jobhunt_eligibility::profile::place_area;
+    let only = |places: &[&str]| {
+        let mut p = at("São Paulo, Brazil");
+        p.relocation = Some(true);
+        p.relocation_only_to = places
+            .iter()
+            .map(|place| (place_area(place), (*place).to_owned()))
+            .collect();
+        p
+    };
+    let ny = job(
+        "greenhouse:example",
+        "New York, NY",
+        Some(WorkplaceType::Hybrid),
+        "",
+    );
+    let lisbon = job(
+        "lever:example",
+        "Lisbon, Portugal",
+        Some(WorkplaceType::Hybrid),
+        "",
+    );
+    // Every destination certainly elsewhere: a conflict.
+    let d = decide(&ny, &only(&["Portugal", "Spain"]));
+    assert_eq!(d.status, Ineligible);
+    assert!(has_reason(
+        &d,
+        RuleId::Presence,
+        Verdict::Fail,
+        "you'd only relocate to Portugal or Spain"
+    ));
+    // A certain match: the move is the condition.
+    let d = decide(&lisbon, &only(&["Portugal", "Spain"]));
+    assert!(has_reason(
+        &d,
+        RuleId::Presence,
+        Verdict::Conditional,
+        "relocating to Lisbon"
+    ));
+    // Europe includes Portugal; a region counts.
+    assert_eq!(
+        only(&["Europe"]).would_relocate_to(place_area("Lisbon").unwrap()),
+        Some(Membership::Yes)
+    );
+    assert_eq!(status(&ny, &only(&["Europe"])), Ineligible);
+
+    // Codex review #4: a destination Narrow can't recognize (a typo) is
+    // unknown, never a conflict.
+    let typo = only(&["Portugall"]);
+    assert_eq!(
+        typo.relocation_only_to[0].0, None,
+        "the typo isn't recognized"
+    );
+    for office in [&lisbon, &ny] {
+        let d = decide(office, &typo);
+        assert_eq!(d.status, Uncertain, "{:?}", d.reasons);
+        assert!(has_reason(
+            &d,
+            RuleId::Presence,
+            Verdict::Unknown,
+            "can't tell whether it is among the places you'd relocate to (Portugall)"
+        ));
+    }
+    // Known and unknown alternatives: a certain match still matches; a
+    // known conflict next to an unknown one is unresolved.
+    let mixed = only(&["Spain", "Portugall"]);
+    let d = decide(&ny, &mixed);
+    assert_eq!(d.status, Uncertain);
+    assert!(!d.reasons.iter().any(|r| r.verdict == Verdict::Fail));
+    let d = decide(&lisbon, &only(&["Portugal", "Atlantis"]));
+    assert!(has_reason(
+        &d,
+        RuleId::Presence,
+        Verdict::Conditional,
+        "relocating to Lisbon"
+    ));
+    // A state named as the destination and an office city of that country:
+    // can't say; another country's city: a conflict.
+    let california = only(&["California"]);
+    assert_eq!(
+        california.would_relocate_to(place_area("San Francisco, CA").unwrap()),
+        Some(Membership::Maybe)
+    );
+    assert_eq!(
+        california.would_relocate_to(place_area("Lisbon").unwrap()),
+        Some(Membership::No)
+    );
+    assert_eq!(
+        only(&["Lisbon"]).would_relocate_to(place_area("Porto, Portugal").unwrap()),
+        Some(Membership::No)
+    );
+}
+
+/// Codex review (e88868c): an office named only by a broad region may be in
+/// the city someone would move to: unresolved, never a conflict. Missing
+/// detail is never turned into "no".
+#[test]
+fn broad_office_locations_leave_relocation_unresolved() {
+    use jobhunt_eligibility::geo::Membership::{Maybe, No, Yes};
+    use jobhunt_eligibility::profile::place_area;
+    let only = |places: &[&str]| {
+        let mut p = at("São Paulo, Brazil");
+        p.relocation = Some(true);
+        p.relocation_only_to = places
+            .iter()
+            .map(|place| (place_area(place), (*place).to_owned()))
+            .collect();
+        p
+    };
+    let area = |place: &str| place_area(place).unwrap_or_else(|| panic!("{place} is recognized"));
+    let lisbon = only(&["Lisbon"]);
+    assert_eq!(lisbon.would_relocate_to(area("Lisbon")), Some(Yes));
+    assert_eq!(lisbon.would_relocate_to(area("Madrid")), Some(No));
+    assert_eq!(lisbon.would_relocate_to(area("Europe")), Some(Maybe));
+    assert_eq!(lisbon.would_relocate_to(area("Portugal")), Some(Maybe));
+    assert_eq!(
+        lisbon.would_relocate_to(area("Asia")),
+        Some(No),
+        "Asia can't hold Lisbon"
+    );
+    let portugal = only(&["Portugal"]);
+    assert_eq!(portugal.would_relocate_to(area("Europe")), Some(Maybe));
+    assert_eq!(portugal.would_relocate_to(area("Lisbon")), Some(Yes));
+    assert_eq!(portugal.would_relocate_to(area("Latin America")), Some(No));
+    // Several destinations: any certain match, all certain conflicts,
+    // otherwise unresolved.
+    assert_eq!(
+        only(&["Madrid", "Lisbon"]).would_relocate_to(area("Lisbon")),
+        Some(Yes)
+    );
+    assert_eq!(
+        only(&["Madrid", "Berlin"]).would_relocate_to(area("Lisbon")),
+        Some(No)
+    );
+    assert_eq!(
+        only(&["Madrid", "Lisbon"]).would_relocate_to(area("Europe")),
+        Some(Maybe)
+    );
+    assert_eq!(
+        only(&["Tokyo", "Lisbon"]).would_relocate_to(area("Asia")),
+        Some(Maybe)
+    );
+    assert_eq!(
+        only(&["Madrid", "Lisbon"]).would_relocate_to(area("Asia")),
+        Some(No)
+    );
+
+    // Through the rules: a hybrid office "in Europe" is uncertain, not
+    // ineligible, for someone who'd only move to Lisbon.
+    let europe = job("lever:example", "Europe", Some(WorkplaceType::Hybrid), "");
+    let d = decide(&europe, &lisbon);
+    assert_eq!(d.status, Uncertain, "{:?}", d.reasons);
+    assert!(
+        !d.reasons.iter().any(|r| r.verdict == Verdict::Fail),
+        "{:?}",
+        d.reasons
+    );
+    assert!(has_reason(
+        &d,
+        RuleId::Presence,
+        Verdict::Unknown,
+        "can't tell whether it is among the places you'd relocate to (Lisbon)"
+    ));
+    let madrid = job(
+        "lever:example",
+        "Madrid, Spain",
+        Some(WorkplaceType::Hybrid),
+        "",
+    );
+    assert_eq!(status(&madrid, &lisbon), Ineligible);
+}

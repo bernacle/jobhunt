@@ -3,14 +3,15 @@ import type { LearnedView, PreferenceUpdateResult, PreferenceView, TasteView } f
 import { STANCE_LABEL, ago } from "@/lib/format";
 
 import { type ClarifyAction, ClarifyPreference } from "./clarify";
+import { LayerMark } from "./preference-controls";
 import { RemovePreference } from "./preferences";
 
 /*
- * Explicit and learned, kept apart. What the person told Narrow is a solid
- * square in primary ink: it always applies and always wins. What Narrow
- * learned from their decisions is a hollow square in secondary ink: a
- * tendency that only affects ranking, never a hidden filter. The two
- * columns and the words say so too, not only the marks.
+ * Explicit and learned, kept apart, in three layers. What the person told
+ * Narrow always wins: a requirement is a solid square, a preference a
+ * half-filled one. What Narrow learned from their decisions is a hollow
+ * square in secondary ink: a tendency that only affects ranking, never a
+ * hidden filter. The columns and the words say so too, not only the marks.
  */
 
 type Remove = (id: string) => Promise<ActionResult<PreferenceUpdateResult>>;
@@ -31,19 +32,20 @@ function learnedSentence(l: LearnedView): string {
   return `${l.direction === "prefer" ? "You tend to go for" : "You tend to pass on"} ${l.value}`;
 }
 
-function Square({ learned }: { learned: boolean }) {
+function Square({ layer }: { layer: string }) {
+  const known = layer === "requirement" || layer === "preference" ? layer : "learned";
   return (
-    <span
-      aria-hidden="true"
-      className={`mt-[0.45em] size-[7px] shrink-0 rounded-[1px] ${learned ? "border border-fg-secondary" : "bg-fg"}`}
-    />
+    <span className="mt-[0.4em] flex shrink-0">
+      <LayerMark layer={known} />
+      <span className="sr-only">{known === "requirement" ? "Requirement" : known === "preference" ? "Preference" : "Learned"}</span>
+    </span>
   );
 }
 
 export function ExplicitPreference({ p, remove, clarify }: { p: PreferenceView; remove: Remove; clarify?: ClarifyAction }) {
   return (
     <li className="flex gap-3 border-b border-line-subtle py-3">
-      <Square learned={false} />
+      <Square layer={p.layer} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-3">
           <p className="text-[14px] font-medium text-fg nr-tnum">
@@ -62,6 +64,10 @@ export function ExplicitPreference({ p, remove, clarify }: { p: PreferenceView; 
         </p>
         {p.clarify && clarify ? (
           <ClarifyPreference p={p} clarify={clarify} />
+        ) : p.clarify ? (
+          <p className="mt-1 text-[13px] text-fg-secondary">
+            <span className="nr-inferred">Needs your answer</span>: until then it isn&apos;t used as a requirement.
+          </p>
         ) : (
           p.certainty === "uncertain" && (
             <p className="mt-1 text-[13px] text-fg-secondary">
@@ -78,7 +84,7 @@ export function ExplicitPreference({ p, remove, clarify }: { p: PreferenceView; 
 function Pattern({ l }: { l: LearnedView }) {
   return (
     <li className="flex gap-3 border-b border-line-subtle py-3">
-      <Square learned />
+      <Square layer="learned" />
       <div className="min-w-0 flex-1">
         <p className="text-[14px] text-fg-secondary">{learnedSentence(l)}</p>
         <p className="mt-0.5 font-mono text-mono-s text-fg-muted">
@@ -153,7 +159,7 @@ export function TasteTable({ taste, remove, clarify }: { taste: TasteView; remov
           <td className="w-[130px]" />
           <th scope="col" className={`${column} pr-8`}>
             <span className="block text-title-m">You told us</span>
-            <span className="mt-1 block text-[13px] text-fg-muted">Always applied, and always wins.</span>
+            <span className="mt-1 block text-[13px] text-fg-muted">Requirements and preferences. Always wins.</span>
           </th>
           <th scope="col" className={column}>
             <span className="block text-title-m text-fg-secondary">We&apos;ve learned</span>

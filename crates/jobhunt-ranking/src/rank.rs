@@ -10,8 +10,12 @@
 //! | --- | --- |
 //! | rejected, or already applied / interviewing / offered | not recommended (it is in the pipeline, or ruled out by the person) |
 //! | the listing is closed | not recommended |
+//! | ruled out only by the person's stated work setup or relocation | not recommended (a stated conflict, not "can't take it") |
 //! | ineligible | not recommended |
 //! | verified pay below a *required* minimum | not recommended |
+//! | a stated requirement the posting contradicts (team or company size, remote geography) | not recommended |
+//! | pay not published (or not comparable), when the person hides such jobs | not recommended |
+//! | eligibility uncertain, when the person hides such jobs | not recommended |
 //! | eligibility uncertain | shown separately, with why |
 //! | eligible or conditional, but not trusted (never verified, stale, failed) | "verify first" |
 //! | eligible or conditional, trusted ([`Assessment::recommendable`]) | recommended |
@@ -21,7 +25,10 @@
 //! is shown only in details; it is not a match percentage. A strong fit
 //! needs a reason in terms of what the person wants (a stated preference,
 //! learned taste, their own feedback), not just eligibility and
-//! freshness, and nothing they said they don't want.
+//! freshness, and nothing they said they don't want; and a requirement the
+//! posting says nothing about (pay not published against a required
+//! minimum, a required team size, a required remote geography) is
+//! unresolved, which is never a strong fit.
 
 use chrono::{DateTime, Utc};
 use jobhunt_eligibility::{Assessment, Eligibility};
@@ -38,7 +45,7 @@ use crate::taste::TasteModel;
 
 /// Revision of the signals, weights, gates and tiers. Part of every stored
 /// ranking's key; bump it with any change that can rank a job differently.
-pub const RANKING_VERSION: &str = "2";
+pub const RANKING_VERSION: &str = "3";
 
 /// Why an opportunity is not among the recommendations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -59,9 +66,21 @@ pub enum Exclusion {
     BelowMinimum {
         why: String,
     },
-    /// The posting states the opposite of a required company or team kind
-    /// ("a public company" against "small companies required").
+    /// The posting states the opposite of something the person requires:
+    /// a company or team kind ("a public company" against "small companies
+    /// required"), their work setup ("hybrid in New York" against "remote
+    /// only"), relocation, or where remote roles must be open to.
     UnmetRequirement {
+        why: String,
+    },
+    /// The pay isn't published (or can't be compared), and the person
+    /// asked to leave such jobs out.
+    PayUnknown {
+        why: String,
+    },
+    /// Eligibility isn't confirmed, and the person asked to leave such
+    /// jobs out until it is.
+    EligibilityUnconfirmed {
         why: String,
     },
 }
@@ -74,6 +93,10 @@ impl Exclusion {
             Self::Closed { why } => format!("closed: {why}"),
             Self::Ineligible { why } => format!("you can't take it: {why}"),
             Self::BelowMinimum { why } | Self::UnmetRequirement { why } => why.clone(),
+            Self::PayUnknown { why } => format!("pay unknown, and you hide such jobs: {why}"),
+            Self::EligibilityUnconfirmed { why } => {
+                format!("eligibility not confirmed, and you hide such jobs: {why}")
+            }
         }
     }
 }
@@ -217,12 +240,16 @@ pub struct Context<'a> {
     pub now: DateTime<Utc>,
 }
 
-fn gate(
-    a: &Assessment,
-    state: &OpportunityState,
+/// What decides the gate beyond eligibility and verification.
+struct Stated {
     below_minimum: Option<String>,
     unmet_requirement: Option<String>,
-) -> Gate {
+    /// Pay unknown, and the person hides such jobs: why.
+    hidden_pay: Option<String>,
+    hides_unclear_eligibility: bool,
+}
+
+fn gate(a: &Assessment, state: &OpportunityState, stated: Stated) -> Gate {
     let excluded = |exclusion| Gate::Excluded { exclusion };
     if state.stage == Stage::Rejected {
         return excluded(Exclusion::Rejected);
@@ -235,16 +262,27 @@ fn gate(
             why: a.listing_reason().conclusion,
         });
     }
+    if let Some(why) = signals::stated_conflict(a) {
+        return excluded(Exclusion::UnmetRequirement { why });
+    }
     if a.decision.status == Eligibility::Ineligible {
         return excluded(Exclusion::Ineligible {
             why: a.decision.headline.clone(),
         });
     }
-    if let Some(why) = below_minimum {
+    if let Some(why) = stated.below_minimum {
         return excluded(Exclusion::BelowMinimum { why });
     }
-    if let Some(why) = unmet_requirement {
+    if let Some(why) = stated.unmet_requirement {
         return excluded(Exclusion::UnmetRequirement { why });
+    }
+    if let Some(why) = stated.hidden_pay {
+        return excluded(Exclusion::PayUnknown { why });
+    }
+    if stated.hides_unclear_eligibility && a.decision.status == Eligibility::Uncertain {
+        return excluded(Exclusion::EligibilityUnconfirmed {
+            why: a.decision.headline.clone(),
+        });
     }
     match a.decision.status {
         Eligibility::Uncertain => Gate::EligibilityUnclear {
@@ -302,12 +340,27 @@ pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
     all.extend(signals::seniority(&inputs));
     all.extend(signals::stack(&inputs));
     all.extend(signals::domain(&inputs));
-    let (pay_signals, below_minimum) = signals::compensation(&inputs);
-    all.extend(pay_signals);
+    let pay_reading = signals::compensation(&inputs);
+    all.extend(pay_reading.signals);
     let company = signals::company(&inputs);
     all.extend(company.signals);
     all.extend(signals::work_style(&inputs));
     all.extend(signals::work_mode(&inputs));
+    // Where remote work is allowed is read only when the person said where
+    // they want it.
+    let geography = if ctx.person.remote_geography.is_empty() {
+        None
+    } else {
+        let reach = signals::remote_reach_of(record);
+        Some(signals::remote_geography(&inputs, &reach))
+    };
+    let (geography_out, geography_unresolved) = match geography {
+        Some(g) => {
+            all.extend(g.signals);
+            (g.ruled_out, g.unresolved)
+        }
+        None => (None, false),
+    };
     all.extend(signals::freshness(&inputs));
 
     let score = all.iter().map(|s| s.weight).sum::<f64>();
@@ -315,13 +368,17 @@ pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
     let gate = gate(
         candidate.assessment,
         candidate.state,
-        below_minimum,
-        company.ruled_out,
+        Stated {
+            below_minimum: pay_reading.below_minimum,
+            unmet_requirement: company.ruled_out.or(geography_out),
+            hidden_pay: pay_reading.unknown.filter(|_| ctx.person.hides_unknown_pay),
+            hides_unclear_eligibility: ctx.person.hides_unclear_eligibility,
+        },
     );
     let tier = tier(&all, score);
     // A requirement the posting says nothing about is not met: never a
     // strong fit on the strength of everything else.
-    let tier = if company.unresolved {
+    let tier = if company.unresolved || pay_reading.unresolved || geography_unresolved {
         tier.min(Tier::WorthReviewing)
     } else {
         tier
@@ -364,5 +421,7 @@ impl Ranking {
     }
 }
 
+#[cfg(test)]
+mod stated_tests;
 #[cfg(test)]
 mod tests;

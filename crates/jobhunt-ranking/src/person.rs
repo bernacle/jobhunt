@@ -11,8 +11,12 @@
 //!   worked in payments is not wanting to work in payments, so experience
 //!   only ever says "you have relevant experience", never "you want this".
 //!
-//! Location, work authorization and engagement preferences are
-//! eligibility's; ranking doesn't read them again.
+//! Location, work authorization, relocation and engagement preferences
+//! are eligibility's; ranking doesn't read them again. Ranking reads the
+//! two policies for what isn't known (pay that isn't published,
+//! eligibility that isn't confirmed) and the remote geographies the person
+//! stated they want roles open to: which jobs they want, not which they
+//! can take.
 
 use jobhunt_core::text::search_key;
 use jobhunt_profile::infer::{canonical_domain, topic_key};
@@ -20,6 +24,8 @@ use jobhunt_profile::{
     Arrangement, Certainty, ClaimKind, CompensationBound, EvidenceStrength, PayPeriod,
     PreferenceValue, ProfileData, Stance, WorkMode,
 };
+
+use jobhunt_eligibility::geo::Area;
 
 use crate::facets::{Level, title_level, title_roles};
 use crate::key::{Dimension, Direction, TasteKey};
@@ -80,6 +86,20 @@ pub struct PayPreference {
     pub text: String,
 }
 
+/// A geography the person wants remote roles to be open to ("the
+/// Americas", "Latin America", "anywhere"), or doesn't.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteGeography {
+    /// `pref_…`.
+    pub id: String,
+    /// As written: "Latin America".
+    pub text: String,
+    /// Normalized; `None` when Narrow doesn't recognize it (then it never
+    /// matches, and never rules a job out).
+    pub area: Option<Area>,
+    pub stance: Stance,
+}
+
 /// Evidence of having done something, with where.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Experience {
@@ -97,6 +117,14 @@ pub struct Person {
     pub stated: Vec<StatedPreference>,
     pub pay: Vec<PayPreference>,
     pub work_modes: Vec<(WorkMode, Stance)>,
+    /// Geographies remote roles should be open to.
+    pub remote_geography: Vec<RemoteGeography>,
+    /// Jobs whose pay isn't published (or can't be compared) are left out
+    /// rather than shown as unresolved.
+    pub hides_unknown_pay: bool,
+    /// Jobs whose eligibility isn't confirmed are left out rather than
+    /// shown as unresolved.
+    pub hides_unclear_eligibility: bool,
     /// Role kinds evidenced by the resume.
     pub roles: Vec<Experience>,
     pub domains: Vec<Experience>,
@@ -106,6 +134,19 @@ pub struct Person {
     pub level: Option<(Level, String)>,
     /// The resume shows engineering work.
     pub engineer: bool,
+}
+
+/// A stated region, normalized: "Worldwide" and "anywhere" are the whole
+/// world; otherwise the most specific place Narrow recognizes.
+pub fn region_area(region: &str) -> Option<Area> {
+    let key = search_key(region);
+    if matches!(
+        key.as_str(),
+        "worldwide" | "anywhere" | "global" | "globally" | "the world"
+    ) {
+        return Some(Area::Worldwide);
+    }
+    jobhunt_eligibility::profile::place_area(region)
 }
 
 /// The keys a role preference is about.
@@ -184,8 +225,19 @@ impl Person {
                     text: p.value.to_string(),
                 }),
                 PreferenceValue::WorkMode { mode } => out.work_modes.push((*mode, p.stance)),
+                PreferenceValue::Region { region } => {
+                    out.remote_geography.push(RemoteGeography {
+                        id: p.id.to_string(),
+                        text: region.clone(),
+                        area: region_area(region),
+                        stance: p.stance,
+                    });
+                }
+                PreferenceValue::UnknownPay { show } => out.hides_unknown_pay = !show,
+                PreferenceValue::UnclearEligibility { show } => {
+                    out.hides_unclear_eligibility = !show;
+                }
                 PreferenceValue::CurrentLocation { .. }
-                | PreferenceValue::Region { .. }
                 | PreferenceValue::Timezone { .. }
                 | PreferenceValue::Relocation { .. }
                 | PreferenceValue::Sponsorship { .. }
@@ -269,7 +321,10 @@ impl Person {
 
     /// Whether the person said anything about what they want.
     pub fn has_preferences(&self) -> bool {
-        !self.stated.is_empty() || !self.pay.is_empty() || !self.work_modes.is_empty()
+        !self.stated.is_empty()
+            || !self.pay.is_empty()
+            || !self.work_modes.is_empty()
+            || !self.remote_geography.is_empty()
     }
 }
 

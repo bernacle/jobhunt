@@ -480,18 +480,26 @@ async fn search_keeps_the_ranking_rules() {
         "add",
         "I want backend or infrastructure roles, at least USD 180k",
     ]);
-    // Won't relocate: the office jobs abroad become ineligible.
+    // Won't relocate: the office jobs abroad are left out, as a conflict
+    // with what the person stated rather than as "can't take it".
     env.ok(&["preferences", "set", "relocation", "no"]);
     let mut mcp = env.mcp().await;
     mcp.initialize().await;
     let all = json!({"refresh": "always", "include_lower_tiers": true, "limit": 25});
     let first = mcp.call("search_jobs", all.clone()).await;
     let titles: Vec<&str> = values(&first["results"], "title");
-    // Ineligible jobs are not recommended, even among the lower tiers.
+    // Jobs someone can't take, or that conflict with what they require,
+    // are not recommended, even among the lower tiers.
+    let not_shown = &first["not_shown"];
     assert!(
-        first["not_shown"]["ineligible"].as_u64().unwrap() >= 3,
-        "{:#}",
-        first["not_shown"]
+        not_shown["ineligible"].as_u64().unwrap()
+            + not_shown["unmet_requirement"].as_u64().unwrap()
+            >= 3,
+        "{not_shown:#}"
+    );
+    assert!(
+        not_shown["unmet_requirement"].as_u64().unwrap() >= 1,
+        "refusing to relocate is a stated conflict: {not_shown:#}"
     );
     for abroad in [
         "Account Executive, Enterprise (Berlin, Germany)",

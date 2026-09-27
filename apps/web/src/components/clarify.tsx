@@ -4,7 +4,7 @@ import { useId, useState, useTransition } from "react";
 
 import type { ActionResult } from "@/app/actions";
 import type { PreferenceInput, PreferenceUpdateResult, PreferenceView } from "@/lib/api-types";
-import { amountText } from "@/lib/clarify";
+import { amountText, clarifyTitle } from "@/lib/clarify";
 
 import { Button, helpClass, inputClass, labelClass } from "./ui";
 
@@ -28,7 +28,8 @@ function Choice({ name, value, label, required }: { name: string; value: string;
  * A preference Narrow read from someone's words but can't rely on until
  * they answer: whether a pay is a floor or a goal, and in which currency
  * (never assumed); whether a size is a must or a nice-to-have, and whether
- * it's the team or the company. Until then it is unresolved, and says so.
+ * it's the team or the company; whether something like "remote" is a must
+ * or a nice-to-have. Until then it is unresolved, and says so.
  */
 export function ClarifyPreference({ p, clarify }: { p: PreferenceView; clarify: ClarifyAction }) {
   const c = p.clarify;
@@ -68,6 +69,9 @@ export function ClarifyPreference({ p, clarify }: { p: PreferenceView; clarify: 
               applies_to: (c.applies_to as "employment" | "contract" | undefined) ?? null,
             },
           ]);
+        } else if (c.kind === "importance") {
+          const stance = String(data.get("stance")) as "require" | "want";
+          submit([{ ...c.input, stance } as PreferenceInput]);
         } else {
           const scope = String(data.get("scope"));
           const stance = String(data.get("stance")) as "require" | "want";
@@ -116,6 +120,23 @@ export function ClarifyPreference({ p, clarify }: { p: PreferenceView; clarify: 
               ))}
             </datalist>
           </div>
+        </>
+      ) : c.kind === "importance" ? (
+        <>
+          <p className="mt-1 text-[13px] text-fg-secondary">
+            For now it&apos;s a nice-to-have: it changes the order, and leaves nothing out.
+          </p>
+          <fieldset className="mt-3">
+            <legend className={labelClass}>{clarifyTitle(c)}: must have, or nice to have?</legend>
+            <div className="flex flex-wrap gap-x-5 gap-y-1">
+              <Choice name="stance" value="require" label="Must have" required />
+              <Choice name="stance" value="want" label="Nice to have" required />
+            </div>
+          </fieldset>
+          <p className={helpClass}>
+            Must have: a posting that says otherwise is left out; one that doesn&apos;t say is still shown, marked unresolved. Nice to have: it
+            only changes the order.
+          </p>
         </>
       ) : (
         <>

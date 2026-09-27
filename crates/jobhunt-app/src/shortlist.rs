@@ -367,9 +367,17 @@ pub struct Funnel {
 pub struct NotShown {
     pub ineligible: usize,
     pub below_pay_minimum: usize,
-    /// The posting contradicts a required company or team kind.
+    /// The posting contradicts something the person requires: a company
+    /// or team kind, their work setup, relocation, a remote geography.
     #[serde(default)]
     pub unmet_requirement: usize,
+    /// Pay not published (or not comparable), and the person hides such
+    /// jobs.
+    #[serde(default)]
+    pub pay_unknown: usize,
+    /// Eligibility not confirmed, and the person hides such jobs.
+    #[serde(default)]
+    pub eligibility_unconfirmed: usize,
     pub closed: usize,
     pub rejected: usize,
     pub in_pipeline: usize,
@@ -593,6 +601,8 @@ impl SearchResults {
                 ineligible: e.ineligible,
                 below_pay_minimum: e.below_minimum,
                 unmet_requirement: e.unmet_requirement,
+                pay_unknown: e.pay_unknown,
+                eligibility_unconfirmed: e.eligibility_unconfirmed,
                 closed: e.closed,
                 rejected: e.rejected,
                 in_pipeline: e.in_pipeline,

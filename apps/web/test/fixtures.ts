@@ -1,4 +1,4 @@
-import type { FeedItem, FeedView, FeedbackResult, LearnedView, TasteView } from "@/lib/api-types";
+import type { FeedItem, FeedView, FeedbackResult, LearnedView, PreferenceControls, PreferenceView, TasteView } from "@/lib/api-types";
 
 /** A recommendation as the API returns it (values from a real response). */
 export function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
@@ -110,8 +110,10 @@ export function tasteView(overrides: Partial<TasteView> = {}): TasteView {
         origin: "statement",
         snippet: "backend roles",
         active: true,
+        layer: "preference",
       },
     ],
+    controls: controls(),
     statements: [],
     learned: [learned()],
     contradictory: [],
@@ -121,6 +123,78 @@ export function tasteView(overrides: Partial<TasteView> = {}): TasteView {
     unread_reasons: [],
     feedback_events: 4,
     opportunities: 3,
+    ...overrides,
+  };
+}
+
+/** One stated preference as the API returns it. */
+export function stated(overrides: Partial<PreferenceView> = {}): PreferenceView {
+  return {
+    id: "pref_1",
+    category: "location",
+    stance: "required",
+    value: "remote work",
+    certainty: "certain",
+    origin: "user_entered",
+    active: true,
+    layer: "requirement",
+    ...overrides,
+  };
+}
+
+/**
+ * The structured controls for the BRU-308 person: lives in Brazil, remote
+ * only, won't relocate, at least USD 140,000 a year, unknown pay shown,
+ * small teams nice to have.
+ */
+export function controls(overrides: Partial<PreferenceControls> = {}): PreferenceControls {
+  return {
+    work: {
+      setup: "remote_only",
+      setup_layer: "requirement",
+      setup_records: [stated({ id: "pref_remote" })],
+      relocation: "not_willing",
+      relocation_only_to: [],
+      relocation_record: stated({ id: "pref_reloc", value: "not willing to relocate" }),
+    },
+    location: {
+      home: "Brazil",
+      home_basis: "preference",
+      home_country: "Brazil",
+      home_record: stated({ id: "pref_home", value: "based in Brazil" }),
+      remote_open_to_you: ["anywhere", "the Americas", "Latin America", "South America", "Brazil"],
+      authorized_in: [],
+      remote_geography: [],
+      unclear_eligibility: "show",
+    },
+    pay: {
+      minimum: [
+        {
+          record: stated({ id: "pref_min", category: "compensation", value: "at least USD 140,000 per year" }),
+          amount: 140000,
+          currency: "USD",
+          period: "year",
+        },
+      ],
+      target: [],
+      unknown_pay: "show",
+    },
+    company: {
+      items: [
+        {
+          value: "small_team",
+          scope: "team",
+          importance: "nice_to_have",
+          layer: "preference",
+          record: stated({ id: "pref_team", category: "company", stance: "wanted", value: "small teams", layer: "preference" }),
+        },
+        { value: "small_company", scope: "company_size", importance: "off", layer: "none" },
+        { value: "large_company", scope: "company_size", importance: "off", layer: "none" },
+        { value: "early_stage", scope: "stage", importance: "off", layer: "none" },
+        { value: "startup", scope: "stage", importance: "off", layer: "none" },
+        { value: "scaleup", scope: "stage", importance: "off", layer: "none" },
+      ],
+    },
     ...overrides,
   };
 }

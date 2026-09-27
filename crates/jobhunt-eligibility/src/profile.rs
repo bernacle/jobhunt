@@ -10,7 +10,7 @@
 
 use jobhunt_profile::{Engagement, PreferenceValue, ProfileData, Stance, WorkMode};
 
-use crate::geo::{Area, Country, parse_places};
+use crate::geo::{Area, COUNTRIES, Country, Membership, parse_places};
 use crate::zones::{Offsets, span, zones_in};
 
 /// Where a profile fact came from.
@@ -69,6 +69,9 @@ pub struct ProfileFacts {
     pub zones: Vec<(String, Offsets)>,
     pub work_modes: Vec<(WorkMode, Stance)>,
     pub relocation: Option<bool>,
+    /// When willing to relocate only to some places: those places,
+    /// normalized (unrecognized ones kept as written). Empty is anywhere.
+    pub relocation_only_to: Vec<(Option<Area>, String)>,
     pub needs_sponsorship: Option<bool>,
     /// Places the person stated they may already work in, normalized
     /// (unrecognized ones kept as written).
@@ -105,7 +108,13 @@ impl ProfileFacts {
                         out.zones.extend(ranges);
                     }
                 }
-                PreferenceValue::Relocation { willing } => out.relocation = Some(*willing),
+                PreferenceValue::Relocation { willing, only_to } => {
+                    out.relocation = Some(*willing);
+                    out.relocation_only_to = only_to
+                        .iter()
+                        .map(|place| (place_area(place), place.clone()))
+                        .collect();
+                }
                 PreferenceValue::Sponsorship { needed } => out.needs_sponsorship = Some(*needed),
                 PreferenceValue::WorkAuthorization { place } => {
                     out.authorized_in.push((place_area(place), place.clone()));
@@ -119,7 +128,9 @@ impl ProfileFacts {
                 | PreferenceValue::Region { .. }
                 | PreferenceValue::Company { .. }
                 | PreferenceValue::Domain { .. }
-                | PreferenceValue::WorkStyle { .. } => {}
+                | PreferenceValue::WorkStyle { .. }
+                | PreferenceValue::UnknownPay { .. }
+                | PreferenceValue::UnclearEligibility { .. } => {}
             }
         }
         if out.location.is_none()
@@ -180,6 +191,45 @@ impl ProfileFacts {
             .collect()
     }
 
+    /// Whether the person would relocate to an office in `place`:
+    /// `Some(Yes)` when willing (anywhere, or `place` is certainly within
+    /// one of the places they named); `Some(No)` when not willing, or when
+    /// `place` is certainly outside every place they named; `Some(Maybe)`
+    /// when that can't be established (a place Narrow doesn't recognize, or
+    /// an uncertain membership): unknown stays unknown. `None` when they
+    /// haven't said.
+    pub fn would_relocate_to(&self, place: Area) -> Option<Membership> {
+        match self.relocation? {
+            false => Some(Membership::No),
+            true if self.relocation_only_to.is_empty() => Some(Membership::Yes),
+            true => {
+                let each: Vec<Membership> = self
+                    .relocation_only_to
+                    .iter()
+                    .map(|(area, _)| match area {
+                        None => Membership::Maybe,
+                        Some(a) => destination(*a, place),
+                    })
+                    .collect();
+                Some(if each.contains(&Membership::Yes) {
+                    Membership::Yes
+                } else if each.iter().all(|m| *m == Membership::No) {
+                    Membership::No
+                } else {
+                    Membership::Maybe
+                })
+            }
+        }
+    }
+
+    /// The places the person would only relocate to, as written.
+    pub fn relocation_places(&self) -> Vec<String> {
+        self.relocation_only_to
+            .iter()
+            .map(|(_, raw)| raw.clone())
+            .collect()
+    }
+
     pub fn engagement(&self, engagement: Engagement) -> Option<Stance> {
         self.engagements
             .iter()
@@ -194,6 +244,49 @@ impl ProfileFacts {
             area.filter(|a| a.contains(country) == crate::geo::Membership::Yes)
                 .map(|_| raw.clone())
         })
+    }
+}
+
+/// Whether an office in `place` is within a relocation destination:
+/// `Yes` when certainly, `No` only when certainly not, and `Maybe` when the
+/// places Narrow knows can't settle it (a city against its own country or
+/// state, or an office named only by a broad region that may include the
+/// destination). Missing detail is never a conflict.
+fn destination(allowed: Area, place: Area) -> Membership {
+    if allowed == place || allowed == Area::Worldwide {
+        return Membership::Yes;
+    }
+    // An office named only by a region (or "anywhere"): it may be in the
+    // destination if the region may include any country of it.
+    if place.country().is_none() {
+        let possible = |c: &Country| place.contains(c) != Membership::No;
+        let may = match allowed.country() {
+            Some(c) => possible(c),
+            None => COUNTRIES
+                .iter()
+                .any(|c| allowed.contains(c) != Membership::No && possible(c)),
+        };
+        return if may {
+            Membership::Maybe
+        } else {
+            Membership::No
+        };
+    }
+    match (allowed, place) {
+        // Another city is another place.
+        (Area::City { .. }, Area::City { .. }) => Membership::No,
+        // A city or state named as the destination, and an office elsewhere
+        // in the same country (or a state and a city of it): can't say.
+        (Area::City { country: a, .. } | Area::Subdivision { country: a, .. }, _) => {
+            match place.country() {
+                Some(c) if c.code == a.code => Membership::Maybe,
+                _ => Membership::No,
+            }
+        }
+        _ => match place.country() {
+            Some(c) => allowed.contains(c),
+            None => Membership::Maybe,
+        },
     }
 }
 

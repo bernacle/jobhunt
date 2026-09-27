@@ -18,6 +18,7 @@ function read(overrides: Partial<PreferenceView>): PreferenceView {
     origin: "statement",
     snippet: "Small teams and the sallary of 140k",
     active: true,
+    layer: "preference",
     ...overrides,
   };
 }

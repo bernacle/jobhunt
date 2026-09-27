@@ -162,6 +162,12 @@ jobs:
     env:
       JOBHUNT_TEST_DATABASE_URL: postgres://jobhunt:jobhunt@127.0.0.1:5432/jobhunt
       JOBHUNT_REQUIRE_POSTGRES: "1"
+      # Every step selects the same packages as the build step and picks its
+      # tests with --test: another package selection resolves features
+      # differently and rebuilds the dependency graph (about a gigabyte of
+      # debug artifacts each time), which filled the runner's disk and
+      # crashed the linker. Library unit tests run in the `test` job.
+      CLOUD_PACKAGES: -p jobhunt-storage -p jobhunt-app -p jobhunt-cloud -p jobhunt-cli
     steps:
       - uses: actions/checkout@v7
         with:
@@ -176,32 +182,32 @@ jobs:
       - name: Build the cloud tests (Cargo.lock must be up to date)
         run: |
           cargo fetch --locked
-          cargo test --frozen --no-run -p jobhunt-storage -p jobhunt-app -p jobhunt-cloud -p jobhunt-cli
+          cargo test --frozen --no-run $CLOUD_PACKAGES
       # As in `test`: an unreachable proxy, so nothing reaches the internet
       # (the local Postgres and mock servers are exempt).
       - name: Storage contract (SQLite and Postgres), isolation, encryption, sync, leases
-        run: cargo test --frozen --no-fail-fast -p jobhunt-storage --tests
+        run: cargo test --frozen --no-fail-fast $CLOUD_PACKAGES --test contract --test postgres
         env:
           HTTP_PROXY: http://127.0.0.1:9
           HTTPS_PROXY: http://127.0.0.1:9
           ALL_PROXY: http://127.0.0.1:9
           NO_PROXY: localhost,127.0.0.1,::1
       - name: Sync end to end (two local machines, one cloud account)
-        run: cargo test --frozen --no-fail-fast -p jobhunt-app --test sync
+        run: cargo test --frozen --no-fail-fast $CLOUD_PACKAGES --test sync
         env:
           HTTP_PROXY: http://127.0.0.1:9
           HTTPS_PROXY: http://127.0.0.1:9
           ALL_PROXY: http://127.0.0.1:9
           NO_PROXY: localhost,127.0.0.1,::1
       - name: HTTP API, authentication and hosted MCP (real HTTP, MCP client)
-        run: cargo test --frozen --no-fail-fast -p jobhunt-cloud
+        run: cargo test --frozen --no-fail-fast $CLOUD_PACKAGES --test api_schema --test cloud --test email --test web
         env:
           HTTP_PROXY: http://127.0.0.1:9
           HTTPS_PROXY: http://127.0.0.1:9
           ALL_PROXY: http://127.0.0.1:9
           NO_PROXY: localhost,127.0.0.1,::1
       - name: Binary end to end (server, migrate, workers, login, sync, offline)
-        run: cargo test --frozen --no-fail-fast -p jobhunt-cli --test cloud_e2e
+        run: cargo test --frozen --no-fail-fast $CLOUD_PACKAGES --test cloud_e2e
         env:
           HTTP_PROXY: http://127.0.0.1:9
           HTTPS_PROXY: http://127.0.0.1:9
