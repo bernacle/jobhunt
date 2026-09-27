@@ -11,15 +11,19 @@
 //! and verification, 0.25 for freshness. Unknowns weigh nothing: pay that
 //! isn't published is unknown, not low.
 
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::{Arc, LazyLock, Mutex};
+
 use chrono::{DateTime, Utc};
 use jobhunt_eligibility::geo::{Area, COUNTRIES, Membership};
 use jobhunt_eligibility::job::{JobRequirements, RemoteScope, ScopeBasis, Strength};
 use jobhunt_eligibility::{Assessment, Eligibility, RuleId, Verdict};
-use jobhunt_jobs::PayInterval;
 use jobhunt_jobs::verification::{
     CompensationCheck, CompensationStatus, CurrencyEvidence, PayRange, Standing, TrustState,
     VerificationAge, ago,
 };
+use jobhunt_jobs::{JobId, JobRecord, PayInterval};
 use jobhunt_profile::preferences::group_thousands;
 use jobhunt_profile::{
     Arrangement, CompensationBound, EvidenceStrength, PayPeriod, Stance, WorkMode,
@@ -1107,7 +1111,116 @@ impl RemoteReach {
     }
 }
 
-/// Whether all of `inner` lies within `outer`.
+/// How many postings' remote reach [`remote_reach_of`] remembers; past
+/// that it starts over (as [`crate::facets::facets_of`] does).
+const REMEMBERED_REACH: usize = 20_000;
+
+/// Remote reach by record and a hash of what it was read from.
+type RememberedReach = HashMap<(JobId, u64), Arc<RemoteReach>>;
+
+static REMEMBERED_REACHES: LazyLock<Mutex<RememberedReach>> = LazyLock::new(Mutex::default);
+
+#[cfg(test)]
+thread_local! {
+    /// Postings actually read for their reach on this thread (tests).
+    pub(crate) static REACH_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Everything [`jobhunt_eligibility::requirements`] reads from a record,
+/// hashed: a new version of a posting is a new key.
+fn reach_input(record: &JobRecord) -> u64 {
+    let job = &record.posting;
+    let mut h = std::hash::DefaultHasher::new();
+    (
+        &job.location,
+        &job.description_text,
+        &job.work_authorization,
+        job.is_remote,
+    )
+        .hash(&mut h);
+    format!(
+        "{:?}{:?}{:?}{}",
+        job.locations, job.workplace_type, job.employment_type, job.provenance.source
+    )
+    .hash(&mut h);
+    h.finish()
+}
+
+/// Where a posting allows remote work, remembered per posting version.
+/// Reading a posting's requirements is most of what it costs, and it only
+/// changes when the posting does.
+pub fn remote_reach_of(record: &JobRecord) -> Arc<RemoteReach> {
+    let key = (record.id, reach_input(record));
+    if let Some(found) = REMEMBERED_REACHES
+        .lock()
+        .ok()
+        .and_then(|m| m.get(&key).cloned())
+    {
+        return found;
+    }
+    #[cfg(test)]
+    REACH_READS.with(|n| n.set(n.get() + 1));
+    let read = Arc::new(RemoteReach::of(&jobhunt_eligibility::requirements(record)));
+    if let Ok(mut remembered) = REMEMBERED_REACHES.lock() {
+        if remembered.len() >= REMEMBERED_REACH {
+            remembered.clear();
+        }
+        remembered.insert(key, Arc::clone(&read));
+    }
+    read
+}
+
+/// Whether two areas share a place: [`Membership::Yes`] when they
+/// certainly do (a role open to the Americas is open to Latin America; one
+/// open anywhere is open to every region), [`Membership::No`] when they
+/// certainly don't, and [`Membership::Maybe`] when the geography tables
+/// can't say (Mexico in "North America"; a state and a city of the same
+/// country). Maybe is unresolved: never a match, never a conflict.
+fn overlap(a: Area, b: Area) -> Membership {
+    if a == b || a == Area::Worldwide || b == Area::Worldwide {
+        return Membership::Yes;
+    }
+    match (a, b) {
+        // Two different cities never overlap.
+        (Area::City { .. }, Area::City { .. }) => Membership::No,
+        // A city or state against a place with a country: the country's
+        // membership decides, except that a city and a state of the same
+        // country may or may not overlap.
+        (Area::City { country, .. } | Area::Subdivision { country, .. }, other)
+        | (other, Area::City { country, .. } | Area::Subdivision { country, .. }) => match other {
+            Area::City { country: c2, .. } | Area::Subdivision { country: c2, .. } => {
+                if c2.code == country.code {
+                    Membership::Maybe
+                } else {
+                    Membership::No
+                }
+            }
+            _ => other.contains(country),
+        },
+        (Area::Country(c), other) | (other, Area::Country(c)) => other.contains(c),
+        // Two regions: a country both certainly include, else one either
+        // may include.
+        _ => {
+            let (mut maybe, mut yes) = (false, false);
+            for c in COUNTRIES {
+                match (a.contains(c), b.contains(c)) {
+                    (Membership::Yes, Membership::Yes) => yes = true,
+                    (Membership::No, _) | (_, Membership::No) => {}
+                    _ => maybe = true,
+                }
+            }
+            if yes {
+                Membership::Yes
+            } else if maybe {
+                Membership::Maybe
+            } else {
+                Membership::No
+            }
+        }
+    }
+}
+
+/// Whether all of `inner` certainly lies within `outer`.
 fn within(inner: Area, outer: Area) -> bool {
     if inner == outer || outer == Area::Worldwide {
         return true;
@@ -1122,17 +1235,6 @@ fn within(inner: Area, outer: Area) -> bool {
             .filter(|c| inner.contains(c) == Membership::Yes)
             .all(|c| outer.contains(c) == Membership::Yes),
     }
-}
-
-/// Whether two areas share any place: a role open to the Americas is open
-/// to Latin America; one open anywhere is open to every region.
-fn overlaps(a: Area, b: Area) -> bool {
-    if a == b || a == Area::Worldwide || b == Area::Worldwide {
-        return true;
-    }
-    COUNTRIES
-        .iter()
-        .any(|c| a.contains(c) != Membership::No && b.contains(c) != Membership::No)
 }
 
 fn areas_text(areas: &[Area]) -> String {
@@ -1150,10 +1252,41 @@ fn areas_text(areas: &[Area]) -> String {
     }
 }
 
+/// How stated alternatives ("Europe or Latin America") fare against a
+/// job's remote areas: one certain match matches; a conflict needs every
+/// alternative to certainly conflict; anything else (an unrecognized
+/// place, an uncertain membership) is unresolved.
+fn alternatives(wanted: &[&crate::person::RemoteGeography], job: &[Area]) -> Membership {
+    let each: Vec<Membership> = wanted
+        .iter()
+        .map(|g| match g.area {
+            None => Membership::Maybe,
+            Some(w) => {
+                let all: Vec<Membership> = job.iter().map(|j| overlap(w, *j)).collect();
+                if all.contains(&Membership::Yes) {
+                    Membership::Yes
+                } else if all.iter().all(|m| *m == Membership::No) {
+                    Membership::No
+                } else {
+                    Membership::Maybe
+                }
+            }
+        })
+        .collect();
+    if each.contains(&Membership::Yes) {
+        Membership::Yes
+    } else if !each.is_empty() && each.iter().all(|m| *m == Membership::No) {
+        Membership::No
+    } else {
+        Membership::Maybe
+    }
+}
+
 /// The remote-geography signals, and what they decide beyond the score: a
-/// required geography the posting's published scope is entirely outside
-/// of (a stated conflict), and whether a required one can't be checked
-/// (the posting publishes no scope: unresolved, never a strong fit).
+/// required geography whose every alternative the posting's published
+/// scope certainly excludes (a stated conflict), and whether a required
+/// one is unresolved (no published scope, an unrecognized place, or an
+/// uncertain membership: shown, marked, and never a strong fit).
 pub struct GeographyReading {
     pub signals: Vec<Signal>,
     pub ruled_out: Option<String>,
@@ -1168,91 +1301,106 @@ pub fn remote_geography(i: &Inputs<'_>, reach: &RemoteReach) -> GeographyReading
         unresolved: false,
     };
     let stated = &i.person.remote_geography;
-    let Some(job_areas) = (match reach {
-        RemoteReach::Areas(areas) => Some(areas),
-        RemoteReach::Unknown => None,
-        RemoteReach::NotRemote => return out,
-    }) else {
-        let required: Vec<&str> = stated
-            .iter()
-            .filter(|g| g.stance == Stance::Required)
+    let listed = |stance: Stance| -> Vec<&crate::person::RemoteGeography> {
+        stated.iter().filter(|g| g.stance == stance).collect()
+    };
+    let texts = |gs: &[&crate::person::RemoteGeography]| {
+        gs.iter()
             .map(|g| g.text.as_str())
-            .collect();
-        if !required.is_empty() {
-            out.unresolved = true;
-            out.signals.push(
+            .collect::<Vec<_>>()
+            .join(" or ")
+    };
+    let job_areas = match reach {
+        RemoteReach::NotRemote => return out,
+        RemoteReach::Unknown => {
+            let required = listed(Stance::Required);
+            if !required.is_empty() {
+                out.unresolved = true;
+                out.signals.push(
+                    Signal::new(
+                        group,
+                        Basis::Stated,
+                        0.0,
+                        format!(
+                            "Unresolved: you require remote roles open to {}, and the posting doesn't say where remote work is allowed",
+                            texts(&required)
+                        ),
+                    )
+                    .kind(SignalKind::Unknown),
+                );
+            }
+            return out;
+        }
+        RemoteReach::Areas(areas) => areas,
+    };
+    let where_ = areas_text(job_areas);
+    let evidence = format!("remote scope: {where_}");
+    for stance in [Stance::Required, Stance::Wanted, Stance::Acceptable] {
+        let wanted = listed(stance);
+        if wanted.is_empty() {
+            continue;
+        }
+        let names = texts(&wanted);
+        let signal = match (stance, alternatives(&wanted, job_areas)) {
+            (Stance::Required, Membership::Yes) => Signal::new(
+                group,
+                Basis::Stated,
+                0.0,
+                format!("Remote from {where_}, within what you require ({names})"),
+            ),
+            (Stance::Required, Membership::No) => {
+                let why =
+                    format!("Remote only from {where_}; you require remote roles open to {names}");
+                out.ruled_out.get_or_insert(why.clone());
+                Signal::new(group, Basis::Stated, -3.0, why).kind(SignalKind::Blocker)
+            }
+            (Stance::Required, Membership::Maybe) => {
+                out.unresolved = true;
                 Signal::new(
                     group,
                     Basis::Stated,
                     0.0,
                     format!(
-                        "Unresolved: you require remote roles open to {}, and the posting doesn't say where remote work is allowed",
-                        required.join(" or ")
+                        "Unresolved: you require remote roles open to {names}; Narrow can't tell whether remote from {where_} is"
                     ),
                 )
-                .kind(SignalKind::Unknown),
-            );
-        }
-        return out;
-    };
-    let where_ = areas_text(job_areas);
-    let evidence = format!("remote scope: {where_}");
-    for stance in [Stance::Required, Stance::Wanted, Stance::Acceptable] {
-        let wanted: Vec<&crate::person::RemoteGeography> =
-            stated.iter().filter(|g| g.stance == stance).collect();
-        // Unrecognized places neither match nor rule anything out.
-        let known: Vec<Area> = wanted.iter().filter_map(|g| g.area).collect();
-        if known.is_empty() {
-            continue;
-        }
-        let texts: Vec<&str> = wanted.iter().map(|g| g.text.as_str()).collect();
-        let listed = texts.join(" or ");
-        let met = known
-            .iter()
-            .any(|w| job_areas.iter().any(|j| overlaps(*w, *j)));
-        let signal = match (stance, met) {
-            (Stance::Required, true) => Signal::new(
-                group,
-                Basis::Stated,
-                0.0,
-                format!("Remote from {where_}, within what you require ({listed})"),
-            ),
-            (Stance::Required, false) => {
-                let why =
-                    format!("Remote only from {where_}; you require remote roles open to {listed}");
-                out.ruled_out.get_or_insert(why.clone());
-                Signal::new(group, Basis::Stated, -3.0, why).kind(SignalKind::Blocker)
+                .kind(SignalKind::Unknown)
             }
-            (Stance::Wanted, true) => Signal::new(
+            (Stance::Wanted, Membership::Yes) => Signal::new(
                 group,
                 Basis::Stated,
                 1.0,
-                format!("Remote from {where_}, as you prefer ({listed})"),
+                format!("Remote from {where_}, as you prefer ({names})"),
             ),
-            (Stance::Wanted, false) => Signal::new(
+            (Stance::Wanted, Membership::No) => Signal::new(
                 group,
                 Basis::Stated,
                 -1.0,
-                format!("Remote only from {where_}, not {listed} as you prefer"),
+                format!("Remote only from {where_}, not {names} as you prefer"),
             ),
-            (_, true) => Signal::new(
+            (_, Membership::Yes) => Signal::new(
                 group,
                 Basis::Stated,
                 0.25,
                 format!("Remote from {where_}, which you'd accept"),
             ),
-            (_, false) => continue,
+            // A preference that can't be checked weighs nothing.
+            _ => Signal::new(
+                group,
+                Basis::Stated,
+                0.0,
+                format!("Narrow can't tell whether remote from {where_} is within {names}"),
+            )
+            .kind(SignalKind::Unknown),
         };
         out.signals.push(signal.evidence([evidence.clone()]));
     }
-    // Places the person doesn't want: only when the job is entirely there.
-    let avoided: Vec<&crate::person::RemoteGeography> = stated
-        .iter()
-        .filter(|g| g.stance == Stance::Unwanted && g.area.is_some())
-        .collect();
-    if let Some(g) = avoided.iter().find(|g| {
-        g.area
-            .is_some_and(|a| job_areas.iter().all(|j| within(*j, a)))
+    // Places the person doesn't want: only when the job is certainly
+    // entirely there.
+    if let Some(g) = stated.iter().find(|g| {
+        g.stance == Stance::Unwanted
+            && g.area
+                .is_some_and(|a| job_areas.iter().all(|j| within(*j, a)))
     }) {
         out.signals.push(
             Signal::new(
@@ -1371,6 +1519,11 @@ pub fn compensation(i: &Inputs<'_>) -> PayReading {
             if is_floor(p) {
                 unchecked.push(p);
             }
+            // The job's pay is published; it just can't be compared with
+            // this figure, which is as unknown to the policy as no pay.
+            unknown.get_or_insert_with(|| {
+                format!("Your {bound} has no currency, so this job's pay can't be compared with it")
+            });
             out.push(
                 Signal::new(
                     group,
@@ -1386,17 +1539,23 @@ pub fn compensation(i: &Inputs<'_>) -> PayReading {
             );
             continue;
         };
+        let same_terms = |r: &&&PayRange| {
+            r.currency.code() == Some(currency.as_str()) && same_period(p.period, r.interval)
+        };
+        // A range without amounts says nothing to compare.
         let comparable: Vec<&&PayRange> = salaries
             .iter()
-            .filter(|r| r.currency.code() == Some(currency.as_str()))
-            .filter(|r| same_period(p.period, r.interval))
+            .filter(same_terms)
+            .filter(|r| r.min.is_some() || r.max.is_some())
             .collect();
         if comparable.is_empty() {
             let ambiguous = salaries.iter().find_map(|r| match &r.currency {
                 CurrencyEvidence::Ambiguous { symbol } => Some(symbol),
                 _ => None,
             });
-            let why = if let Some(symbol) = ambiguous {
+            let why = if salaries.iter().any(|r| same_terms(&r)) {
+                format!("Pay doesn't state amounts; not compared with your {bound}")
+            } else if let Some(symbol) = ambiguous {
                 format!(
                     "Pay is in “{symbol}”, which several currencies use; not compared with your {bound} in {currency}"
                 )

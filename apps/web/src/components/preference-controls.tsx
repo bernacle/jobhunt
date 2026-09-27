@@ -591,6 +591,19 @@ function UnclearEligibility({ location, update }: { location: PreferenceControls
 
 const CURRENCIES = ["USD", "EUR", "GBP", "BRL", "CAD", "AUD", "CHF"];
 
+/** Every pay period the API stores; a figure is never converted. */
+type Period = "year" | "month" | "day" | "hour";
+const PERIODS: { value: Period; label: string }[] = [
+  { value: "year", label: "Year" },
+  { value: "month", label: "Month" },
+  { value: "day", label: "Day" },
+  { value: "hour", label: "Hour" },
+];
+
+function periodOf(value: string | undefined): Period {
+  return PERIODS.find((p) => p.value === value)?.value ?? "year";
+}
+
 function payText(p: PayControl): string {
   const amount = p.amount.toLocaleString("en-US");
   const who = p.applies_to ? ` (${p.applies_to} only)` : "";
@@ -614,7 +627,7 @@ function PayRow({
   const stored = main ? `${main.record.id}:${main.amount}:${main.currency}:${main.period}` : "";
   const [amount, setAmount] = useStored(main ? String(main.amount) : "", stored);
   const [currency, setCurrency] = useStored(main?.currency ?? "", stored);
-  const [period, setPeriod] = useStored<"year" | "month">(main?.period === "month" ? "month" : "year", stored);
+  const [period, setPeriod] = useStored<Period>(periodOf(main?.period), stored);
   const [error, setError] = useState<string | null>(null);
   const minimum = bound === "minimum";
   return (
@@ -685,9 +698,12 @@ function PayRow({
           <label htmlFor={`${id}-period`} className={labelClass}>
             Per
           </label>
-          <select id={`${id}-period`} value={period} onChange={(e) => setPeriod(e.target.value as "year" | "month")} className={selectClass}>
-            <option value="year">Year</option>
-            <option value="month">Month</option>
+          <select id={`${id}-period`} value={period} onChange={(e) => setPeriod(periodOf(e.target.value))} className={selectClass}>
+            {PERIODS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
           </select>
         </div>
         <div className="flex items-center gap-3">

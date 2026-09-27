@@ -822,36 +822,40 @@ fn work_setup_and_relocation_are_separate() {
 
 #[test]
 fn relocation_only_to_selected_places() {
-    let mut brazil = at("São Paulo, Brazil");
-    brazil.relocation = Some(true);
-    brazil.relocation_only_to = vec![
-        (
-            jobhunt_eligibility::profile::place_area("Portugal"),
-            "Portugal".into(),
-        ),
-        (None, "Atlantis".into()),
-    ];
+    use jobhunt_eligibility::geo::Membership;
+    use jobhunt_eligibility::profile::place_area;
+    let only = |places: &[&str]| {
+        let mut p = at("São Paulo, Brazil");
+        p.relocation = Some(true);
+        p.relocation_only_to = places
+            .iter()
+            .map(|place| (place_area(place), (*place).to_owned()))
+            .collect();
+        p
+    };
     let ny = job(
         "greenhouse:example",
         "New York, NY",
         Some(WorkplaceType::Hybrid),
         "",
     );
-    let d = decide(&ny, &brazil);
-    assert_eq!(d.status, Ineligible);
-    assert!(has_reason(
-        &d,
-        RuleId::Presence,
-        Verdict::Fail,
-        "you'd only relocate to Portugal or Atlantis"
-    ));
     let lisbon = job(
         "lever:example",
         "Lisbon, Portugal",
         Some(WorkplaceType::Hybrid),
         "",
     );
-    let d = decide(&lisbon, &brazil);
+    // Every destination certainly elsewhere: a conflict.
+    let d = decide(&ny, &only(&["Portugal", "Spain"]));
+    assert_eq!(d.status, Ineligible);
+    assert!(has_reason(
+        &d,
+        RuleId::Presence,
+        Verdict::Fail,
+        "you'd only relocate to Portugal or Spain"
+    ));
+    // A certain match: the move is the condition.
+    let d = decide(&lisbon, &only(&["Portugal", "Spain"]));
     assert!(has_reason(
         &d,
         RuleId::Presence,
@@ -859,13 +863,55 @@ fn relocation_only_to_selected_places() {
         "relocating to Lisbon"
     ));
     // Europe includes Portugal; a region counts.
-    brazil.relocation_only_to = vec![(
-        jobhunt_eligibility::profile::place_area("Europe"),
-        "Europe".into(),
-    )];
-    assert!(
-        brazil.would_relocate_to(jobhunt_eligibility::profile::place_area("Lisbon").unwrap())
-            == Some(true)
+    assert_eq!(
+        only(&["Europe"]).would_relocate_to(place_area("Lisbon").unwrap()),
+        Some(Membership::Yes)
     );
-    assert_eq!(status(&ny, &brazil), Ineligible);
+    assert_eq!(status(&ny, &only(&["Europe"])), Ineligible);
+
+    // Codex review #4: a destination Narrow can't recognize (a typo) is
+    // unknown, never a conflict.
+    let typo = only(&["Portugall"]);
+    assert_eq!(
+        typo.relocation_only_to[0].0, None,
+        "the typo isn't recognized"
+    );
+    for office in [&lisbon, &ny] {
+        let d = decide(office, &typo);
+        assert_eq!(d.status, Uncertain, "{:?}", d.reasons);
+        assert!(has_reason(
+            &d,
+            RuleId::Presence,
+            Verdict::Unknown,
+            "can't tell whether it is among the places you'd relocate to (Portugall)"
+        ));
+    }
+    // Known and unknown alternatives: a certain match still matches; a
+    // known conflict next to an unknown one is unresolved.
+    let mixed = only(&["Spain", "Portugall"]);
+    let d = decide(&ny, &mixed);
+    assert_eq!(d.status, Uncertain);
+    assert!(!d.reasons.iter().any(|r| r.verdict == Verdict::Fail));
+    let d = decide(&lisbon, &only(&["Portugal", "Atlantis"]));
+    assert!(has_reason(
+        &d,
+        RuleId::Presence,
+        Verdict::Conditional,
+        "relocating to Lisbon"
+    ));
+    // A state named as the destination and an office city of that country:
+    // can't say; another country's city: a conflict.
+    let california = only(&["California"]);
+    assert_eq!(
+        california.would_relocate_to(place_area("San Francisco, CA").unwrap()),
+        Some(Membership::Maybe)
+    );
+    assert_eq!(
+        california.would_relocate_to(place_area("Lisbon").unwrap()),
+        Some(Membership::No)
+    );
+    assert_eq!(
+        only(&["Lisbon"]).would_relocate_to(place_area("Porto, Portugal").unwrap()),
+        Some(Membership::No)
+    );
 }

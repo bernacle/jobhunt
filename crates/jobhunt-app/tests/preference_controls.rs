@@ -614,3 +614,134 @@ async fn today_for_a_remote_only_person_in_brazil() {
     assert_eq!(feed.report.excluded.pay_unknown, 2);
     assert_eq!(feed.report.excluded.eligibility_unconfirmed, 1);
 }
+
+/// The active remote/hybrid/on-site records, as (value, stance).
+async fn work_modes(app: &LocalApp) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = app
+        .taste_view()
+        .await
+        .unwrap()
+        .stated
+        .iter()
+        .filter(|p| p.value.ends_with(" work"))
+        .map(|p| (p.value.clone(), p.stance.clone()))
+        .collect();
+    out.sort();
+    out
+}
+
+fn modes(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = pairs
+        .iter()
+        .map(|(v, s)| ((*v).to_owned(), (*s).to_owned()))
+        .collect();
+    out.sort();
+    out
+}
+
+async fn setup(app: &LocalApp, answer: WorkSetupInput) {
+    set(app, vec![PreferenceInput::WorkSetup { setup: answer }]).await;
+}
+
+/// Codex review #2: words that state a work setup replace it exactly as a
+/// structured answer does: one work setup, no stale records, both ways.
+#[tokio::test]
+async fn words_and_answers_share_one_work_setup() {
+    // Hybrid okay → "remote only".
+    let app = app().await;
+    setup(&app, WorkSetupInput::HybridOkay).await;
+    say(&app, "remote only").await;
+    assert_eq!(controls(&app).await.work.setup, "remote_only");
+    assert_eq!(
+        work_modes(&app).await,
+        modes(&[("remote work", "required")])
+    );
+
+    // Remote only → "hybrid is okay": what was said now, nothing stale
+    // (a nice-to-have is never upgraded to a requirement).
+    let app = app_with(WorkSetupInput::RemoteOnly).await;
+    say(&app, "hybrid is okay").await;
+    assert_eq!(
+        work_modes(&app).await,
+        modes(&[("hybrid work", "acceptable")])
+    );
+    let c = controls(&app).await;
+    assert_eq!(c.work.setup, "custom");
+    assert_eq!(c.work.setup_layer, "preference");
+    // … and "hybrid is okay but I prefer remote" keeps both, as said.
+    say(&app, "hybrid is okay but I prefer remote").await;
+    assert_eq!(
+        work_modes(&app).await,
+        modes(&[("hybrid work", "acceptable"), ("remote work", "wanted")])
+    );
+
+    // Prefer remote → "remote only".
+    let app = app_with(WorkSetupInput::PreferRemote).await;
+    say(&app, "remote only").await;
+    assert_eq!(controls(&app).await.work.setup, "remote_only");
+    assert_eq!(
+        work_modes(&app).await,
+        modes(&[("remote work", "required")])
+    );
+
+    // Remote only → "prefer remote".
+    let app = app_with(WorkSetupInput::RemoteOnly).await;
+    say(&app, "I prefer remote").await;
+    assert_eq!(controls(&app).await.work.setup, "prefer_remote");
+    assert_eq!(work_modes(&app).await, modes(&[("remote work", "wanted")]));
+
+    // And back through a structured answer: it replaces what words set.
+    setup(&app, WorkSetupInput::HybridOkay).await;
+    assert_eq!(
+        work_modes(&app).await,
+        modes(&[("hybrid work", "required"), ("remote work", "required")])
+    );
+    // Words that only rule a mode out add to the setup.
+    say(&app, "no on-site").await;
+    assert_eq!(
+        work_modes(&app).await,
+        modes(&[
+            ("hybrid work", "required"),
+            ("onsite work", "unwanted"),
+            ("remote work", "required")
+        ])
+    );
+}
+
+async fn app_with(answer: WorkSetupInput) -> LocalApp {
+    let app = app().await;
+    setup(&app, answer).await;
+    app
+}
+
+/// Codex review #3: a pay figure keeps its period exactly: every period
+/// round-trips through the controls, and setting it again changes nothing.
+#[tokio::test]
+async fn pay_periods_round_trip() {
+    for (period, name) in [
+        (PeriodInput::Hour, "hour"),
+        (PeriodInput::Day, "day"),
+        (PeriodInput::Month, "month"),
+        (PeriodInput::Year, "year"),
+    ] {
+        let app = app().await;
+        let input = PreferenceInput::Compensation {
+            minimum: Some(100),
+            target: None,
+            currency: "USD".into(),
+            period,
+            applies_to: None,
+        };
+        set(&app, vec![input.clone()]).await;
+        let c = controls(&app).await;
+        let min = &c.pay.minimum[0];
+        assert_eq!(
+            (min.amount, min.currency.as_deref(), min.period.as_str()),
+            (100, Some("USD"), name)
+        );
+        // What the editor sends back when nothing is changed.
+        let again = set(&app, vec![input]).await;
+        assert!(again.unchanged, "{name}: nothing changed");
+        assert_eq!(controls(&app).await.pay.minimum[0].period, name);
+    }
+}

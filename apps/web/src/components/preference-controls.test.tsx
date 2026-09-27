@@ -237,3 +237,34 @@ describe("one source of truth", () => {
     expect(within(group("Minimum")).getByLabelText("Amount")).toHaveValue("150000");
   });
 });
+
+describe("pay periods (Codex review #3)", () => {
+  for (const period of ["hour", "day", "month", "year"] as const) {
+    it(`keeps a USD 100 per ${period} figure exactly when updated unchanged`, async () => {
+      const save = update();
+      const c = controls();
+      const figure: Controls = {
+        ...c,
+        pay: {
+          ...c.pay,
+          minimum: [{ record: stated({ id: "pref_min", category: "compensation" }), amount: 100, currency: "USD", period }],
+        },
+      };
+      render(<PayControls controls={figure} update={save} />);
+      const minimum = group("Minimum");
+      expect(within(minimum).getByText(`At least USD 100 per ${period}`)).toBeInTheDocument();
+      expect(within(minimum).getByLabelText("Per")).toHaveValue(period);
+      await userEvent.click(within(minimum).getByRole("button", { name: "Update" }));
+      expect(save).toHaveBeenCalledWith(
+        [{ kind: "compensation", minimum: 100, target: null, currency: "USD", period, applies_to: null }],
+        [],
+      );
+    });
+  }
+
+  it("offers every period the API stores", () => {
+    render(<PayControls controls={controls()} update={update()} />);
+    const options = within(within(group("Target")).getByLabelText("Per")).getAllByRole("option");
+    expect(options.map((o) => o.getAttribute("value"))).toEqual(["year", "month", "day", "hour"]);
+  });
+});

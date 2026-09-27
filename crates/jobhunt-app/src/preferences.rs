@@ -514,6 +514,25 @@ impl LocalApp {
                 }
                 None => None,
             };
+            // Words that say how the person wants to work ("remote only",
+            // "hybrid is okay but I prefer remote") are a whole new work
+            // setup, exactly like a structured answer: what they read
+            // replaces every other work-mode preference. Words that only
+            // rule a mode out ("no on-site") add to the setup instead.
+            if let Some(read) = &statement {
+                let modes: Vec<(WorkMode, Stance)> = read
+                    .preferences
+                    .iter()
+                    .filter(|p| p.active)
+                    .filter_map(|p| match p.value {
+                        PreferenceValue::WorkMode { mode } => Some((mode, p.stance)),
+                        _ => None,
+                    })
+                    .collect();
+                if modes.iter().any(|(_, s)| *s != Stance::Unwanted) {
+                    removed.extend(replace_work_setup(&profiles, &modes, now).await?);
+                }
+            }
             let mut set = Vec::new();
             for (value, stance) in values {
                 let outcome = retry_conflicts(|| async {
@@ -536,20 +555,7 @@ impl LocalApp {
                 set.push(outcome);
             }
             if let Some(keep) = &work_setup {
-                let data = profiles.load_or_new(now).await?;
-                let stale: Vec<String> = data
-                    .preferences
-                    .iter()
-                    .filter(|p| p.active)
-                    .filter(|p| match p.value {
-                        PreferenceValue::WorkMode { mode } => !keep.contains(&(mode, p.stance)),
-                        _ => false,
-                    })
-                    .map(|p| p.id.to_string())
-                    .collect();
-                for id in stale {
-                    removed.push(retry_conflicts(|| profiles.remove(&id, now)).await?);
-                }
+                removed.extend(replace_work_setup(&profiles, keep, now).await?);
             }
             let data = profiles.load_or_new(now).await?;
             Ok(PreferenceChanges {
@@ -561,6 +567,36 @@ impl LocalApp {
         })
         .await
     }
+}
+
+/// Makes `keep` the whole work setup: every active work-mode preference
+/// that isn't one of these (mode, stance) pairs is removed, so there is one
+/// work setup whether it came from a structured answer or the person's
+/// words.
+async fn replace_work_setup<R>(
+    profiles: &jobhunt_profile::ProfileService<'_, R>,
+    keep: &[(WorkMode, Stance)],
+    now: DateTime<Utc>,
+) -> Result<Vec<Removal>, AppError>
+where
+    R: jobhunt_profile::ProfileRepository + ?Sized,
+{
+    let data = profiles.load_or_new(now).await?;
+    let stale: Vec<String> = data
+        .preferences
+        .iter()
+        .filter(|p| p.active)
+        .filter(|p| match p.value {
+            PreferenceValue::WorkMode { mode } => !keep.contains(&(mode, p.stance)),
+            _ => false,
+        })
+        .map(|p| p.id.to_string())
+        .collect();
+    let mut removed = Vec::new();
+    for id in stale {
+        removed.push(retry_conflicts(|| profiles.remove(&id, now)).await?);
+    }
+    Ok(removed)
 }
 
 /// Runs a profile change again when another process changed the profile

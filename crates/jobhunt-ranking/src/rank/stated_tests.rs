@@ -470,13 +470,275 @@ fn remote_geography_must_have_and_nice_to_have() {
     );
     assert_eq!(r.gate, Gate::Recommended);
     assert!(has(&r, SignalKind::Minus, "not Europe as you prefer"));
-    // An unrecognized place neither matches nor rules anything out.
+}
+
+/// Codex review #5: an alternative Narrow can't recognize is unresolved,
+/// never dropped: it neither passes silently nor lets a known alternative
+/// alone decide a conflict.
+#[test]
+fn unrecognized_required_geography_stays_unresolved() {
+    let mut paid = remote("Remote - Brazil", SMALL_TEAM);
+    usd(&mut paid, 150_000.0, 180_000.0);
+    // Atlantis alone: shown, unresolved, never a strong fit.
     let mut odd = person();
     odd.remote_geography = vec![geography("Atlantis", Stance::Required)];
-    let r = rank_for(
-        &remote("Remote - Brazil", SMALL_TEAM),
-        &odd,
-        &facts(Stance::Required),
+    let r = rank_for(&paid, &odd, &facts(Stance::Required));
+    assert_eq!(r.gate, Gate::Recommended, "{:?}", r.gate);
+    assert!(has(
+        &r,
+        SignalKind::Unknown,
+        "Unresolved: you require remote roles open to Atlantis"
+    ));
+    assert_eq!(r.tier, Tier::WorthReviewing, "{:?}", summaries(&r));
+    // The same job with a recognized, met requirement can be a strong fit.
+    let mut latam = person();
+    latam.remote_geography = vec![geography("Latin America", Stance::Required)];
+    assert_eq!(
+        rank_for(&paid, &latam, &facts(Stance::Required)).tier,
+        Tier::StrongFit
     );
+    // Europe or Atlantis against a Brazil-only scope: Europe conflicts,
+    // Atlantis can't be checked, so not a conflict: unresolved.
+    let mut either = person();
+    either.remote_geography = vec![
+        geography("Europe", Stance::Required),
+        geography("Atlantis", Stance::Required),
+    ];
+    let r = rank_for(&paid, &either, &facts(Stance::Required));
+    assert!(!r.gate.is_excluded(), "{:?}", r.gate);
+    assert!(has(
+        &r,
+        SignalKind::Unknown,
+        "Unresolved: you require remote roles open to Europe or Atlantis"
+    ));
+    assert!(r.tier <= Tier::WorthReviewing);
+    // Europe or Latin America: the certain match decides.
+    either.remote_geography = vec![
+        geography("Europe", Stance::Required),
+        geography("Latin America", Stance::Required),
+    ];
+    let r = rank_for(&paid, &either, &facts(Stance::Required));
+    assert_eq!(r.tier, Tier::StrongFit, "{:?}", summaries(&r));
+    // Every alternative certainly conflicting: the stated conflict.
+    either.remote_geography = vec![
+        geography("Europe", Stance::Required),
+        geography("Asia", Stance::Required),
+    ];
+    let r = rank_for(&paid, &either, &facts(Stance::Required));
+    assert!(
+        matches!(excluded(&r), Some(Exclusion::UnmetRequirement { .. })),
+        "{:?}",
+        r.gate
+    );
+}
+
+/// Codex review #6: an uncertain membership (Mexico in "North America")
+/// is unresolved: never rendered as met, never enough for a strong fit.
+#[test]
+fn an_uncertain_membership_is_not_a_match() {
+    let mut mexico = ProfileFacts::living_in("Mexico City, Mexico");
+    mexico.work_modes = vec![(WorkMode::Remote, Stance::Required)];
+    let mut job = remote("Remote - Mexico", SMALL_TEAM);
+    usd(&mut job, 150_000.0, 180_000.0);
+    let mut na = person();
+    na.remote_geography = vec![geography("North America", Stance::Required)];
+    let r = rank_for(&job, &na, &mexico);
+    assert_eq!(r.gate, Gate::Recommended, "{:?}", r.gate);
+    assert!(
+        !has(&r, SignalKind::Context, "within what you require"),
+        "{:?}",
+        summaries(&r)
+    );
+    assert!(has(
+        &r,
+        SignalKind::Unknown,
+        "Unresolved: you require remote roles open to North America"
+    ));
+    assert_eq!(r.tier, Tier::WorthReviewing);
+    // A wanted one that can't be checked weighs nothing either way.
+    let mut nice = person();
+    nice.remote_geography = vec![geography("North America", Stance::Wanted)];
+    let r = rank_for(&job, &nice, &mexico);
+    assert!(
+        !r.signals.iter().any(|s| s.group == SignalGroup::WorkMode
+            && s.weight != 0.0
+            && s.summary.contains("North America")),
+        "{:?}",
+        summaries(&r)
+    );
+    // Where the table is certain, it decides.
+    let mut latam = person();
+    latam.remote_geography = vec![geography("Latin America", Stance::Required)];
+    let r = rank_for(&job, &latam, &mexico);
+    assert!(has(&r, SignalKind::Context, "within what you require"));
+    assert_eq!(r.tier, Tier::StrongFit, "{:?}", summaries(&r));
+}
+
+/// Codex review #8: a posting's remote reach is read once per version of
+/// the posting, not on every ranking.
+#[test]
+fn remote_reach_is_read_once_per_posting_version() {
+    use crate::signals::REACH_READS;
+    let reads = || REACH_READS.with(std::cell::Cell::get);
+    let mut job = remote(
+        "Remote (LATAM)",
+        "A unique posting for the reach cache test: Rust and PostgreSQL.",
+    );
+    usd(&mut job, 150_000.0, 180_000.0);
+    let mut must = person();
+    must.remote_geography = vec![geography("Latin America", Stance::Required)];
+    let f = facts(Stance::Required);
+    let before = reads();
+    let first = rank_for(&job, &must, &f);
+    for _ in 0..5 {
+        assert_eq!(rank_for(&job, &must, &f).tier, first.tier);
+    }
+    assert_eq!(reads() - before, 1, "read once, then remembered");
+    // Without a stated geography nothing is read at all.
+    let before = reads();
+    rank_for(&job, &person(), &f);
+    assert_eq!(reads(), before);
+    // A new version of the posting is read again, and its new scope used.
+    let mut edited = job.clone();
+    edited.posting.location = Some("Remote - Europe".into());
+    let before = reads();
+    let r = rank_for(&edited, &must, &f);
+    assert_eq!(reads() - before, 1);
+    assert!(r.gate.is_excluded(), "{:?}", r.gate);
+}
+
+/// Performance probe (not part of the regular suite): 1,000 warmed
+/// rankings with and without a remote-geography preference.
+/// `cargo test --release -p jobhunt-ranking geography_probe -- --ignored --nocapture`
+#[test]
+#[ignore = "timing probe; run by hand"]
+fn geography_probe() {
+    let description = "About the role. You'll own our payments API end to end, working with a team of 6 \
+        engineers. Requirements: strong experience with Rust and PostgreSQL in production; \
+        comfortable with distributed systems. We are remote-first and hire across Latin America. \
+        You'll overlap at least 4 hours with UTC-3. We offer equity, a home-office budget and \
+        flexible hours. We don't sponsor visas. Contractors are welcome through Deel.";
+    let jobs: Vec<JobRecord> = (0..100)
+        .map(|i| {
+            let mut r = remote(
+                if i % 2 == 0 {
+                    "Remote - Brazil"
+                } else {
+                    "Remote (LATAM)"
+                },
+                &format!("{description} Job {i}."),
+            );
+            usd(&mut r, 150_000.0, 180_000.0);
+            r
+        })
+        .collect();
+    let f = facts(Stance::Required);
+    let assessed: Vec<_> = jobs
+        .iter()
+        .map(|j| crate::testing::assessment_for(j, &f, Some(2)))
+        .collect();
+    let state = OpportunityState::default();
+    let taste = TasteModel::empty("rules/1");
+    let run = |person: &Person| {
+        let ctx = Context {
+            person,
+            taste: &taste,
+            now: now(),
+        };
+        let started = std::time::Instant::now();
+        for _ in 0..10 {
+            for (job, a) in jobs.iter().zip(&assessed) {
+                let records = [job.clone()];
+                let candidate = Candidate {
+                    records: &records,
+                    assessment: a,
+                    state: &state,
+                };
+                std::hint::black_box(rank(&candidate, &ctx));
+            }
+        }
+        started.elapsed()
+    };
+    let plain = person();
+    let mut geography = person();
+    geography.remote_geography = vec![geography_pref("Latin America", Stance::Required)];
+    run(&plain);
+    run(&geography);
+    let without = run(&plain);
+    let with = run(&geography);
+    println!("1,000 warmed rankings: without geography {without:?}, with geography {with:?}");
+}
+
+fn geography_pref(text: &str, stance: Stance) -> RemoteGeography {
+    geography(text, stance)
+}
+
+/// Codex review #7: "hide jobs with unknown pay" hides every job whose pay
+/// Narrow can't compare with the person's, not only jobs that publish
+/// none, and the job's own pay fact is left as published.
+#[test]
+fn hiding_unknown_pay_covers_pay_that_cant_be_compared() {
+    let hide = |pay: PayPreference| {
+        let mut p = person();
+        p.pay = vec![pay];
+        p.hides_unknown_pay = true;
+        p
+    };
+    let f = facts(Stance::Required);
+    let mut usd_job = remote("Remote - Brazil", SMALL_TEAM);
+    usd(&mut usd_job, 150_000.0, 180_000.0);
+
+    // The person's minimum has no currency: published USD pay can't be
+    // compared, so it is hidden, and still reads as published.
+    let r = rank_for(&usd_job, &hide(minimum(140_000, None)), &f);
+    assert!(
+        matches!(excluded(&r), Some(Exclusion::PayUnknown { why }) if why.contains("no currency")),
+        "{:?}",
+        r.gate
+    );
+    assert!(
+        r.brief.summary.contains("USD 150,000"),
+        "{}",
+        r.brief.summary
+    );
+    // Another currency, no conversion.
+    let mut eur = remote("Remote - Brazil", SMALL_TEAM);
+    eur.posting.compensation = Some(salary(Some("EUR"), 150_000.0, 180_000.0, None));
+    let r = rank_for(&eur, &hide(minimum(140_000, Some("USD"))), &f);
+    assert!(
+        matches!(excluded(&r), Some(Exclusion::PayUnknown { .. })),
+        "{:?}",
+        r.gate
+    );
+    // Another period, no conversion.
+    let mut monthly = remote("Remote - Brazil", SMALL_TEAM);
+    let mut pay = salary(Some("USD"), 12_000.0, 15_000.0, None);
+    pay.components[0].interval = Some(jobhunt_jobs::PayInterval::Month);
+    monthly.posting.compensation = Some(pay);
+    let r = rank_for(&monthly, &hide(minimum(140_000, Some("USD"))), &f);
+    assert!(
+        matches!(excluded(&r), Some(Exclusion::PayUnknown { why }) if why.contains("another period")),
+        "{:?}",
+        r.gate
+    );
+    // A range without amounts is not "below the minimum": it is unknown.
+    let mut empty = remote("Remote - Brazil", SMALL_TEAM);
+    let mut pay = salary(Some("USD"), 0.0, 0.0, Some("Competitive"));
+    pay.components[0].min = None;
+    pay.components[0].max = None;
+    empty.posting.compensation = Some(pay);
+    let r = rank_for(&empty, &hide(minimum(140_000, Some("USD"))), &f);
+    assert!(
+        matches!(excluded(&r), Some(Exclusion::PayUnknown { .. })),
+        "{:?}",
+        r.gate
+    );
+    let mut shown = hide(minimum(140_000, Some("USD")));
+    shown.hides_unknown_pay = false;
+    let r = rank_for(&empty, &shown, &f);
+    assert!(!r.gate.is_excluded(), "unknown is never low: {:?}", r.gate);
+    assert!(has(&r, SignalKind::Unknown, "Unresolved"));
+    // Comparable pay stays.
+    let r = rank_for(&usd_job, &hide(minimum(140_000, Some("USD"))), &f);
     assert_eq!(r.gate, Gate::Recommended);
 }

@@ -343,7 +343,7 @@ pub fn presence(ctx: &Context<'_>) -> Vec<Reason> {
                     country_name(home)
                 ),
             )
-        } else if ctx.profile.would_relocate_to(office) == Some(true) {
+        } else if ctx.profile.would_relocate_to(office) == Some(Membership::Yes) {
             reason(
                 Verdict::Conditional,
                 format!(
@@ -372,21 +372,29 @@ pub fn presence(ctx: &Context<'_>) -> Vec<Reason> {
         _ => place.clone(),
     };
     let r = match ctx.profile.would_relocate_to(office) {
-        Some(false) if ctx.profile.relocation == Some(false) => reason(
+        Some(Membership::No) if ctx.profile.relocation == Some(false) => reason(
             Verdict::Fail,
             format!(
                 "Requires {how} presence in {abroad}; you live in {} and are not willing to relocate",
                 country_name(home)
             ),
         ),
-        Some(false) => reason(
+        Some(Membership::No) => reason(
             Verdict::Fail,
             format!(
                 "Requires {how} presence in {abroad}; you'd only relocate to {}",
                 join(&only_to, "or")
             ),
         ),
-        Some(true) => {
+        // A destination Narrow can't place: unknown, never a conflict.
+        Some(Membership::Maybe) => reason(
+            Verdict::Unknown,
+            format!(
+                "Requires {how} presence in {abroad}; Narrow can't tell whether it is among the places you'd relocate to ({})",
+                join(&only_to, "or")
+            ),
+        ),
+        Some(Membership::Yes) => {
             let mut r = reason(
                 Verdict::Conditional,
                 format!("Requires relocating to {abroad} for {how} work"),

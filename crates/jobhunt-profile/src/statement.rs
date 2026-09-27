@@ -262,7 +262,7 @@ enum Polarity {
 
 // Checked in this order; phrases containing a negation that are not
 // negative ("don't mind") come first.
-const ACCEPTABLE_CUES: [&str; 14] = [
+const ACCEPTABLE_CUES: [&str; 18] = [
     "don t mind",
     "dont mind",
     "wouldn t mind",
@@ -277,6 +277,11 @@ const ACCEPTABLE_CUES: [&str; 14] = [
     "happy to",
     "could do",
     "if needed",
+    // "hybrid is okay", "on-site is fine"
+    "okay",
+    "ok",
+    "fine",
+    "works for me",
 ];
 const UNWANTED_CUES: [&str; 26] = [
     "avoid*",
@@ -317,7 +322,7 @@ const REQUIRED_CUES: [&str; 9] = [
     "non negotiable",
     "have to",
 ];
-const WANTED_CUES: [&str; 14] = [
+const WANTED_CUES: [&str; 16] = [
     "want*",
     "prefer*",
     "love",
@@ -332,6 +337,9 @@ const WANTED_CUES: [&str; 14] = [
     "keen",
     "would like",
     "passionate",
+    // "remote would be nice", "a plus"
+    "nice",
+    "a plus",
 ];
 const HEDGES: [&str; 9] = [
     "maybe", "perhaps", "probably", "might", "not sure", "kind of", "sort of", "possibly",
@@ -544,8 +552,8 @@ fn read_clause(clause: &str, statement: &str) -> Vec<ReadPreference> {
     let mut push = |value, stance, certainty| push_noted(value, stance, certainty, None);
 
     // Location and logistics. "Remote from Brazil" is working remotely
-    // from where the user lives: remote is the requirement, and Brazil is
-    // home (not a region wish).
+    // from where the user lives: Brazil is home (not a region wish), and
+    // remote is how they work.
     let remote_from = place_after(clause, &ws, &["remote from", "remotely from"]).filter(|p| {
         let first = p.split_whitespace().next().unwrap_or("").to_lowercase();
         !matches!(
@@ -553,24 +561,30 @@ fn read_clause(clause: &str, statement: &str) -> Vec<ReadPreference> {
             "anywhere" | "home" | "everywhere" | "any" | "wherever"
         )
     });
-    let remote_only = remote_from.is_some()
-        || has_any(
-            &ws,
-            &[
-                "remote only",
-                "only remote",
-                "fully remote",
-                "100 remote",
-                "remote first only",
-                "full remote",
-            ],
-        );
-    if remote_only {
+    let remote_only = has_any(
+        &ws,
+        &[
+            "remote only",
+            "only remote",
+            "fully remote",
+            "100 remote",
+            "remote first only",
+            "full remote",
+        ],
+    );
+    if remote_only || remote_from.is_some() {
+        // "Remote only" and "remote from Brazil" make remote a requirement,
+        // unless the clause says in its own words how much it matters ("I'd
+        // prefer remote from Brazil", "open to remote from Portugal"): the
+        // person's polarity always wins over the shortcut.
         push(
             PreferenceValue::WorkMode {
                 mode: WorkMode::Remote,
             },
-            Stance::Required,
+            match polarity {
+                Polarity::Unknown | Polarity::Required => Stance::Required,
+                other => stance_for(other),
+            },
             if hedged {
                 Certainty::Uncertain
             } else {
@@ -1528,6 +1542,68 @@ mod tests {
                 "{home}"
             );
         }
+    }
+
+    /// Codex review #1: the person's own polarity always wins over the
+    /// "remote only" / "remote from X" shortcut, and a nice-to-have is
+    /// never upgraded to a requirement.
+    #[test]
+    fn explicit_polarity_is_preserved() {
+        let reading = |text: &str, key: &str| {
+            let out = read(text);
+            let p = find(&out, key);
+            (p.stance, p.certainty)
+        };
+        use Certainty::Certain;
+        assert_eq!(
+            reading("remote from Brazil", "work_mode:remote"),
+            (Stance::Required, Certain)
+        );
+        assert_eq!(
+            reading("prefer remote from Brazil", "work_mode:remote"),
+            (Stance::Wanted, Certain)
+        );
+        let prefer = read("prefer remote from Brazil");
+        assert_eq!(
+            find(&prefer, "current_location").value,
+            PreferenceValue::CurrentLocation {
+                place: "Brazil".into()
+            },
+            "where the person lives is read either way"
+        );
+        assert_eq!(
+            reading("remote would be nice", "work_mode:remote"),
+            (Stance::Wanted, Certain)
+        );
+        assert_eq!(
+            reading("open to remote roles", "work_mode:remote"),
+            (Stance::Acceptable, Certain)
+        );
+        assert_eq!(
+            reading("I'm open to remote from Portugal", "work_mode:remote"),
+            (Stance::Acceptable, Certain)
+        );
+        assert_eq!(
+            reading("I'd prefer fully remote", "work_mode:remote"),
+            (Stance::Wanted, Certain)
+        );
+        assert_eq!(
+            reading("remote only", "work_mode:remote"),
+            (Stance::Required, Certain)
+        );
+        let both = read("hybrid is okay but I prefer remote");
+        assert!(both.unparsed.is_empty(), "{:?}", both.unparsed);
+        let hybrid = find(&both, "work_mode:hybrid");
+        assert_eq!(
+            (hybrid.stance, hybrid.certainty),
+            (Stance::Acceptable, Certain)
+        );
+        let remote = find(&both, "work_mode:remote");
+        assert_eq!((remote.stance, remote.certainty), (Stance::Wanted, Certain));
+        assert_eq!(
+            reading("on-site is fine", "work_mode:onsite"),
+            (Stance::Acceptable, Certain)
+        );
     }
 
     /// The phrase a real person typed at onboarding: two things read,

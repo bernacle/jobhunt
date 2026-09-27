@@ -351,7 +351,7 @@ pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
     let geography = if ctx.person.remote_geography.is_empty() {
         None
     } else {
-        let reach = signals::RemoteReach::of(&jobhunt_eligibility::requirements(record));
+        let reach = signals::remote_reach_of(record);
         Some(signals::remote_geography(&inputs, &reach))
     };
     let (geography_out, geography_unresolved) = match geography {
