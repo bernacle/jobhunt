@@ -168,8 +168,8 @@ fn brazil_remote_and_global_remote_with_unknown_pay_appear_unresolved() {
             summaries(&r)
         );
         assert!(
-            r.brief.unknowns.iter().any(|u| u.starts_with("Unresolved")),
-            "the card says so: {:?}",
+            r.brief.unknowns[0].starts_with("Unresolved: you require at least"),
+            "the card shows the unresolved requirement first: {:?}",
             r.brief.unknowns
         );
         assert!(

@@ -547,12 +547,22 @@ async fn today_for_a_remote_only_person_in_brazil() {
             "{company}: never a strong fit"
         );
         assert!(
-            r.brief
-                .unknowns
-                .iter()
-                .any(|u| u.starts_with("Unresolved: you require at least USD 140,000")),
+            r.brief.unknowns[0].starts_with("Unresolved: you require at least USD 140,000"),
             "{company}: {:?}",
             r.brief.unknowns
+        );
+        // Today's card shows one unknown: it is that requirement, not only
+        // "pay isn't published".
+        let card = feed
+            .entries
+            .iter()
+            .find(|e| e.entry.ranking.company == company)
+            .map(|e| jobhunt_app::shortlist::ShortlistItem::of(&e.entry))
+            .unwrap();
+        assert!(
+            card.unknowns[0].starts_with("Unresolved: you require at least USD 140,000"),
+            "{company}: {:?}",
+            card.unknowns
         );
     }
     // Remote with no geographic scope: shown (the default policy), with
