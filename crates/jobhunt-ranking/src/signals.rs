@@ -265,6 +265,34 @@ pub fn stated_conflict(a: &Assessment) -> Option<String> {
     })
 }
 
+/// A work-setup requirement the posting leaves unresolved: a listing that
+/// says remote but whose own words also expect office presence or travel.
+/// Said first among what isn't known, and never a strong fit.
+pub fn work_setup_unresolved(a: &Assessment) -> Option<Signal> {
+    if a.decision.status == Eligibility::Ineligible {
+        return None;
+    }
+    let reason = a
+        .decision
+        .reasons
+        .iter()
+        .find(|r| r.rule == RuleId::WorkMode && r.verdict == Verdict::Unknown)?;
+    let mut text = reason.conclusion.clone();
+    if let Some(first) = text.get(..1) {
+        text.replace_range(..1, &first.to_lowercase());
+    }
+    Some(
+        Signal::new(
+            SignalGroup::WorkMode,
+            Basis::Stated,
+            0.0,
+            format!("Unresolved: {text}"),
+        )
+        .kind(SignalKind::Unknown)
+        .evidence(reason.evidence.iter().map(|e| e.text.clone())),
+    )
+}
+
 pub fn eligibility(a: &Assessment) -> Signal {
     let d = &a.decision;
     if let Some(why) = stated_conflict(a) {
@@ -1300,9 +1328,13 @@ pub fn remote_geography(i: &Inputs<'_>, reach: &RemoteReach) -> GeographyReading
         ruled_out: None,
         unresolved: false,
     };
-    let stated = &i.person.remote_geography;
+    let stated = i.person.effective_remote_geography();
     let listed = |stance: Stance| -> Vec<&crate::person::RemoteGeography> {
-        stated.iter().filter(|g| g.stance == stance).collect()
+        stated
+            .iter()
+            .copied()
+            .filter(|g| g.stance == stance)
+            .collect()
     };
     let texts = |gs: &[&crate::person::RemoteGeography]| {
         gs.iter()

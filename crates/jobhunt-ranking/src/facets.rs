@@ -307,14 +307,25 @@ const REQUIRED_CUES: [&str; 9] = [
 ];
 
 /// Company and team kinds a description states, with the words.
+///
+/// A company's stage is read only from wording about the company itself
+/// ("we're an early-stage startup", "our seed round"). The stage of a
+/// project, a product, a new team or a role ("early-stage work", "a
+/// brand-new team", "founding engineer", "first engineer on the product")
+/// says nothing about the company: a public company hires founding
+/// engineers for new internal bets.
 const COMPANY_TERMS: &[(&str, &str)] = &[
-    ("early stage", "early_stage"),
+    ("we are early stage", "early_stage"),
+    ("we re early stage", "early_stage"),
+    ("we are an early stage", "early_stage"),
+    ("we re an early stage", "early_stage"),
+    ("an early stage company", "early_stage"),
+    ("an early stage startup", "early_stage"),
+    ("our early stage", "early_stage"),
     ("pre seed", "early_stage"),
     ("seed stage", "early_stage"),
     ("seed round", "early_stage"),
     ("series a", "early_stage"),
-    ("first engineer*", "early_stage"),
-    ("founding engineer*", "early_stage"),
     ("series b", "scaleup"),
     ("series c", "scaleup"),
     ("series d", "scaleup"),
@@ -329,7 +340,6 @@ const COMPANY_TERMS: &[(&str, &str)] = &[
     ("start up", "startup"),
     ("y combinator", "startup"),
     ("founder*", "founder_led"),
-    ("founding team", "founder_led"),
     // Team sizes are read by `team_size`, clause by clause: whose team a
     // size is decides what it can mean.
     // The company itself ("we're a small company"), not its customers
@@ -1187,14 +1197,18 @@ pub fn facets(record: &JobRecord) -> JobFacets {
     if let Some(fact) = team_size(&sentences) {
         company_traits.push(fact);
     }
-    if record.posting.provenance.source.kind() == "yc"
-        && !company_traits.iter().any(|f| f.key.value == "startup")
-    {
-        company_traits.push(Fact {
-            key: TasteKey::new(Dimension::CompanyTrait, "startup"),
-            evidence: "listed on Y Combinator's Work at a Startup".into(),
-            source: FactSource::Structured,
-        });
+    // Later-stage evidence ("our $500M Series F", "publicly traded",
+    // "thousands of employees") outranks early-stage wording in the same
+    // posting ("we raised our Series A in 2016"): the company is no longer
+    // early-stage. A job board (Y Combinator's included, where alumni like
+    // public companies post too) says nothing about the stage.
+    if company_traits.iter().any(|f| {
+        matches!(
+            f.key.value.as_str(),
+            "scaleup" | "public_company" | "large_company"
+        )
+    }) {
+        company_traits.retain(|f| f.key.value != "early_stage");
     }
     let mut work_style = statements(&sentences, &WORK_STYLE_PATTERNS, Dimension::WorkStyle);
     let level = title_level(&title);
@@ -1564,9 +1578,83 @@ mod tests {
     }
 
     #[test]
-    fn yc_companies_are_startups_and_managers_manage() {
+    fn a_job_board_is_not_a_company_stage_and_managers_manage() {
+        // Posting on Y Combinator's job board doesn't make a company a
+        // startup today (DoorDash posts there).
         let f = facets(&record("yc:acme", "Engineering Manager", ""));
-        assert!(f.company_traits.iter().any(|t| t.key.value == "startup"));
+        assert!(f.company_traits.is_empty(), "{:?}", f.company_traits);
         assert!(f.manages_people());
+    }
+
+    fn stages(source: &str, description: &str) -> Vec<String> {
+        facets(&record(source, "Software Engineer", description))
+            .company_traits
+            .iter()
+            .map(|t| t.key.value.clone())
+            .collect()
+    }
+
+    /// Production smoke test: the stage of a team, a project or a role is
+    /// never the company's stage.
+    #[test]
+    fn only_the_company_itself_has_a_company_stage() {
+        // DoorDash (on Y Combinator's job board): a team bootstrapping new
+        // bets and hiring founding engineers.
+        let doordash = stages(
+            "yc:doordash",
+            "The mission of the Database and Messaging team is to build and operate online \
+             stateful systems. We are bootstrapping some long term bets in all of these areas \
+             and looking for founding engineers.",
+        );
+        assert!(!doordash.contains(&"early_stage".into()), "{doordash:?}");
+        assert!(!doordash.contains(&"startup".into()), "{doordash:?}");
+        assert!(!doordash.contains(&"founder_led".into()), "{doordash:?}");
+        // Supabase: early-stage work on a brand-new team, at a Series F
+        // company with a small team.
+        let supabase = stages(
+            "ashby:supabase",
+            "This is a role with a lot of agency. Small team, working product, patterns still \
+             to be set. Are comfortable owning ambiguous, early-stage work and making sound \
+             calls. This is a founding role on a brand-new team. Over $1B raised (including our \
+             $500M Series F).",
+        );
+        assert!(!supabase.contains(&"early_stage".into()), "{supabase:?}");
+        assert!(supabase.contains(&"scaleup".into()), "{supabase:?}");
+        assert!(
+            supabase.contains(&"small_team".into()),
+            "the team is still small"
+        );
+        for not_the_company in [
+            "You'll be the first engineer on our new payments product.",
+            "Join the founding team of a new internal initiative.",
+            "This is greenfield work: you'll build something from zero.",
+            "We're building an early-stage product for small businesses.",
+            "We sell to early-stage companies.",
+        ] {
+            let t = stages("ashby:acme", not_the_company);
+            assert!(
+                !t.contains(&"early_stage".into()),
+                "{not_the_company}: {t:?}"
+            );
+        }
+        for the_company in [
+            "We're an early-stage startup backed by great investors.",
+            "We are early stage and move fast.",
+            "We just closed our seed round.",
+            "We raised a $12M Series A last year.",
+        ] {
+            assert!(
+                stages("ashby:acme", the_company).contains(&"early_stage".into()),
+                "{the_company}"
+            );
+        }
+        // A later round in the same posting outranks an earlier one.
+        let grown = stages(
+            "ashby:acme",
+            "We raised our Series A in 2016. We have since raised a $300M Series D.",
+        );
+        assert!(!grown.contains(&"early_stage".into()), "{grown:?}");
+        // Unknown stays unknown.
+        assert!(stages("ashby:acme", "You will build backend services in Rust.").is_empty());
     }
 }

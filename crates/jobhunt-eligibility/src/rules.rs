@@ -226,7 +226,24 @@ pub fn work_mode(ctx: &Context<'_>) -> Vec<Reason> {
             vec![evidence],
         ),
     };
+    // A remote listing whose own words also expect office presence or
+    // travel ("Remote-Friendly" and "in one of our offices at least 25% of
+    // the time"): for someone who requires remote work only, whether that
+    // applies to this role is unknown. Never read as fine, never as a
+    // conflict the posting didn't state.
+    let policy = &ctx.job.presence_policy;
+    let remote_only =
+        !required.contains(&WorkMode::Hybrid) && !required.contains(&WorkMode::Onsite);
     let reason = match mode {
+        Some(WorkMode::Remote) if remote_only && !policy.is_empty() => Reason::new(
+            RuleId::WorkMode,
+            Verdict::Unknown,
+            format!(
+                "The listing says remote, but it also expects office presence or travel (“{}”); Narrow can't tell whether that applies to this role",
+                clip(&policy[0].text, 140)
+            ),
+        )
+        .evidence(policy),
         Some(m) if required.contains(&m) => Reason::new(
             RuleId::WorkMode,
             Verdict::Pass,
@@ -253,6 +270,17 @@ pub fn work_mode(ctx: &Context<'_>) -> Vec<Reason> {
         ),
     };
     vec![reason.evidence(evidence).fact(fact)]
+}
+
+/// At most `max` characters of `text`, cut at a word, with an ellipsis.
+fn clip(text: &str, max: usize) -> String {
+    let text = text.trim();
+    if text.chars().count() <= max {
+        return text.to_owned();
+    }
+    let cut: String = text.chars().take(max).collect();
+    let cut = cut.rsplit_once(' ').map_or(cut.as_str(), |(head, _)| head);
+    format!("{}…", cut.trim_end_matches([',', ';', ':']))
 }
 
 /// On-site and hybrid options: being at the office's place.

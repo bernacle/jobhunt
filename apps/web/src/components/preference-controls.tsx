@@ -474,7 +474,7 @@ function Authorization({ location, update }: { location: PreferenceControls["loc
 }
 
 const SCOPES = [
-  { code: "worldwide", value: "Worldwide", label: "Anywhere (worldwide)" },
+  { code: "worldwide", value: "Worldwide", label: "Anywhere (no restriction)" },
   { code: "americas", value: "Americas", label: "The Americas" },
   { code: "latam", value: "Latin America", label: "Latin America (LATAM)" },
 ];
@@ -488,12 +488,16 @@ function RemoteGeography({ location, update }: { location: PreferenceControls["l
   const stance = importance === "must_have" ? "require" : "want";
   const presetOf = (code: string) => wanted.find((g) => g.code === code);
   const others = wanted.filter((g) => !SCOPES.some((s) => s.code === g.code));
+  // Anywhere restricts nothing and ranks nothing up or down; a required list
+  // that includes it restricts nothing either.
+  const anywhere = Boolean(presetOf("worldwide"));
+  const restricting = importance === "must_have" && anywhere ? [] : wanted.filter((g) => g.code !== "worldwide");
   return (
     <Row
       id={id}
       title="Remote roles open to"
       help="Where a remote role's published scope should reach. Leave empty to rely on where you live."
-      layer={wanted.length === 0 ? null : importance === "must_have" ? "requirement" : "preference"}
+      layer={restricting.length === 0 ? null : importance === "must_have" ? "requirement" : "preference"}
     >
       <fieldset disabled={pending}>
         <legend className="sr-only">Remote scopes</legend>
@@ -520,6 +524,12 @@ function RemoteGeography({ location, update }: { location: PreferenceControls["l
           })}
         </div>
       </fieldset>
+      {anywhere && (
+        <p className="mt-2 text-caption text-fg-muted">
+          Anywhere means no geographic restriction: it doesn&apos;t rank remote roles up or down. Eligibility still depends on where you
+          live.
+        </p>
+      )}
       {others.length > 0 && (
         <ul aria-label="Other places" className="mt-3 flex flex-wrap gap-2">
           {others.map((g) => (

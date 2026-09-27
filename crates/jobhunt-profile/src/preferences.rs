@@ -528,7 +528,10 @@ impl fmt::Display for PreferenceValue {
             }
             Self::WorkMode { mode } => write!(f, "{} work", mode.as_str()),
             Self::CurrentLocation { place } => write!(f, "based in {place}"),
-            Self::Region { region } => write!(f, "work in {region}"),
+            Self::Region { region } if is_anywhere(region) => {
+                write!(f, "remote roles open anywhere (no geographic restriction)")
+            }
+            Self::Region { region } => write!(f, "remote roles open to {region}"),
             Self::Timezone { zone } => write!(f, "time zone {zone}"),
             Self::Relocation {
                 willing: true,
@@ -564,6 +567,16 @@ impl fmt::Display for PreferenceValue {
             }
         }
     }
+}
+
+/// Whether a region is the whole world ("Worldwide", "anywhere",
+/// "global"): as a remote geography it restricts nothing and prefers
+/// nothing.
+pub fn is_anywhere(region: &str) -> bool {
+    matches!(
+        search_key(region).as_str(),
+        "worldwide" | "anywhere" | "global" | "globally" | "the world"
+    )
 }
 
 /// `120000` → `120,000`.
@@ -935,6 +948,22 @@ mod tests {
         let strict = PreferenceValue::UnclearEligibility { show: false };
         assert_eq!(strict.key(), "unclear_eligibility");
         assert_eq!(strict.category(), PreferenceCategory::Location);
+    }
+
+    #[test]
+    fn remote_geography_reads_as_such_and_anywhere_as_no_restriction() {
+        let region = |r: &str| PreferenceValue::Region { region: r.into() }.to_string();
+        assert_eq!(
+            region("Worldwide"),
+            "remote roles open anywhere (no geographic restriction)"
+        );
+        assert_eq!(region("anywhere"), region("Worldwide"));
+        assert_eq!(
+            region("Latin America"),
+            "remote roles open to Latin America"
+        );
+        assert!(is_anywhere("Global") && is_anywhere("the world"));
+        assert!(!is_anywhere("Europe"));
     }
 
     #[test]

@@ -334,6 +334,12 @@ pub struct JobRequirements {
     pub conflicts: Vec<Conflict>,
     /// Location text JobHunt does not recognize.
     pub unrecognized: Vec<Evidence>,
+    /// Statements that expect presence or travel whatever the job's own
+    /// location says ("we expect all staff to be in one of our offices at
+    /// least 25% of the time", "Remote-Friendly (Travel-Required)"), with
+    /// or without a named place. On a remote job they are a contradiction
+    /// to surface, not a conclusion to draw.
+    pub presence_policy: Vec<Evidence>,
 }
 
 impl JobRequirements {
@@ -376,9 +382,30 @@ pub fn requirements(record: &JobRecord) -> JobRequirements {
         vague_zone: None,
         conflicts: Vec::new(),
         unrecognized: Vec::new(),
+        presence_policy: Vec::new(),
     };
 
     let places = structured_places(record);
+    // "Remote-Friendly (Travel-Required)": travel stated in a location field.
+    for (field, text) in posting
+        .location
+        .iter()
+        .map(|l| ("location", l.as_str()))
+        .chain(
+            posting
+                .locations
+                .iter()
+                .filter_map(|l| l.name.as_deref())
+                .map(|n| ("locations", n)),
+        )
+    {
+        let ws = words(text);
+        if compiled(&TRAVEL_CUES).iter().any(|p| p.find(&ws).is_some())
+            && !job.presence_policy.iter().any(|e| e.text == text.trim())
+        {
+            job.presence_policy.push(evidence(record, field, text));
+        }
+    }
 
     // Mode, from the workplace type first, then the places.
     let any_remote = places.iter().any(|(p, _)| p.remote);
@@ -422,6 +449,11 @@ pub fn requirements(record: &JobRecord) -> JobRequirements {
         .collect();
     for (place, ev) in places {
         let remote_place = place.remote || job.mode == JobMode::Remote;
+        // A place that is itself remote ("Remote (US)", "Remote, Global") is
+        // also evidence that the job is remote.
+        if place.remote && place.area.is_some() {
+            remote_evidence.push(ev.clone());
+        }
         match (remote_place, place.area) {
             (true, Some(Area::Worldwide)) => global = Some(ev),
             (
@@ -441,13 +473,20 @@ pub fn requirements(record: &JobRecord) -> JobRequirements {
                 }
             }
             (true, Some(area)) => {
-                if !scope.iter().any(|s| s.area == area) {
-                    scope.push(ScopedArea {
-                        area,
-                        raw: place.raw.clone(),
-                        basis: ScopeBasis::Stated,
-                        evidence: ev,
-                    });
+                let stated = ScopedArea {
+                    area,
+                    raw: place.raw.clone(),
+                    basis: ScopeBasis::Stated,
+                    evidence: ev,
+                };
+                match scope.iter_mut().find(|s| s.area == area) {
+                    // "Remote (US)" after "New York, NY": the posting states
+                    // what the office only suggested, and the statement wins.
+                    Some(existing) if existing.basis == ScopeBasis::OfficeCity => {
+                        *existing = stated;
+                    }
+                    Some(_) => {}
+                    None => scope.push(stated),
                 }
             }
             (true, None) => {
@@ -544,6 +583,10 @@ pub fn requirements(record: &JobRecord) -> JobRequirements {
     }
     if let Some(text) = &posting.description_text {
         for sentence in sentences(text) {
+            if presence_policy(&sentence) {
+                job.presence_policy
+                    .push(evidence(record, "description", &sentence));
+            }
             read_sentence(record, &sentence, &mut job);
         }
     }
@@ -916,6 +959,105 @@ fn compiled(cues: &'static [&'static str]) -> &'static [Pattern] {
     cache
         .entry((cues.as_ptr() as usize, cues.len()))
         .or_insert_with(|| Vec::leak(cues.iter().map(|c| Pattern::new(c)).collect()))
+}
+
+/// Where presence happens, for a presence policy.
+const PRESENCE_PLACES: [&str; 7] = [
+    "office",
+    "offices",
+    "on site",
+    "onsite",
+    "in person",
+    "headquarters",
+    "in office",
+];
+
+/// How often, or how firmly, presence is expected.
+const PRESENCE_CADENCE: [&str; 19] = [
+    "of the time",
+    "percent",
+    "days a week",
+    "days per week",
+    "day a week",
+    "day per week",
+    "times a week",
+    "times per week",
+    "per week",
+    "each week",
+    "every week",
+    "per month",
+    "a month",
+    "quarterly",
+    "regularly",
+    "periodic*",
+    "expect*",
+    "required",
+    "mandatory",
+];
+
+/// A hybrid arrangement named as the job's ("a hybrid role").
+const HYBRID_ROLE: [&str; 6] = [
+    "hybrid role",
+    "hybrid position",
+    "hybrid schedule",
+    "hybrid model",
+    "hybrid policy",
+    "hybrid work",
+];
+
+/// Travel stated as a requirement of the job.
+const TRAVEL_CUES: [&str; 8] = [
+    "travel required",
+    "required to travel",
+    "travel requirement*",
+    "travel is required",
+    "will need to travel",
+    "must travel",
+    "must be able to travel",
+    "travel up to",
+];
+
+/// Offices as a perk or an option, not an expectation.
+const PRESENCE_NOT_REQUIRED: [&str; 23] = [
+    "budget",
+    "perk*",
+    "allowance",
+    "stipend",
+    "equipment",
+    "membership",
+    "co working",
+    "coworking",
+    "wework",
+    "reimburs*",
+    "no offices",
+    "no office",
+    "not required",
+    "optional",
+    "if you prefer",
+    "if you d like",
+    "home office",
+    // The software, not a place.
+    "microsoft office",
+    "ms office",
+    "office 365",
+    "office suite",
+    "google workspace",
+    "office hours",
+];
+
+/// Whether a sentence states an expectation of office presence or travel
+/// ("we expect all staff to be in one of our offices at least 25% of the
+/// time", "this is a hybrid role", "travel required"), named place or not.
+fn presence_policy(sentence: &str) -> bool {
+    let ws = words(sentence);
+    let has = |cues: &'static [&'static str]| compiled(cues).iter().any(|p| p.find(&ws).is_some());
+    if has(&PRESENCE_NOT_REQUIRED) {
+        return false;
+    }
+    has(&TRAVEL_CUES)
+        || has(&HYBRID_ROLE)
+        || (has(&PRESENCE_PLACES) && has(&PRESENCE_CADENCE))
+        || (has(&["hybrid"]) && has(&PRESENCE_CADENCE))
 }
 
 /// Substrings (lowercase) at least one of which every eligibility sentence

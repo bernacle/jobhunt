@@ -100,7 +100,7 @@ describe("Location", () => {
     const scopes = group("Remote roles open to");
     expect(within(scopes).getByRole("checkbox", { name: "Latin America (LATAM)" })).toBeChecked();
     expect(within(scopes).getByText("Preference")).toBeInTheDocument();
-    await userEvent.click(within(scopes).getByRole("checkbox", { name: "Anywhere (worldwide)" }));
+    await userEvent.click(within(scopes).getByRole("checkbox", { name: "Anywhere (no restriction)" }));
     expect(save).toHaveBeenCalledWith([{ kind: "region", region: "Worldwide", stance: "want" }], []);
     await userEvent.click(within(scopes).getByRole("checkbox", { name: "Latin America (LATAM)" }));
     expect(save).toHaveBeenLastCalledWith([], ["pref_latam"]);
@@ -266,5 +266,22 @@ describe("pay periods (Codex review #3)", () => {
     render(<PayControls controls={controls()} update={update()} />);
     const options = within(within(group("Target")).getByLabelText("Per")).getAllByRole("option");
     expect(options.map((o) => o.getAttribute("value"))).toEqual(["year", "month", "day", "hour"]);
+  });
+});
+
+describe("Anywhere (production smoke test)", () => {
+  it("is no restriction: no layer, and it says it ranks nothing", () => {
+    const c = controls();
+    const anywhere = {
+      record: stated({ id: "pref_any", value: "remote roles open anywhere (no geographic restriction)", stance: "wanted", layer: "preference" }),
+      place: "Worldwide",
+      read_as: "anywhere",
+      code: "worldwide",
+    };
+    render(<LocationControls controls={{ ...c, location: { ...c.location, remote_geography: [anywhere] } }} update={update()} />);
+    const scopes = group("Remote roles open to");
+    expect(within(scopes).getByRole("checkbox", { name: "Anywhere (no restriction)" })).toBeChecked();
+    expect(within(scopes).queryByText("Preference", { exact: true })).not.toBeInTheDocument();
+    expect(within(scopes).getByText(/doesn't rank remote roles up or down/)).toBeInTheDocument();
   });
 });

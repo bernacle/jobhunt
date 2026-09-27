@@ -742,3 +742,186 @@ fn hiding_unknown_pay_covers_pay_that_cant_be_compared() {
     let r = rank_for(&usd_job, &hide(minimum(140_000, Some("USD"))), &f);
     assert_eq!(r.gate, Gate::Recommended);
 }
+
+// ---------------------------------------------------------------------------
+// Production smoke test of BRU-308 (the shapes seen on a real account).
+
+fn early_stage_wanted() -> Person {
+    let mut p = person();
+    p.stated.push(stated(
+        Dimension::CompanyTrait,
+        TasteKey::new(Dimension::CompanyTrait, "early_stage"),
+        Stance::Wanted,
+        "early-stage companies",
+    ));
+    p.stated.push(stated(
+        Dimension::CompanyTrait,
+        TasteKey::new(Dimension::CompanyTrait, "startup"),
+        Stance::Wanted,
+        "startups",
+    ));
+    p
+}
+
+/// "Anywhere" restricts nothing and prefers nothing: with it or without it,
+/// every job ranks the same.
+#[test]
+fn anywhere_is_neutral() {
+    let jobs = [
+        remote("Remote - Brazil", SMALL_TEAM),
+        remote("Remote (LATAM)", SMALL_TEAM),
+        remote("Remote - Worldwide", SMALL_TEAM),
+        remote("Remote", SMALL_TEAM),
+    ];
+    let f = facts(Stance::Required);
+    for stance in [Stance::Wanted, Stance::Required, Stance::Acceptable] {
+        let mut anywhere = person();
+        anywhere.remote_geography = vec![geography("Worldwide", stance)];
+        for j in &jobs {
+            let with = rank_for(j, &anywhere, &f);
+            let without = rank_for(j, &person(), &f);
+            assert_eq!(
+                (with.gate.clone(), with.tier, with.score),
+                (without.gate.clone(), without.tier, without.score),
+                "{stance:?} {:?}",
+                j.posting.location
+            );
+            assert!(
+                !summaries(&with)
+                    .iter()
+                    .any(|s| s.contains("as you prefer (Worldwide)")),
+                "{:?}",
+                summaries(&with)
+            );
+        }
+    }
+    // A required list that includes anywhere restricts nothing.
+    let mut either = person();
+    either.remote_geography = vec![
+        geography("Anywhere", Stance::Required),
+        geography("Europe", Stance::Required),
+    ];
+    let r = rank_for(&jobs[0], &either, &f);
+    assert_eq!(r.gate, Gate::Recommended, "{:?}", r.gate);
+    // Other wishes next to anywhere still count, as said.
+    let mut latam = person();
+    latam.remote_geography = vec![
+        geography("Worldwide", Stance::Wanted),
+        geography("Latin America", Stance::Wanted),
+    ];
+    assert!(has(
+        &rank_for(&jobs[0], &latam, &f),
+        SignalKind::Plus,
+        "as you prefer (Latin America)"
+    ));
+}
+
+/// Ramp: New York (HQ), San Francisco, Remote (US) is remote in the US
+/// only: never on Today for someone in Brazil.
+#[test]
+fn a_us_only_remote_job_listing_offices_first_is_excluded() {
+    let mut ramp = job("New York, NY (HQ)", Some(WorkplaceType::Remote), SMALL_TEAM);
+    ramp.posting.is_remote = Some(true);
+    let loc = |name: &str| jobhunt_jobs::SourceLocation {
+        name: Some(name.into()),
+        locality: None,
+        region: None,
+        country: Some("US".into()),
+    };
+    ramp.posting.locations = vec![
+        loc("New York, NY (HQ)"),
+        loc("San Francisco, CA"),
+        loc("Remote (US)"),
+    ];
+    usd(&mut ramp, 189_000.0, 330_000.0);
+    let r = rank_for(&ramp, &person(), &facts(Stance::Required));
+    assert!(
+        matches!(excluded(&r), Some(Exclusion::Ineligible { why }) if why.contains("United States")),
+        "{:?}",
+        r.gate
+    );
+    assert!(!on_today(&r));
+}
+
+/// Anthropic: remote-friendly, but also 25% in an office and travel
+/// required. Unresolved, said first, never a strong fit.
+#[test]
+fn a_remote_job_with_an_office_policy_is_unresolved_and_says_so() {
+    let mut anthropic = remote(
+        "Remote - Brazil",
+        "You'll join a team of 6 engineers building backend services in Rust and PostgreSQL. \
+         Location-based hybrid policy: Currently, we expect all staff to be in one of our offices \
+         at least 25% of the time.",
+    );
+    usd(&mut anthropic, 405_000.0, 485_000.0);
+    let r = rank_for(&anthropic, &person(), &facts(Stance::Required));
+    assert!(
+        matches!(r.gate, Gate::EligibilityUnclear { .. }),
+        "{:?}",
+        r.gate
+    );
+    assert!(on_today(&r), "unresolved is shown, not hidden");
+    assert!(
+        r.brief.unknowns[0].starts_with(
+            "Unresolved: the listing says remote, but it also expects office presence"
+        ),
+        "{:?}",
+        r.brief.unknowns
+    );
+    assert!(r.brief.unknowns[0].contains("25% of the time"));
+    assert_eq!(
+        r.tier,
+        Tier::WorthReviewing,
+        "never a strong fit: {:?}",
+        summaries(&r)
+    );
+    // The same job without the policy is fine, and can be a strong fit.
+    let mut plain = remote("Remote - Brazil", SMALL_TEAM);
+    usd(&mut plain, 405_000.0, 485_000.0);
+    assert_eq!(
+        rank_for(&plain, &person(), &facts(Stance::Required)).tier,
+        Tier::StrongFit
+    );
+}
+
+/// DoorDash and Supabase: founding engineers for a new bet, early-stage
+/// work on a brand-new team at a Series F company, a Y Combinator listing.
+/// None is an early-stage company, and none a startup.
+#[test]
+fn team_and_project_stage_never_match_a_company_stage_wish() {
+    let doordash = {
+        let mut r = crate::testing::record(
+            "yc:doordash",
+            "Software Engineer, Distributed Databases",
+            "We are bootstrapping some long term bets in all of these areas and looking for \
+             founding engineers.",
+        );
+        r.posting.location = Some("Remote".into());
+        r
+    };
+    let supabase = remote(
+        "Remote, Global",
+        "Small team, working product. Are comfortable owning ambiguous, early-stage work. This \
+         is a founding role on a brand-new team. Over $1B raised (including our $500M Series F).",
+    );
+    for j in [&doordash, &supabase] {
+        let r = rank_for(j, &early_stage_wanted(), &facts(Stance::Required));
+        assert!(
+            !r.signals
+                .iter()
+                .any(|s| s.group == crate::signals::SignalGroup::Company
+                    && s.weight > 0.0
+                    && (s.summary.contains("early-stage") || s.summary.contains("startup"))),
+            "{}: {:?}",
+            j.posting.company,
+            summaries(&r)
+        );
+    }
+    // The small team is still read, as a team.
+    let r = rank_for(&supabase, &early_stage_wanted(), &facts(Stance::Required));
+    assert!(
+        !r.signals
+            .iter()
+            .any(|s| s.summary.contains("Small teams: a kind") && s.weight < 0.0)
+    );
+}

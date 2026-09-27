@@ -799,3 +799,150 @@ async fn ruling_a_mode_out_keeps_the_work_setup() {
         modes(&[("hybrid work", "acceptable")])
     );
 }
+
+/// The production smoke test of BRU-308, replayed: the account's settings
+/// (remote only, won't relocate, Brazil, at least USD 140k, Anywhere,
+/// early-stage and small teams nice to have) against the shapes of the
+/// jobs Today showed.
+#[tokio::test]
+async fn today_after_the_production_smoke_test() {
+    let app = app().await;
+    set(
+        &app,
+        vec![
+            PreferenceInput::Location {
+                place: "Dourados, Brazil".into(),
+            },
+            PreferenceInput::WorkSetup {
+                setup: WorkSetupInput::RemoteOnly,
+            },
+            PreferenceInput::Relocation {
+                willing: false,
+                only_to: Vec::new(),
+            },
+            PreferenceInput::AuthorizedIn {
+                place: "Brazil".into(),
+            },
+            PreferenceInput::Region {
+                region: "Worldwide".into(),
+                stance: StanceInput::Want,
+            },
+            PreferenceInput::Compensation {
+                minimum: Some(140_000),
+                target: None,
+                currency: "USD".into(),
+                period: PeriodInput::Year,
+                applies_to: None,
+            },
+            PreferenceInput::Company {
+                company: "early_stage".into(),
+                stance: StanceInput::Want,
+            },
+            PreferenceInput::Company {
+                company: "small_team".into(),
+                stance: StanceInput::Want,
+            },
+            PreferenceInput::Role {
+                role: "backend".into(),
+                stance: StanceInput::Want,
+            },
+        ],
+    )
+    .await;
+    let office = |name: &str| jobhunt_jobs::SourceLocation {
+        name: Some(name.into()),
+        locality: None,
+        region: None,
+        country: Some("US".into()),
+    };
+    let mut ramp = posting(
+        "Ramp",
+        "New York, NY (HQ)",
+        Some(WorkplaceType::Remote),
+        "You'll build backend services in Go and PostgreSQL. Budget for intra-office travel.",
+        Some((189_000.0, 330_000.0)),
+    );
+    ramp.is_remote = Some(true);
+    ramp.locations = vec![
+        office("New York, NY (HQ)"),
+        office("San Francisco, CA"),
+        office("Remote (US)"),
+    ];
+    let anthropic = posting(
+        "Anthropic",
+        "Remote-Friendly (Travel-Required) | San Francisco, CA | Seattle, WA | New York City, NY",
+        None,
+        "You'll build backend data infrastructure in Go. Location-based hybrid policy: Currently, \
+         we expect all staff to be in one of our offices at least 25% of the time.",
+        Some((405_000.0, 485_000.0)),
+    );
+    let supabase = posting(
+        "Supabase",
+        "Remote, Global",
+        None,
+        "We're looking for backend engineers. Small team, working product. Are comfortable \
+         owning ambiguous, early-stage work. This is a founding role on a brand-new team. We \
+         hire globally. Over $1B raised (including our $500M Series F).",
+        Some((150_000.0, 180_000.0)),
+    );
+    let airbnb = posting(
+        "Airbnb",
+        "Brazil",
+        Some(WorkplaceType::Remote),
+        "You'll build backend developer tools in Java and Go.",
+        None,
+    );
+    discover(app.store(), &[ramp, anthropic, supabase, airbnb]).await;
+    let feed = today(&app).await;
+    let on = companies(&feed);
+
+    // Ramp is remote in the US only: someone in Brazil can't take it.
+    assert!(!on.contains(&"Ramp".to_owned()), "{on:?}");
+    // Anthropic: shown, with the contradiction first, never "fine".
+    let r = entry(&feed, "Anthropic");
+    let card = feed
+        .entries
+        .iter()
+        .find(|e| e.entry.ranking.company == "Anthropic")
+        .map(|e| jobhunt_app::shortlist::ShortlistItem::of(&e.entry))
+        .unwrap();
+    assert!(
+        card.unknowns[0].starts_with(
+            "Unresolved: the listing says remote, but it also expects office presence or travel"
+        ),
+        "{:?}",
+        card.unknowns
+    );
+    assert_eq!(r.tier, Tier::WorthReviewing);
+    // Supabase: a small team, but not an early-stage company; Anywhere adds
+    // nothing.
+    let r = entry(&feed, "Supabase");
+    let lines: Vec<&String> = r.brief.worth.iter().chain(&r.brief.caveats).collect();
+    assert!(
+        !lines.iter().any(|l| l.contains("Early-stage")),
+        "{lines:?}"
+    );
+    assert!(lines.iter().any(|l| l.contains("Small teams")), "{lines:?}");
+    // Nowhere does Anywhere read as a preference met.
+    for e in &feed.entries {
+        assert!(
+            !e.entry
+                .ranking
+                .signals
+                .iter()
+                .any(|s| s.summary.contains("Worldwide")),
+            "{}",
+            e.entry.ranking.company
+        );
+    }
+    // The stored wording.
+    let taste = app.taste_view().await.unwrap();
+    assert!(
+        taste
+            .stated
+            .iter()
+            .any(|p| p.value == "remote roles open anywhere (no geographic restriction)"),
+        "{:?}",
+        taste.stated.iter().map(|p| &p.value).collect::<Vec<_>>()
+    );
+}

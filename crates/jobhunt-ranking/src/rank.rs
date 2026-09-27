@@ -45,7 +45,7 @@ use crate::taste::TasteModel;
 
 /// Revision of the signals, weights, gates and tiers. Part of every stored
 /// ranking's key; bump it with any change that can rank a job differently.
-pub const RANKING_VERSION: &str = "4";
+pub const RANKING_VERSION: &str = "5";
 
 /// Why an opportunity is not among the recommendations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -334,6 +334,9 @@ pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
         signals::eligibility(candidate.assessment),
         signals::verification(candidate.assessment, ctx.now),
     ];
+    let work_setup = signals::work_setup_unresolved(candidate.assessment);
+    let work_setup_unresolved = work_setup.is_some();
+    all.extend(work_setup);
     all.extend(signals::feedback(&inputs));
     all.extend(signals::notes(&inputs, record.opportunity_id));
     all.extend(signals::role(&inputs));
@@ -348,7 +351,7 @@ pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
     all.extend(signals::work_mode(&inputs));
     // Where remote work is allowed is read only when the person said where
     // they want it.
-    let geography = if ctx.person.remote_geography.is_empty() {
+    let geography = if ctx.person.effective_remote_geography().is_empty() {
         None
     } else {
         let reach = signals::remote_reach_of(record);
@@ -378,7 +381,11 @@ pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
     let tier = tier(&all, score);
     // A requirement the posting says nothing about is not met: never a
     // strong fit on the strength of everything else.
-    let tier = if company.unresolved || pay_reading.unresolved || geography_unresolved {
+    let tier = if company.unresolved
+        || pay_reading.unresolved
+        || geography_unresolved
+        || work_setup_unresolved
+    {
         tier.min(Tier::WorthReviewing)
     } else {
         tier
