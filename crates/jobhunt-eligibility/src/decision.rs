@@ -18,7 +18,7 @@ use crate::profile::{FactBasis, ProfileLocation};
 /// (geography tables, cue lists). Part of every stored decision's cache
 /// key, so changing a rule never keeps conclusions reached under the old
 /// one. Bump it with any change that can change a decision.
-pub const RULES_VERSION: &str = "2";
+pub const RULES_VERSION: &str = "3";
 
 /// Whether a person appears able to work a job, worst first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

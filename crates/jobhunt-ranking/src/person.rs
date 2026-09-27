@@ -139,11 +139,7 @@ pub struct Person {
 /// A stated region, normalized: "Worldwide" and "anywhere" are the whole
 /// world; otherwise the most specific place Narrow recognizes.
 pub fn region_area(region: &str) -> Option<Area> {
-    let key = search_key(region);
-    if matches!(
-        key.as_str(),
-        "worldwide" | "anywhere" | "global" | "globally" | "the world"
-    ) {
+    if jobhunt_profile::preferences::is_anywhere(region) {
         return Some(Area::Worldwide);
     }
     jobhunt_eligibility::profile::place_area(region)
@@ -300,6 +296,22 @@ impl Person {
         self.stated
             .iter()
             .filter_map(|p| p.key().map(|k| (k.clone(), p.direction(), p.text.clone())))
+            .collect()
+    }
+
+    /// The remote geographies that change anything. "Anywhere" is no
+    /// geographic restriction: it never raises a job's rank ("as you prefer
+    /// (Worldwide)" would fit every remote job), never rules one out, and a
+    /// required list that includes it restricts nothing.
+    pub fn effective_remote_geography(&self) -> Vec<&RemoteGeography> {
+        let anywhere_required = self
+            .remote_geography
+            .iter()
+            .any(|g| g.stance == Stance::Required && g.area == Some(Area::Worldwide));
+        self.remote_geography
+            .iter()
+            .filter(|g| g.area != Some(Area::Worldwide))
+            .filter(|g| !(anywhere_required && g.stance == Stance::Required))
             .collect()
     }
 

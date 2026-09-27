@@ -994,3 +994,168 @@ fn broad_office_locations_leave_relocation_unresolved() {
     );
     assert_eq!(status(&madrid, &lisbon), Ineligible);
 }
+
+fn source_location(
+    name: &str,
+    locality: Option<&str>,
+    region: Option<&str>,
+) -> jobhunt_jobs::SourceLocation {
+    jobhunt_jobs::SourceLocation {
+        name: Some(name.into()),
+        locality: locality.map(Into::into),
+        region: region.map(Into::into),
+        country: Some("US".into()),
+    }
+}
+
+fn remote_only_in_brazil() -> ProfileFacts {
+    let mut f = at("Dourados, Brazil");
+    f.work_modes = vec![(WorkMode::Remote, Stance::Required)];
+    f.relocation = Some(false);
+    f
+}
+
+/// Production smoke test (Ramp): offices listed first, then "Remote (US)".
+/// The stated remote scope wins over the scope the offices only suggest,
+/// so it is a US-only remote job, not "scope unclear".
+#[test]
+fn a_stated_remote_scope_outranks_one_inferred_from_offices() {
+    let mut ramp = job(
+        "ashby:ramp",
+        "New York, NY (HQ)",
+        Some(WorkplaceType::Remote),
+        "Ramp is building the smart infrastructure for finance teams. Budget for intra-office travel. Relocation expense coverage to NYC or SF (if needed).",
+    );
+    ramp.posting.is_remote = Some(true);
+    ramp.posting.locations = vec![
+        source_location("New York, NY (HQ)", Some("New York"), Some("NY")),
+        source_location("San Francisco, CA", Some("San Francisco"), Some("CA")),
+        source_location("Remote (US)", None, None),
+    ];
+    let r = requirements(&ramp);
+    assert_eq!(r.options.len(), 1);
+    assert_eq!(r.options[0].label(), "Remote (United States)");
+    assert!(
+        r.presence_policy.is_empty(),
+        "perks aren't a presence policy: {:?}",
+        r.presence_policy
+    );
+    let d = decide(&ramp, &remote_only_in_brazil());
+    assert_eq!(d.status, Ineligible, "{:?}", d.reasons);
+    assert!(has_reason(
+        &d,
+        RuleId::CountryConstraint,
+        Verdict::Fail,
+        "limits remote work to the United States"
+    ));
+    // The same order reversed, and a stated scope alone, read the same.
+    ramp.posting.locations.reverse();
+    assert_eq!(
+        requirements(&ramp).options[0].label(),
+        "Remote (United States)"
+    );
+    // Remote alone is never global.
+    let mut bare = ramp.clone();
+    bare.posting.location = Some("Remote".into());
+    bare.posting.locations = Vec::new();
+    assert_eq!(status(&bare, &remote_only_in_brazil()), Uncertain);
+}
+
+/// Production smoke test (Anthropic): "Remote-Friendly (Travel-Required)"
+/// and a company-wide office policy. For someone who requires remote work
+/// that is unresolved and says why; never "the position is remote, as you
+/// require".
+#[test]
+fn a_presence_policy_on_a_remote_job_is_unresolved() {
+    let anthropic = job(
+        "greenhouse:anthropic",
+        "Remote-Friendly (Travel-Required) | San Francisco, CA | Seattle, WA | New York City, NY",
+        None,
+        "You'll build data infrastructure. Location-based hybrid policy: Currently, we expect all staff to be in one of our offices at least 25% of the time. However, some roles may require more time in our offices.",
+    );
+    let r = requirements(&anthropic);
+    assert!(
+        r.presence_policy
+            .iter()
+            .any(|e| e.text.contains("at least 25% of the time")),
+        "{:?}",
+        r.presence_policy
+    );
+    assert!(
+        r.presence_policy
+            .iter()
+            .any(|e| e.text.contains("Travel-Required"))
+    );
+    let d = decide(&anthropic, &remote_only_in_brazil());
+    assert_eq!(d.status, Uncertain, "{:?}", d.reasons);
+    assert!(has_reason(
+        &d,
+        RuleId::WorkMode,
+        Verdict::Unknown,
+        "it also expects office presence or travel"
+    ));
+    assert!(
+        !has_reason(&d, RuleId::WorkMode, Verdict::Pass, "as you require"),
+        "never Fine while the posting expects presence"
+    );
+    // Someone fine with hybrid isn't asked: the policy is within their setup.
+    let mut hybrid_ok = remote_only_in_brazil();
+    hybrid_ok.work_modes = vec![
+        (WorkMode::Remote, Stance::Required),
+        (WorkMode::Hybrid, Stance::Required),
+    ];
+    assert!(has_reason(
+        &decide(&anthropic, &hybrid_ok),
+        RuleId::WorkMode,
+        Verdict::Pass,
+        "remote"
+    ));
+
+    // A hybrid cadence without a city, on a remote-classified job.
+    let cadence = remote(
+        "Remote - Brazil",
+        "This is a hybrid role: you'll be in the office two days a week.",
+    );
+    assert_eq!(requirements(&cadence).presence_policy.len(), 1);
+    assert_eq!(status(&cadence, &remote_only_in_brazil()), Uncertain);
+
+    // Perks, options and software are not presence policies.
+    for text in [
+        "There are no Supabase offices, but we provide a WeWork membership or co-working allowance you can use anywhere in the world.",
+        "Budget for intra-office travel.",
+        "Experience with Microsoft Office is required.",
+        "A home office stipend is provided every month.",
+        "Office attendance is optional.",
+    ] {
+        let j = remote("Remote - Brazil", text);
+        assert!(requirements(&j).presence_policy.is_empty(), "{text}");
+        assert_eq!(status(&j, &remote_only_in_brazil()), Eligible, "{text}");
+    }
+}
+
+/// A remote job whose remote words are only in its location fields still
+/// cites them: never "not stated" next to "the position is remote".
+#[test]
+fn remote_evidence_comes_from_the_location_fields_too() {
+    let supabase = job(
+        "ashby:supabase",
+        "Remote, Global",
+        None,
+        "We hire globally.",
+    );
+    let d = decide(&supabase, &remote_only_in_brazil());
+    let work_mode = d
+        .reasons
+        .iter()
+        .find(|r| r.rule == RuleId::WorkMode)
+        .unwrap();
+    assert_eq!(work_mode.verdict, Verdict::Pass);
+    assert!(
+        work_mode
+            .evidence
+            .iter()
+            .any(|e| e.text.contains("Remote, Global")),
+        "{:?}",
+        work_mode.evidence
+    );
+}
