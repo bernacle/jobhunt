@@ -7,7 +7,7 @@ import type { PreferenceUpdateResult } from "@/lib/api-types";
 import { learned, tasteView } from "../../test/fixtures";
 import { violations } from "../../test/axe";
 import { AddPreference, Interpretation, StatementForm } from "./preferences";
-import { NotInUse, TasteTable } from "./taste";
+import { NotInUse, TasteReview } from "./taste";
 
 const result: PreferenceUpdateResult = {
   statement: { id: "stmt_1", text: "…", reading: "partial", not_understood: ["something about vibes"], at: "2026-09-25T12:00:00Z" },
@@ -77,27 +77,26 @@ describe("AddPreference", () => {
 describe("explicit and learned", () => {
   const remove = vi.fn(async () => ok);
 
-  it("keeps what was told apart from what was learned, in their own columns", async () => {
-    const { container } = render(<TasteTable taste={tasteView()} remove={remove} />);
-    expect(screen.getByRole("columnheader", { name: /You told us/ })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: /We've learned.*Ranking only/ })).toBeInTheDocument();
-    const roles = screen.getByRole("rowheader", { name: "Roles" }).closest("tr")!;
-    const [told, learnedCell] = within(roles).getAllByRole("cell");
-    expect(within(told!).getByText("Want: backend roles")).toBeInTheDocument();
-    expect(within(told!).queryByText(/SRE/)).not.toBeInTheDocument();
-    expect(within(learnedCell!).getByText("You tend to pass on SRE / DevOps")).toBeInTheDocument();
-    expect(within(learnedCell!).getByText(/established · 2 reasons in your words across 2 jobs/)).toBeInTheDocument();
-    await userEvent.click(within(learnedCell!).getByText("Why Narrow thinks so"));
+  it("keeps what was told apart from what was learned, each in its own layer", async () => {
+    const { container } = render(<TasteReview taste={tasteView()} remove={remove} />);
+    const preferences = screen.getByRole("region", { name: "Preferences" });
+    expect(within(preferences).getByText("Want: backend roles")).toBeInTheDocument();
+    expect(within(preferences).queryByText(/SRE/)).not.toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Requirements" })).getByText("None stated")).toBeInTheDocument();
+    const learnedLayer = screen.getByRole("region", { name: "Learned" });
+    expect(within(learnedLayer).getByText("You tend to pass on SRE / DevOps")).toBeInTheDocument();
+    expect(within(learnedLayer).getByText(/established · 2 reasons in your words across 2 jobs/)).toBeInTheDocument();
+    await userEvent.click(within(learnedLayer).getByText("Why Narrow thinks so"));
     expect(screen.getByText("too much SRE")).toBeInTheDocument();
     // A learned tendency has no requirement controls.
-    expect(within(learnedCell!).queryByRole("button", { name: /Remove/ })).not.toBeInTheDocument();
-    expect(within(told!).getByRole("button", { name: /Remove/ })).toBeInTheDocument();
+    expect(within(learnedLayer).queryByRole("button", { name: /Remove/ })).not.toBeInTheDocument();
+    expect(within(preferences).getByRole("button", { name: /Remove/ })).toBeInTheDocument();
     expect(await violations(container)).toEqual([]);
   });
 
   it("says when nothing has been learned yet", () => {
-    render(<TasteTable taste={tasteView({ learned: [], feedback_events: 0, opportunities: 0 })} remove={remove} />);
-    expect(screen.getAllByText("Nothing learned yet").length).toBeGreaterThan(0);
+    render(<TasteReview taste={tasteView({ learned: [], feedback_events: 0, opportunities: 0 })} remove={remove} />);
+    expect(screen.getByText("Nothing learned yet")).toBeInTheDocument();
   });
 
   it("keeps contradictory patterns apart and unused", () => {

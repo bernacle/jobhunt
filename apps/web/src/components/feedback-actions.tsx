@@ -74,56 +74,67 @@ export function FeedbackActions({ id, title, company, actions, onDone, canPutAsi
 
   const busy = pending !== null;
   const size = variant === "lead" ? "md" : "sm";
-  // Phones: a 2×2 grid of full-width, 44px targets; primary bottom right.
-  const touch = "max-sm:h-11 max-sm:w-full max-sm:text-[13px]";
-  const quiet = variant === "peer" ? "ghost" : "secondary";
+  // Phones: 44px targets. The lead and the page's bar are a 2×2 grid,
+  // primary bottom right; a peer keeps its four on one row.
+  const peer = variant === "peer";
+  const touch = peer ? "max-sm:h-11 max-sm:text-[13px]" : "max-sm:h-11 max-sm:w-full max-sm:px-3 max-sm:text-[13px]";
+  // Peers are narrow: the quiet actions keep less padding.
+  const quietClass = `${touch} ${peer ? "px-2!" : ""}`;
+  // Quiet actions first, then the secondary, then one primary.
   return (
     <div className={variant === "detail" ? "" : "max-sm:w-full"}>
-      <div className="flex flex-wrap items-center gap-2 max-sm:grid max-sm:grid-cols-2" aria-busy={busy}>
-        {canPutAside && (
+      <div
+        className={`flex flex-wrap items-center gap-x-3 gap-y-2 ${peer ? "justify-between max-sm:-mx-2 max-sm:gap-x-1" : "justify-end max-sm:grid max-sm:grid-cols-2 max-sm:gap-2"}`}
+        aria-busy={busy}
+      >
+        <div className={`flex flex-wrap gap-1 ${peer ? "" : "max-sm:contents"}`}>
+          {canPutAside && (
+            <Button
+              variant="ghost"
+              size={size}
+              className={quietClass}
+              disabled={busy}
+              loading={pending === "aside"}
+              onClick={() => run("aside", () => actions.putAside(id))}
+              title="Puts it aside. Doesn't change what Narrow has learned."
+            >
+              Not now
+            </Button>
+          )}
           <Button
             variant="ghost"
             size={size}
+            className={quietClass}
+            disabled={busy}
+            loading={pending === "rejected"}
+            onClick={() => setRejecting(true)}
+            title="Removes it and tells Narrow what doesn't fit."
+          >
+            Not for me
+          </Button>
+        </div>
+        <div className={`flex flex-wrap gap-2 ${peer ? "max-sm:gap-1" : "max-sm:contents"}`}>
+          <Button
+            variant={variant === "peer" ? "ghost" : "secondary"}
+            size={size}
+            className={quietClass}
+            disabled={busy}
+            loading={pending === "applied"}
+            onClick={() => run("applied", () => actions.feedback(id, "applied"))}
+          >
+            I applied
+          </Button>
+          <Button
+            variant={variant === "peer" ? "secondary" : "primary"}
+            size={size}
             className={touch}
             disabled={busy}
-            loading={pending === "aside"}
-            onClick={() => run("aside", () => actions.putAside(id))}
-            title="Puts it aside. Doesn't change what Narrow has learned."
+            loading={pending === "saved"}
+            onClick={() => run("saved", () => actions.feedback(id, "save"))}
           >
-            Not now
+            Save
           </Button>
-        )}
-        <Button
-          variant={variant === "peer" ? "ghost" : "secondary"}
-          size={size}
-          className={touch}
-          disabled={busy}
-          loading={pending === "rejected"}
-          onClick={() => setRejecting(true)}
-          title="Removes it and tells Narrow what doesn't fit."
-        >
-          Not for me
-        </Button>
-        <Button
-          variant={quiet}
-          size={size}
-          className={touch}
-          disabled={busy}
-          loading={pending === "applied"}
-          onClick={() => run("applied", () => actions.feedback(id, "applied"))}
-        >
-          I applied
-        </Button>
-        <Button
-          variant={variant === "peer" ? "secondary" : "primary"}
-          size={size}
-          className={touch}
-          disabled={busy}
-          loading={pending === "saved"}
-          onClick={() => run("saved", () => actions.feedback(id, "save"))}
-        >
-          Save
-        </Button>
+        </div>
       </div>
       <p aria-live="polite" className="sr-only">
         {pending ? PENDING_LABEL[pending] : ""}

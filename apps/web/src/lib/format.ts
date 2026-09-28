@@ -74,6 +74,21 @@ export function verificationLine(v: VerificationBrief, now: Date = new Date()): 
   }
 }
 
+/** How current the listing is, in a few words, for a card's footer. */
+export function verificationShort(v: VerificationBrief, now: Date = new Date()): string {
+  switch (v.state) {
+    case "verified_active":
+      return v.trusted ? `Verified ${ago(v.verified_at, now)}` : `Last verified ${ago(v.verified_at, now)}`;
+    case "verified_closed":
+    case "closed_by_discovery":
+      return "Listing appears closed";
+    case "could_not_verify":
+      return "Couldn't be verified recently";
+    default:
+      return "Not verified yet";
+  }
+}
+
 /**
  * The check a verification earns, from the API's own trust and freshness:
  * the mint check only for a current, trusted verification; the grey check

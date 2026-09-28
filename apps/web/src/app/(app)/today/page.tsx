@@ -38,15 +38,14 @@ export default async function TodayPage() {
         }
       />
       <div className="-mt-5 mb-8 flex flex-wrap items-center gap-x-4 gap-y-1.5 max-sm:-mt-3.5 max-sm:mb-5">
-        <DiscoveryStatus discovery={feed.discovery} now={now} />
         <FeedSummary summary={feed.summary} />
+        <DiscoveryStatus discovery={feed.discovery} now={now} />
         <RefreshControls />
       </div>
       {unresolved > 0 && (
         <div className="mb-8">
           <Notice title={unresolved === 1 ? "A preference needs your answer" : `${unresolved} preferences need your answer`}>
-            Narrow read {unresolved === 1 ? "it" : "them"} from your words but can&apos;t tell exactly what you meant, so {unresolved === 1 ? "it isn't" : "they aren't"} used
-            that way yet.{" "}
+            Until then {unresolved === 1 ? "it isn't" : "they aren't"} used the way you meant.{" "}
             <a href="/preferences" className={textLinkClass}>
               Answer in Preferences
             </a>
@@ -56,7 +55,6 @@ export default async function TodayPage() {
       {!feed.learning.has_preferences && (
         <div className="mb-8">
           <Notice title="Tell Narrow what you want">
-            Recommendations get sharper once you say which roles, teams and pay you&apos;re after.{" "}
             <a href="/preferences" className={textLinkClass}>
               Add preferences
             </a>
@@ -68,12 +66,9 @@ export default async function TodayPage() {
       ) : (
         <>
           <TodayFeed items={feed.items} actions={actions} now={now} />
-          <div className="mt-9 flex flex-col gap-1.5 text-[13px] leading-normal text-fg-muted max-sm:mt-6">
-            <p className="text-fg-secondary">
-              That&apos;s everything new worth your time.{next && ` Next check ${inAbout(next, now)}.`}
-            </p>
-            <p>Not now puts a role aside without changing what Narrow has learned. Not for me tells Narrow it doesn&apos;t fit.</p>
-          </div>
+          <p className="mt-9 text-[13px] leading-normal text-fg-muted max-sm:mt-6">
+            That&apos;s everything new worth your time.{next && ` Next check ${inAbout(next, now)}.`}
+          </p>
         </>
       )}
     </div>

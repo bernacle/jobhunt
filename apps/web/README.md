@@ -83,10 +83,21 @@ decision brief); everything else sits on the ground. Tiers are words
   an unknown is said plainly in muted ink; a caution gets a sand square,
   an unknown a hollow one. Meaning never rests on colour alone.
 - **Components** are Narrow concepts: `Wordmark`/`BrandMark`, the shell
-  (`nav.tsx`), `OpportunityLead`/`OpportunityPeer`, `DecisionBrief`,
-  `FactRow`, `VerificationStamp`, `Consideration`, `EligibilityDetail`,
-  `TasteTable` (explicit vs learned), `StageTabs`, and the primitives in
-  `ui.tsx` (`Button`, `Raised`, `Notice`, `EmptyState`, `Skeleton`, …).
+  (`nav.tsx`), `OpportunityLead`/`OpportunityPeer`, `FactRow`,
+  `VerificationStatus`, `Consideration`, `EligibilityDetail`, and the
+  primitives in `ui.tsx` (`Button`, `Raised`, `Notice`, `Skeleton`, …).
+- **Default view = decision; detail = evidence.** `DecisionSummary` picks
+  the strongest distinct reasons and the most material concern from the
+  API's ordered lists ([`src/lib/decision.ts`](src/lib/decision.ts)); it
+  never renders every line, never counts what it leaves out, and never
+  drops an unknown (the rest is in the evidence). Detail is reached through
+  a few patterns only: `SummaryRow` (setting · value · one action, editor
+  in place, one at a time), `SummarySection` (conclusion first, then a
+  labelled disclosure), `EvidencePanel` (a side panel, a full-height sheet
+  on phones), `ClaimReviewRow`, and `StateMessage` (one state, one next
+  step, details on demand). Repeated items share tracks
+  (`--nr-track-label`, `--nr-row-min`); Today's peers share rows with
+  CSS subgrid.
 
 Accessibility is part of the components: landmarks and a skip link, one
 `h1` per page, labelled forms, `aria-live` status for every action's

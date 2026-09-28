@@ -71,6 +71,16 @@
   /* Motion: ease-out, no springs */
   --nr-ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
   --nr-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /*
+   * Shared geometry: repeated items line up on these tracks. One label
+   * column for preference, settings and detail-section rows; one for the
+   * checks and facts inside evidence; a minimum height for a repeated row.
+   */
+  --nr-track-label: 184px;
+  --nr-track-label-evidence: 146px;
+  --nr-row-min: 48px;
+  --nr-row-min-touch: 60px;
 }
 
 :root[data-theme="dark"] {
