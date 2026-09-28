@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
-import type { ReactNode } from "react";
 
 import { createToken, revokeToken, saveNotifications, signOutEverywhere } from "@/app/actions";
 import { AssistantTokens } from "@/components/assistant-tokens";
 import { NotificationSettings } from "@/components/notification-settings";
+import { RowGroup, SummaryRow, SummarySection } from "@/components/summary";
 import { ThemeControl } from "@/components/theme-control";
-import { Button, PageHeader, Section, SystemStatus, buttonClass } from "@/components/ui";
+import { Button, PageHeader, SystemStatus, buttonClass } from "@/components/ui";
 import { api, load } from "@/lib/api";
 import { config } from "@/lib/config";
 import { ago } from "@/lib/format";
@@ -14,16 +14,6 @@ import { getSession } from "@/lib/session";
 import { THEME_COOKIE, parseTheme } from "@/lib/theme";
 
 export const metadata: Metadata = { title: "Settings" };
-
-function Row({ k, children, action }: { k: string; children: ReactNode; action?: ReactNode }) {
-  return (
-    <div className="grid items-baseline gap-x-4 gap-y-0.5 border-t border-line-subtle py-3 text-[14px] leading-normal sm:grid-cols-[150px_minmax(0,1fr)_auto] max-sm:min-h-14">
-      <dt className="text-[13px] text-fg-muted max-sm:text-[12.5px]">{k}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
-      {action && <dd>{action}</dd>}
-    </div>
-  );
-}
 
 function issuerLabel(issuer: string): string {
   try {
@@ -33,6 +23,11 @@ function issuerLabel(issuer: string): string {
   }
 }
 
+/**
+ * Everyday settings first (appearance, notifications, account, data);
+ * connecting an AI assistant and the service's status under Advanced,
+ * each summarized, with the details a labelled action away.
+ */
 export default async function SettingsPage() {
   const [notifications, tokens, account, session, jar] = await Promise.all([
     load(() => api.notifications()),
@@ -44,92 +39,107 @@ export default async function SettingsPage() {
   const mcpUrl = `${config().apiPublicUrl}/mcp`;
   const identity = account.identities[0];
   const lastSync = account.cloud.last_sync_at;
+  const activeTokens = tokens.tokens.filter((t) => !t.revoked_at && (!t.expires_at || new Date(t.expires_at) > new Date()));
+  const lastUsed = activeTokens.map((t) => t.last_used_at).filter((d): d is string => Boolean(d)).sort().at(-1);
   return (
-    <div className="max-w-[560px]">
+    <div className="max-w-[640px]">
       <PageHeader title="Settings" />
 
-      <Section title="Account" id="account">
-        <dl>
-          {session?.name && <Row k="Name">{session.name}</Row>}
-          {session?.email && <Row k="Email">{session.email}</Row>}
-          <Row k="Sign-in">
-            {account.authenticated_with === "dev" ? "Development sign-in" : identity ? issuerLabel(identity.issuer) : "Your identity provider"}
-            {identity && <span className="block font-mono text-mono-s text-fg-muted">last signed in {ago(identity.last_login_at)}</span>}
-          </Row>
-          <Row k="Account ID">
-            <code className="font-mono text-mono-s text-fg-secondary">{account.id}</code>
-          </Row>
-        </dl>
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-line-subtle pt-4 max-sm:grid max-sm:grid-cols-2">
-          <form action="/auth/signout" method="post">
-            <Button type="submit" className="max-sm:h-11 max-sm:w-full">
-              Sign out
-            </Button>
-          </form>
-          <form action={signOutEverywhere}>
-            <Button type="submit" variant="ghost" className="max-sm:h-11 max-sm:w-full">
-              Sign out everywhere
-            </Button>
-          </form>
-        </div>
-      </Section>
+      <div className="flex flex-col gap-11 max-sm:gap-9">
+        <RowGroup id="appearance" title="Appearance">
+          <SummaryRow id="theme" label="Theme" control={<ThemeControl initial={parseTheme(jar.get(THEME_COOKIE)?.value)} />} />
+        </RowGroup>
 
-      <Section title="Appearance" id="appearance">
-        <dl>
-          <Row k="Theme">
-            <ThemeControl initial={parseTheme(jar.get(THEME_COOKIE)?.value)} />
-          </Row>
-        </dl>
-      </Section>
+        <section id="notifications" aria-labelledby="notifications-heading" className="scroll-mt-20">
+          <h2 id="notifications-heading" className="mb-1.5 text-[15px] leading-[1.4] font-semibold tracking-[-0.005em]">
+            Notifications
+          </h2>
+          <NotificationSettings initial={notifications} suggestedEmail={session?.email} save={saveNotifications} />
+        </section>
 
-      <Section title="Notifications" id="notifications">
-        <NotificationSettings initial={notifications} suggestedEmail={session?.email} save={saveNotifications} />
-      </Section>
+        <RowGroup id="account" title="Account">
+          {session?.name && <SummaryRow id="account-name" label="Name" value={session.name} />}
+          {session?.email && <SummaryRow id="account-email" label="Email" value={session.email} />}
+          <SummaryRow
+            id="account-signin"
+            label="Sign-in"
+            value={account.authenticated_with === "dev" ? "Development sign-in" : identity ? issuerLabel(identity.issuer) : "Your identity provider"}
+            importance={identity ? `last signed in ${ago(identity.last_login_at)}` : undefined}
+          />
+          <div className="flex flex-wrap gap-2 border-t border-line-subtle py-3.5 max-sm:grid max-sm:grid-cols-2">
+            <form action="/auth/signout" method="post">
+              <Button type="submit" className="max-sm:h-11 max-sm:w-full">
+                Sign out
+              </Button>
+            </form>
+            <form action={signOutEverywhere}>
+              <Button type="submit" variant="ghost" className="max-sm:h-11 max-sm:w-full">
+                Sign out everywhere
+              </Button>
+            </form>
+          </div>
+        </RowGroup>
 
-      <Section title="Status" id="status">
-        <dl>
-          <Row k="Narrow">
-            <SystemStatus>Connected</SystemStatus>
-          </Row>
-          <Row k="Command line">
-            {lastSync ? (
-              <>
-                Synced <span className="font-mono text-mono-s text-fg-muted">{ago(lastSync)}</span>
-              </>
-            ) : (
-              <span className="text-fg-muted">Never synced from the command line</span>
-            )}
-          </Row>
-        </dl>
-      </Section>
+        <RowGroup id="data" title="Your data">
+          <SummaryRow
+            id="data-export"
+            label="Export"
+            value="Profile, preferences and every decision"
+            action={
+              <a href="/api/export" className={buttonClass("secondary", "sm", "max-sm:h-11")}>
+                Download my data
+              </a>
+            }
+          />
+        </RowGroup>
 
-      <Section title="MCP" id="assistant" description="Use Narrow from Claude, ChatGPT or another MCP client, with this same account: the same Today, profile and feedback.">
-        <dl>
-          <Row k="Server URL">
-            <code className="font-mono text-mono-s break-all text-fg">{mcpUrl}</code>
-          </Row>
-          <Row k="Sign-in">
-            Your MCP client asks you to sign in, with the same sign-in as this site.
-            <span className="block text-[13px] text-fg-muted">If it can&apos;t sign in with OAuth, give it a token from below as a bearer token.</span>
-          </Row>
-        </dl>
-        <p className="mt-3 border-t border-line-subtle pt-3 text-[13px] leading-normal text-fg-secondary">
-          Add a remote MCP server (a “custom connector”) with the URL above, then ask things like “What&apos;s new today?”, “Why is this worth my
-          time?” or “Don&apos;t show jobs like this again”.
-        </p>
-        <div className="mt-5">
-          <AssistantTokens tokens={tokens.tokens} create={createToken} revoke={revokeToken} />
-        </div>
-      </Section>
-
-      <Section title="Your data" id="data">
-        <p className="mb-3.5 text-body-s text-fg-secondary">
-          Download everything Narrow keeps about you as a portable file: your profile, preferences and every decision it learned from.
-        </p>
-        <a href="/api/export" className={buttonClass("secondary", "md", "max-sm:h-11 max-sm:w-full")}>
-          Download my data
-        </a>
-      </Section>
+        <section aria-labelledby="advanced-heading">
+          <h2 id="advanced-heading" className="mb-1.5 text-[15px] leading-[1.4] font-semibold tracking-[-0.005em]">
+            Advanced
+          </h2>
+          <div className="border-b border-line-subtle">
+            <SummarySection
+              id="assistant"
+              label="Assistant access"
+              conclusion={
+                activeTokens.length > 0 ? (
+                  <>
+                    {activeTokens.length} active {activeTokens.length === 1 ? "token" : "tokens"}
+                    {lastUsed && <span className="text-fg-muted"> · last used {ago(lastUsed)}</span>}
+                  </>
+                ) : (
+                  "Use Narrow from Claude, ChatGPT or another MCP client, with this account."
+                )
+              }
+              more="Connection details and tokens"
+            >
+              <div className="border-b border-line-subtle">
+                <SummaryRow id="mcp-url" label="Server URL" value={<code className="font-mono text-mono-s break-all">{mcpUrl}</code>} />
+                <SummaryRow id="mcp-signin" label="Sign-in" value="Same as this site. A client that can't sign in can use a token." />
+              </div>
+              <div className="mt-5">
+                <AssistantTokens tokens={tokens.tokens} create={createToken} revoke={revokeToken} />
+              </div>
+            </SummarySection>
+            <SummarySection
+              id="status"
+              label="System status"
+              conclusion={<SystemStatus>Connected</SystemStatus>}
+              more="Diagnostics"
+            >
+              <div className="border-b border-line-subtle">
+                <SummaryRow
+                  id="status-cli"
+                  label="Command line"
+                  value={lastSync ? `Synced ${ago(lastSync)}` : "Never synced from the command line"}
+                  unset={!lastSync}
+                />
+                <SummaryRow id="status-account" label="Account ID" value={<code className="font-mono text-mono-s text-fg-secondary">{account.id}</code>} />
+              </div>
+            </SummarySection>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

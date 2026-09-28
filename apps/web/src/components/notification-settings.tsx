@@ -89,8 +89,7 @@ export function NotificationSettings({
             Email me about strong new matches
           </label>
           <p id={ids.toggleHelp} className="mt-0.5 text-[13px] leading-normal text-fg-secondary">
-            Only strong fits you haven&apos;t seen, verified at the employer, at most {settings.max_items} per email. No email when
-            there&apos;s nothing worth it.
+            Only verified strong fits you haven&apos;t seen, at most {settings.max_items} per email. Nothing when nothing is worth it.
           </p>
         </div>
       </div>
@@ -167,10 +166,9 @@ export function NotificationSettings({
         </p>
       </form>
 
-      <p aria-live="polite" className={`mt-3 text-[13px] ${message?.tone === "error" ? "text-danger" : "text-fg-secondary"}`}>
+      <p aria-live="polite" className={`mt-3 text-[13px] empty:mt-0 ${message?.tone === "error" ? "text-danger" : "text-fg-secondary"}`}>
         {message?.text}
       </p>
-      <p className="mt-1 text-caption text-fg-muted">Narrow doesn&apos;t send push alerts or reminders to come back.</p>
 
       {settings.recent.length > 0 && (
         <details className="group mt-3 text-[13px]">

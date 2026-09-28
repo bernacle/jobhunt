@@ -4,7 +4,8 @@ import Link from "next/link";
 import { changeStage } from "@/app/actions";
 import { StageControl } from "@/components/stage-control";
 import { StageTabs } from "@/components/stage-tabs";
-import { EmptyState, LinkButton, PageHeader, StatusText } from "@/components/ui";
+import { StateMessage } from "@/components/summary";
+import { LinkButton, PageHeader, StatusText } from "@/components/ui";
 import { api, loadOrNoProfile } from "@/lib/api";
 import type { PipelineEntryView, PipelineStage } from "@/lib/api-types";
 import { ago } from "@/lib/format";
@@ -36,8 +37,9 @@ function Row({ entry, now }: { entry: PipelineEntryView; now: Date }) {
         </Link>{" "}
         <span className="text-fg-muted">· {entry.company}</span>
       </p>
-      <p className={`min-w-0 lg:truncate ${closed ? "text-fg-muted" : "text-fg-body"}`}>
-        {closed ? "Listing closed" : entry.last_reason ? <q>{entry.last_reason}</q> : "Listing still open"}
+      {/* Only what changed or what the person said; an open listing is the routine case. */}
+      <p className={`min-w-0 empty:max-lg:hidden lg:truncate ${closed ? "text-fg-secondary" : "text-fg-body"}`}>
+        {closed ? "Listing closed" : entry.last_reason ? <q>{entry.last_reason}</q> : null}
       </p>
       <span className="font-mono text-mono-s text-fg-muted">{entry.since ? ago(entry.since, now) : ""}</span>
       <div className="col-span-2 mt-1.5 lg:col-span-1 lg:mt-0">
@@ -76,7 +78,8 @@ export default async function ApplicationsPage() {
     <div>
       <PageHeader title="Applications" count={active.length} />
       {active.length === 0 ? (
-        <EmptyState
+        <StateMessage
+          kind="empty"
           title="Nothing in progress yet."
           action={
             <LinkButton href="/today" className="max-sm:h-11">
@@ -84,9 +87,8 @@ export default async function ApplicationsPage() {
             </LinkButton>
           }
         >
-          Roles you save or mark as applied from Today appear here with their stage, and you can see when a listing closes. There is no
-          quota: a few good applications beat many.
-        </EmptyState>
+          Roles you save or mark as applied appear here with their stage.
+        </StateMessage>
       ) : (
         <StageTabs
           tabs={[

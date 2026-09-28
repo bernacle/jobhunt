@@ -36,15 +36,25 @@ const claims: UnresolvedClaim[] = [
 const ok = { ok: true as const, data: { decided: [], needs_review_total: 1 } };
 
 describe("ClaimReview", () => {
-  it("shows each claim with its source words, provenance and why", async () => {
+  it("groups claims by what they're about, with actions beside each claim and the evidence on demand", async () => {
     const { container } = render(<ClaimReview claims={claims} total={2} decide={vi.fn(async () => ok)} />);
     expect(screen.getByText("2 claims need your review.")).toBeInTheDocument();
-    const first = screen.getByText("Worked in payments at Acme Payments").closest("li")!;
-    expect(within(first).getByText("Inferred by Narrow")).toBeInTheDocument();
-    expect(within(first).getByText("Acme Payments")).toBeInTheDocument();
-    expect(within(first).getByText("Experience · ana_lima.md")).toBeInTheDocument();
-    expect(within(first).getByText(/Inferred by Narrow; confirm or reject/)).toBeInTheDocument();
+    const group = screen.getByRole("region", { name: "Staff Software Engineer at Acme Payments" });
+    expect(within(group).getByText("inferred by Narrow")).toBeInTheDocument();
+    const row = within(group).getByText("Worked in payments at Acme Payments").closest("li")!;
+    expect(within(row).getByRole("button", { name: "Confirm: Worked in payments at Acme Payments" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Reject: Worked in payments at Acme Payments" })).toBeInTheDocument();
+    // The quote and where it's from aren't between the claim and its actions.
+    expect(within(row).queryByText("Acme Payments", { exact: true })).not.toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: /^See evidence/ }));
+    const panel = screen.getByRole("dialog", { name: "Worked in payments at Acme Payments" });
+    expect(within(panel).getByText("Acme Payments")).toBeInTheDocument();
+    expect(within(panel).getByText("ana_lima.md · Experience")).toBeInTheDocument();
+    expect(within(panel).getByText(/Inferred by Narrow; confirm or reject/)).toBeInTheDocument();
+    expect(within(panel).getByText("mentions “Payments”, “settlement”")).toBeInTheDocument();
     expect(await violations(container)).toEqual([]);
+    // Profile-wide claims have their own group.
+    expect(screen.getByRole("region", { name: "Your profile in general" })).toHaveTextContent("read from your resume");
   });
 
   it("confirms and rejects (with an optional note) through the API", async () => {
