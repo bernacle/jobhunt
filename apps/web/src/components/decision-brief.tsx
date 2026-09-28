@@ -1,21 +1,65 @@
+import { type Concern, type DecisionInput, type DecisionVariant, concernsOf, selectDecision } from "@/lib/decision";
 import { sentence } from "@/lib/format";
 
 import { Consideration } from "./trust";
 
+/** One concern line: a check-first note says so before its words. */
+export function ConcernLine({ concern, size = "md", className }: { concern: Concern; size?: "md" | "sm" | "lg"; className?: string }) {
+  return (
+    <Consideration kind={concern.kind} size={size} className={className}>
+      {concern.checkFirst && <span className="font-medium text-fg">Check first: </span>}
+      {sentence(concern.text)}
+    </Consideration>
+  );
+}
+
 /**
- * Why an opportunity may be worth the person's time, then what to
- * consider. Uncertainty is never folded into the positive side: every
- * caveat (a caution, sand) and unknown (not stated, hollow) the ranking
- * returned is listed. `compact` is the peer treatment: denser, with the
- * labels kept for screen readers only.
+ * The default view of why an opportunity is here: the strongest distinct
+ * reasons and the most material concern, chosen from the API's ordered
+ * lists (never all of them). The rest is in the evidence.
+ */
+export function DecisionSummary({
+  input,
+  variant = "lead",
+  size = "md",
+  className = "",
+}: {
+  input: DecisionInput;
+  variant?: DecisionVariant;
+  size?: "md" | "sm" | "lg";
+  className?: string;
+}) {
+  const { reasons, concerns } = selectDecision(input, variant);
+  return (
+    <ul role="list" className={`flex flex-col gap-1.5 ${className}`}>
+      {reasons.length > 0 ? (
+        reasons.map((line) => (
+          <Consideration key={line} kind="reason" size={size}>
+            {sentence(line)}
+          </Consideration>
+        ))
+      ) : (
+        <li className="text-[14px] text-fg-muted">Nothing specific to you yet.</li>
+      )}
+      {concerns.map((c) => (
+        <ConcernLine key={c.text} concern={c} size={size} />
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Everything the brief says, for the evidence: every reason, then every
+ * concern in the order the summary picks from. Uncertainty is never folded
+ * into the positive side.
  */
 export function DecisionBrief({
   why,
   caveats,
   unknowns = [],
   checkFirst,
+  eligibilityHeadline,
   headingLevel = 3,
-  compact = false,
   className = "",
 }: {
   why: string[];
@@ -23,52 +67,36 @@ export function DecisionBrief({
   unknowns?: string[];
   /** The ranking's "check this first" note, a caution before the rest. */
   checkFirst?: string | null;
+  eligibilityHeadline?: string | null;
   headingLevel?: 2 | 3;
-  compact?: boolean;
   className?: string;
 }) {
   const Heading = headingLevel === 2 ? "h2" : "h3";
-  const cautions = caveats.filter((c) => !unknowns.includes(c));
-  const missing = unknowns.filter((u, i) => unknowns.indexOf(u) === i);
-  const nothing = cautions.length === 0 && missing.length === 0 && !checkFirst;
-  const label = compact ? "sr-only" : "text-label text-fg-muted";
-  const size = compact ? "sm" : "md";
+  const concerns = concernsOf({ why, caveats, unknowns, checkFirst, eligibilityHeadline });
   return (
-    <div
-      className={`grid gap-x-9 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] ${compact ? "gap-y-1.5" : "gap-y-6"} ${className}`}
-    >
+    <div className={`grid gap-x-9 gap-y-6 ${className}`}>
       <div>
-        <Heading className={label}>Why it may be worth your time</Heading>
+        <Heading className="text-label text-fg-muted">Why it may be worth your time</Heading>
         {why.length > 0 ? (
-          <ul role="list" className={`${compact ? "text-row" : "mt-2.5 text-body-m"} space-y-1 text-pretty text-fg-body`}>
+          <ul role="list" className="mt-2.5 flex flex-col gap-1.5">
             {why.map((line) => (
-              <li key={line}>{sentence(line)}</li>
+              <Consideration key={line} kind="reason">
+                {sentence(line)}
+              </Consideration>
             ))}
           </ul>
         ) : (
-          <p className={`${compact ? "" : "mt-2.5"} text-[14px] text-fg-muted`}>Nothing specific to you yet.</p>
+          <p className="mt-2.5 text-[14px] text-fg-muted">Nothing specific to you yet.</p>
         )}
       </div>
       <div>
-        <Heading className={label}>Things to consider</Heading>
-        {nothing ? (
-          <p className={`${compact ? "" : "mt-2.5"} text-[14px] text-fg-muted`}>Nothing flagged.</p>
+        <Heading className="text-label text-fg-muted">Things to consider</Heading>
+        {concerns.length === 0 ? (
+          <p className="mt-2.5 text-[14px] text-fg-muted">Nothing flagged.</p>
         ) : (
-          <ul role="list" className={`${compact ? "space-y-1" : "mt-2.5 space-y-2"}`}>
-            {checkFirst && (
-              <Consideration kind="caution" size={size}>
-                <span className="font-medium text-fg">Check first:</span> {sentence(checkFirst)}
-              </Consideration>
-            )}
-            {cautions.map((line) => (
-              <Consideration key={line} kind="caution" size={size}>
-                {sentence(line)}
-              </Consideration>
-            ))}
-            {missing.map((line) => (
-              <Consideration key={line} kind="missing" size={size}>
-                {sentence(line)}
-              </Consideration>
+          <ul role="list" className="mt-2.5 flex flex-col gap-1.5">
+            {concerns.map((c) => (
+              <ConcernLine key={c.text} concern={c} />
             ))}
           </ul>
         )}

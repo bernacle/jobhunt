@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { decideClaim, uploadResume } from "@/app/actions";
-import { ClaimReview } from "@/components/claim-review";
+import { uploadResume } from "@/app/actions";
 import { ResumeUpload } from "@/components/resume-upload";
+import { Disclosure, RowGroup, SummaryRow } from "@/components/summary";
 import { Consideration, Inferred } from "@/components/trust";
-import { FactRows, PageHeader, Section, textLinkClass } from "@/components/ui";
+import { LinkButton, PageHeader } from "@/components/ui";
 import { api, loadOrNoProfile } from "@/lib/api";
 import type { Signal } from "@/lib/api-types";
 import { ago } from "@/lib/format";
@@ -32,9 +31,9 @@ function Stale() {
 }
 
 /**
- * What Narrow knows about the person, and where each fact came from.
- * Evidence over invention: unsure claims wait for review, and are never
- * used until confirmed.
+ * What Narrow knows about the person: experience, skills, projects, where
+ * it came from. Claims it isn't sure of wait for review on their own page,
+ * one row away, and are never used until confirmed.
  */
 export default async function ProfilePage() {
   const data = await loadOrNoProfile(async () => {
@@ -48,162 +47,161 @@ export default async function ProfilePage() {
   const projects = profile.projects ?? [];
   const education = profile.education ?? [];
   const current = documents.find((d) => d.current);
-  const counts = [
-    `${profile.experiences.length} ${profile.experiences.length === 1 ? "experience" : "experiences"}`,
-    `${profile.technologies.length} ${profile.technologies.length === 1 ? "skill" : "skills"}`,
-    `${claims.total} to review`,
-  ];
-  const row = "grid gap-x-4 gap-y-1 border-t border-line-subtle py-3.5 sm:grid-cols-[minmax(0,1fr)_auto]";
+  const used = profile.technologies.filter((t) => t.strength !== "listed");
+  const listed = profile.technologies.filter((t) => t.strength === "listed");
+  const row = "grid gap-x-4 gap-y-1 border-t border-line-subtle py-3 sm:grid-cols-[minmax(0,1fr)_auto]";
   return (
     <div className="max-w-[640px]">
-      <PageHeader title="Profile">
-        What Narrow knows about you and where each fact came from. Contact details are never part of it, and a claim Narrow isn&apos;t
-        sure about is never used until you confirm it.
-      </PageHeader>
-      <p className="-mt-4 mb-11 font-mono text-mono-s text-fg-muted max-sm:-mt-2 max-sm:mb-8">{counts.join(" · ")}</p>
+      <PageHeader title="Profile" />
 
-      {claims.total > 0 && (
-        <Section title="Needs your review" id="review" description="Narrow read these but isn't sure they're right. Nothing here is used until you confirm it.">
-          <ClaimReview claims={claims.claims} total={claims.total} decide={decideClaim} />
-        </Section>
-      )}
-
-      <Section title="Where you are" id="location">
-        <FactRows
-          rows={[
-            { k: "Based in", v: profile.location ?? <span className="text-missing">Not stated. Eligibility can&apos;t be checked without it.</span> },
-            ...(profile.headline ? [{ k: "Headline", v: profile.headline }] : []),
-          ]}
-        />
-      </Section>
-
-      <Section title="Sources" id="sources">
-        {documents.length > 0 && (
-          <ul role="list" className="mb-5">
-            {documents.map((d) => (
-              <li key={d.id} className="flex min-h-14 flex-col justify-center border-t border-line-subtle py-2.5">
-                <p className="text-[14px] font-medium">
-                  {d.file_name ?? "resume"}
-                  {d.current && <span className="ml-2 font-mono text-mono-xs font-normal text-fg-muted">current</span>}
-                </p>
-                <p className="mt-0.5 font-mono text-mono-s text-fg-muted">
-                  Imported {ago(d.last_imported_at, now)}
-                  {d.pages ? ` · ${d.pages} ${d.pages === 1 ? "page" : "pages"}` : ""} · {d.kind}
-                </p>
-              </li>
-            ))}
-          </ul>
+      <div className="flex flex-col gap-11 max-sm:gap-9">
+        {claims.total > 0 && (
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-line py-3.5 pr-4 pl-[18px] max-sm:flex-col max-sm:items-stretch max-sm:p-4">
+            <div className="min-w-0">
+              <p className="text-[14.5px] leading-[1.4] font-medium text-fg">
+                {claims.total} {claims.total === 1 ? "claim needs" : "claims need"} your review
+              </p>
+              <p className="mt-0.5 text-[12.5px] text-fg-muted">Not used until you confirm.</p>
+            </div>
+            <LinkButton href="/profile/review" className="max-sm:h-11">
+              Review
+            </LinkButton>
+          </div>
         )}
-        <ResumeUpload action={uploadResume} hasResume={Boolean(current)} />
-      </Section>
 
-      <Section title="Experience" id="experience">
-        {profile.experiences.length === 0 ? (
-          <p className="text-[14px] text-fg-muted">No experience found yet.</p>
-        ) : (
-          <ol>
-            {profile.experiences.map((e) => (
-              <li key={e.id} className={row}>
-                <div className="min-w-0">
-                  <p className="text-[14.5px] leading-[1.4] font-semibold">
-                    {e.title ?? "Role not stated"}
-                    {e.company && <span className="font-normal text-fg-secondary"> · {e.company}</span>}
-                    {e.stale && <Stale />}
-                  </p>
-                  {e.technologies.length > 0 && <p className="mt-1 text-row text-fg-secondary">{e.technologies.join(", ")}</p>}
-                  {e.domains.length > 0 && <p className="text-row text-fg-muted">Domains: {e.domains.join(", ")}</p>}
-                </div>
-                <p className="font-mono text-mono-s whitespace-nowrap text-fg-muted sm:text-right">{e.period ?? "dates not stated"}</p>
-              </li>
-            ))}
-          </ol>
+        <RowGroup id="about" title="About you">
+          <SummaryRow
+            id="based-in"
+            label="Based in"
+            value={profile.location ?? "Not stated"}
+            unset={!profile.location}
+            importance={!profile.location ? "Eligibility can't be checked without it" : undefined}
+          />
+          {profile.headline && <SummaryRow id="headline" label="Headline" value={profile.headline} />}
+        </RowGroup>
+
+        <RowGroup id="experience" title="Experience">
+          {profile.experiences.length === 0 ? (
+            <p className="border-t border-line-subtle py-3 text-[14px] text-fg-muted">No experience found yet.</p>
+          ) : (
+            <ol>
+              {profile.experiences.map((e) => (
+                <li key={e.id} className={row}>
+                  <div className="min-w-0">
+                    <p className="text-[14px] leading-[1.4] font-medium">
+                      {e.company ?? "Company not stated"}
+                      <span className="font-normal text-fg-secondary"> · {e.title ?? "role not stated"}</span>
+                      {e.stale && <Stale />}
+                    </p>
+                    {e.technologies.length > 0 && <p className="mt-0.5 text-row text-fg-secondary">{e.technologies.join(", ")}</p>}
+                  </div>
+                  <p className="font-mono text-mono-s whitespace-nowrap text-fg-muted sm:text-right">{e.period ?? "dates not stated"}</p>
+                </li>
+              ))}
+            </ol>
+          )}
+        </RowGroup>
+
+        <RowGroup id="skills" title="Skills">
+          <div className="border-t border-line-subtle py-3">
+            {profile.technologies.length === 0 ? (
+              <p className="text-[14px] text-fg-muted">None found yet.</p>
+            ) : (
+              <>
+                {used.length > 0 && <p className="text-[14px] leading-[1.6] text-fg-body">{used.map((t) => t.name).join(", ")}</p>}
+                {listed.length > 0 && <p className="mt-1 text-[13.5px] leading-[1.6] text-fg-secondary">Only in a skills list: {listed.map((t) => t.name).join(", ")}</p>}
+                <Disclosure label="Evidence for each skill" className="mt-2">
+                  <ul role="list" className="border-t border-line-subtle">
+                    {profile.technologies.map((t) => (
+                      <li key={t.name} className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-line-subtle py-2 text-row">
+                        <span className={t.strength === "listed" ? "text-fg-secondary" : "font-medium text-fg"}>{t.name}</span>
+                        <span className="font-mono text-mono-s text-fg-muted">
+                          {STRENGTH[t.strength] ?? t.strength}
+                          {t.last_used && ` · ${t.last_used === "current" ? "current" : `last ${t.last_used}`}`}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </Disclosure>
+              </>
+            )}
+          </div>
+        </RowGroup>
+
+        {(projects.length > 0 || education.length > 0) && (
+          <RowGroup id="projects" title="Projects and education">
+            <ul role="list">
+              {projects.map((p) => (
+                <li key={p.id} className={row}>
+                  <div className="min-w-0">
+                    <p className="text-[14px] leading-[1.4] font-medium">
+                      {p.name}
+                      {p.stale && <Stale />}
+                    </p>
+                    {p.description && <p className="mt-0.5 text-row text-fg-secondary">{p.description}</p>}
+                  </div>
+                  {p.period && <p className="font-mono text-mono-s whitespace-nowrap text-fg-muted sm:text-right">{p.period}</p>}
+                </li>
+              ))}
+              {education.map((e) => (
+                <li key={e.id} className={row}>
+                  <div className="min-w-0">
+                    <p className="text-[14px] leading-[1.4] font-medium">
+                      {e.institution}
+                      {e.stale && <Stale />}
+                    </p>
+                    {(e.degree || e.field) && <p className="mt-0.5 text-row text-fg-secondary">{[e.degree, e.field].filter(Boolean).join(", ")}</p>}
+                  </div>
+                  {e.period && <p className="font-mono text-mono-s whitespace-nowrap text-fg-muted sm:text-right">{e.period}</p>}
+                </li>
+              ))}
+            </ul>
+          </RowGroup>
         )}
-      </Section>
 
-      {(projects.length > 0 || education.length > 0) && (
-        <Section title="Projects and education" id="projects">
-          <ul role="list">
-            {projects.map((p) => (
-              <li key={p.id} className={row}>
-                <div className="min-w-0">
-                  <p className="text-[14px] leading-[1.4] font-medium">
-                    {p.name}
-                    {p.stale && <Stale />}
-                  </p>
-                  {p.description && <p className="mt-0.5 text-row text-fg-secondary">{p.description}</p>}
-                  {p.technologies.length > 0 && <p className="text-row text-fg-muted">{p.technologies.join(", ")}</p>}
-                </div>
-                {p.period && <p className="font-mono text-mono-s whitespace-nowrap text-fg-muted sm:text-right">{p.period}</p>}
-              </li>
-            ))}
-            {education.map((e) => (
-              <li key={e.id} className={row}>
-                <div className="min-w-0">
-                  <p className="text-[14px] leading-[1.4] font-medium">
-                    {e.institution}
-                    {e.stale && <Stale />}
-                  </p>
-                  {(e.degree || e.field) && <p className="mt-0.5 text-row text-fg-secondary">{[e.degree, e.field].filter(Boolean).join(", ")}</p>}
-                </div>
-                {e.period && <p className="font-mono text-mono-s whitespace-nowrap text-fg-muted sm:text-right">{e.period}</p>}
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
+        <RowGroup id="signals" title="How Narrow reads your history">
+          <SummaryRow id="signal-domains" label="Domains" value={signals(profile.domains)} />
+          <SummaryRow id="signal-roles" label="Kinds of role" value={signals(profile.role_signals)} />
+          <SummaryRow id="signal-seniority" label="Seniority and ownership" value={signals(profile.ownership_signals)} />
+          {profile.gaps.length > 0 && (
+            <div className="border-t border-line-subtle py-3">
+              <Disclosure label="Missing or uncertain">
+                <ul role="list" className="space-y-1.5">
+                  {profile.gaps.map((g) => (
+                    <Consideration key={g} kind="missing">
+                      {g}
+                    </Consideration>
+                  ))}
+                </ul>
+              </Disclosure>
+            </div>
+          )}
+        </RowGroup>
 
-      <Section title="Skills and technologies" id="skills" description="Strongest evidence first.">
-        {profile.technologies.length === 0 ? (
-          <p className="text-[14px] text-fg-muted">None found yet.</p>
-        ) : (
-          <ul role="list" className="border-t border-line-subtle">
-            {profile.technologies.map((t) => (
-              <li key={t.name} className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-line-subtle py-2 text-row">
-                <span className={t.strength === "listed" ? "text-fg-secondary" : "font-medium text-fg"}>{t.name}</span>
-                <span className="font-mono text-mono-s text-fg-muted">
-                  {STRENGTH[t.strength] ?? t.strength}
-                  {t.last_used && ` · ${t.last_used === "current" ? "current" : `last ${t.last_used}`}`}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section title="Career signals" id="signals" description="Narrow's reading of your history, with how much evidence backs each.">
-        <FactRows
-          rows={[
-            { k: "Domains", v: signals(profile.domains) },
-            { k: "Kinds of role", v: signals(profile.role_signals) },
-            { k: "Seniority and ownership", v: signals(profile.ownership_signals) },
-          ]}
-        />
-      </Section>
-
-      {profile.gaps.length > 0 && (
-        <Section title="Missing or uncertain" id="gaps">
-          <ul role="list" className="space-y-1.5">
-            {profile.gaps.map((g) => (
-              <Consideration key={g} kind="missing">
-                {g}
-              </Consideration>
-            ))}
-          </ul>
-        </Section>
-      )}
-
-      <Section title="Your data" id="data">
-        <p className="text-[14px] text-fg-secondary">
-          <a href="/api/export" className={textLinkClass}>
-            Export your Narrow data
-          </a>{" "}
-          as a portable file: profile, preferences and feedback. Account, notifications and AI assistants are in{" "}
-          <Link href="/settings" className={textLinkClass}>
-            Settings
-          </Link>
-          .
-        </p>
-      </Section>
+        <RowGroup id="sources" title="Sources">
+          {documents.map((d) => (
+            <div key={d.id} className="flex min-h-[var(--nr-row-min)] flex-col justify-center border-t border-line-subtle py-2.5">
+              <p className="text-[14px] font-medium">
+                {d.file_name ?? "resume"}
+                {d.current && <span className="ml-2 font-mono text-mono-xs font-normal text-fg-muted">current</span>}
+              </p>
+              <p className="mt-0.5 font-mono text-mono-s text-fg-muted">
+                Imported {ago(d.last_imported_at, now)}
+                {d.pages ? ` · ${d.pages} ${d.pages === 1 ? "page" : "pages"}` : ""} · {d.kind}
+              </p>
+            </div>
+          ))}
+          <div className="border-t border-line-subtle py-3">
+            {current ? (
+              <Disclosure label="Replace resume">
+                <ResumeUpload action={uploadResume} hasResume />
+              </Disclosure>
+            ) : (
+              <ResumeUpload action={uploadResume} hasResume={false} />
+            )}
+          </div>
+        </RowGroup>
+      </div>
     </div>
   );
 }

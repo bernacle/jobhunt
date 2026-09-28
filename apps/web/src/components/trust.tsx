@@ -10,6 +10,7 @@ import {
   unscopedRemote,
   verificationLine,
   verificationMark,
+  verificationShort,
 } from "@/lib/format";
 
 /*
@@ -85,10 +86,45 @@ export function VerificationStamp({ verification, now, className = "" }: { verif
   );
 }
 
-/** Eligibility as a fact: only a pass reads as settled. */
-export function EligibilityFact({ eligibility }: { eligibility: EligibilityBrief }) {
+/**
+ * How current the listing is, briefly: what was checked and when, in
+ * mono. `withSource` names where for a trusted verification; otherwise the
+ * reason it isn't trusted is left to the "check first" line and the
+ * evidence, so it isn't said twice.
+ */
+export function VerificationStatus({
+  verification,
+  now,
+  withSource = false,
+  className = "",
+}: {
+  verification: VerificationBrief;
+  now?: Date;
+  withSource?: boolean;
+  className?: string;
+}) {
+  const mark = verificationMark(verification);
+  const text = withSource && verification.state === "verified_active" && verification.trusted ? verificationLine(verification, now) : verificationShort(verification, now);
+  return (
+    <p className={`font-mono text-mono-s text-fg-muted ${className}`}>
+      {mark && (
+        <>
+          <VerifiedCheck aging={mark === "aging"} />{" "}
+        </>
+      )}
+      {text}
+    </p>
+  );
+}
+
+/**
+ * Eligibility as a fact: only a pass reads as settled. `brief` leaves out
+ * the headline of a pass (the evidence has it); a condition or an unclear
+ * reading always says what it is.
+ */
+export function EligibilityFact({ eligibility, brief = false }: { eligibility: EligibilityBrief; brief?: boolean }) {
   const fact = eligibilityFact(eligibility);
-  const detail = fact.detail && <span className="text-fg-secondary"> · {fact.detail}</span>;
+  const detail = fact.detail && !(brief && fact.kind === "resolved") && <span className="text-fg-secondary"> · {fact.detail}</span>;
   switch (fact.kind) {
     case "resolved":
       return (
@@ -162,32 +198,50 @@ export function FactRow({ items, className = "", size = "md" }: { items: ReactNo
   );
 }
 
-export type ConsiderationKind = "caution" | "unclear" | "missing";
+export type ConsiderationKind = "reason" | "caution" | "unclear" | "unresolved" | "missing";
 
 const MARKER: Record<ConsiderationKind, string> = {
+  reason: "bg-fg-secondary",
   caution: "bg-warning",
   unclear: "border border-fg-secondary",
+  unresolved: "border border-fg-secondary",
   missing: "border border-fg-muted",
 };
 
 // Read before the line by screen readers; sighted readers get the shape.
+// An unresolved requirement already says "Unresolved:" in its words.
 const SPOKEN: Record<ConsiderationKind, string> = {
+  reason: "Reason: ",
   caution: "Caution: ",
   unclear: "Unclear: ",
+  unresolved: "",
   missing: "Not stated: ",
 };
 
+const SIZE = { md: "text-[14px]", sm: "text-[13.5px]", lg: "text-body-m" };
+
 /**
- * One thing to consider. A caution from a source is a sand square; an
- * unclear reading a hollow square in secondary ink; something the posting
- * doesn't say a hollow square in muted ink.
+ * One line of an opportunity's explanation. A reason is a small solid
+ * square; a caution from a source a sand square; an unclear reading or an
+ * unresolved requirement a hollow square in secondary ink; something the
+ * posting doesn't say a hollow square in muted ink.
  */
-export function Consideration({ kind, children, size = "md" }: { kind: ConsiderationKind; children: ReactNode; size?: "md" | "sm" }) {
+export function Consideration({
+  kind,
+  children,
+  size = "md",
+  className = "",
+}: {
+  kind: ConsiderationKind;
+  children: ReactNode;
+  size?: "md" | "sm" | "lg";
+  className?: string;
+}) {
   return (
-    <li className={`flex gap-2.5 leading-normal ${size === "md" ? "text-[14px]" : "text-[13.5px]"} ${kind === "missing" ? "text-fg-secondary" : "text-fg-body"}`}>
+    <li className={`flex gap-2.5 leading-normal ${SIZE[size]} ${kind === "missing" || kind === "unresolved" ? "text-fg-secondary" : "text-fg-body"} ${className}`}>
       <span aria-hidden="true" className={`mt-[0.6em] size-[5px] shrink-0 rounded-[1px] ${MARKER[kind]}`} />
-      <span>
-        <span className="sr-only">{SPOKEN[kind]}</span>
+      <span className="min-w-0 text-pretty">
+        {SPOKEN[kind] && <span className="sr-only">{SPOKEN[kind]}</span>}
         {children}
       </span>
     </li>
