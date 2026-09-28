@@ -5,3 +5,8 @@
 .DS_Store
 node_modules/
 .vercel
+# Environment files hold real secrets; only the examples are tracked.
+.env
+.env.*
+!.env.example
+!.env.sample
