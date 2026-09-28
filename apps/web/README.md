@@ -103,6 +103,9 @@ rename is of the product people see, not of protocols.
 
 ## Configuration
 
+[`.env.example`](.env.example) lists these; copy it to `.env.local`
+(ignored by git) for local work.
+
 | Variable | |
 | --- | --- |
 | `JOBHUNT_API_URL` | where the server reaches the API (required) |

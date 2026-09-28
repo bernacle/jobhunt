@@ -2,6 +2,7 @@
   "private": true,
   "name": "jobhunt-infrastructure",
   "description": "Only for Railway's Infrastructure as Code (.railway/railway.ts); the product is the Rust workspace.",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=22.6"
   },
