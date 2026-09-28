@@ -13,6 +13,7 @@ async-trait.workspace = true
 base64.workspace = true
 chrono.workspace = true
 futures.workspace = true
+getrandom.workspace = true
 jobhunt-core.workspace = true
 jobhunt-eligibility.workspace = true
 jobhunt-jobs.workspace = true

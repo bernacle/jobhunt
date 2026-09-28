@@ -10,8 +10,6 @@
 use std::fmt;
 use std::str::FromStr;
 
-use aes_gcm::aead::OsRng;
-use aes_gcm::aead::rand_core::RngCore;
 use base64::Engine;
 use chrono::{DateTime, Utc};
 use jobhunt_jobs::StorageError;
@@ -66,14 +64,22 @@ impl FromStr for UserId {
 
 fn random_bytes<const N: usize>() -> [u8; N] {
     let mut bytes = [0u8; N];
-    OsRng.fill_bytes(&mut bytes);
+    fill_random(&mut bytes);
     bytes
 }
 
 pub(crate) fn random_hex(bytes: usize) -> String {
     let mut buf = vec![0u8; bytes];
-    OsRng.fill_bytes(&mut buf);
+    fill_random(&mut buf);
     buf.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Fills `buf` from the operating system's CSPRNG. There is no fallback: a
+/// failing system RNG panics, so a token or id is never generated weakly.
+fn fill_random(buf: &mut [u8]) {
+    if let Err(err) = getrandom::fill(buf) {
+        panic!("the operating system's random number generator failed: {err}");
+    }
 }
 
 /// The digest stored for a token.
