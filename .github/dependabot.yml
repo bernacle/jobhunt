@@ -38,3 +38,13 @@ updates:
     groups:
       web-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # The types track the Node major we run on (node:24 in the Dockerfile,
+      # Node 24 in CI). Move them together with the runtime, not before.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # TypeScript 7 drops the JavaScript compiler API that typescript-eslint
+      # (through eslint-config-next) needs; typescript-eslint supports
+      # TypeScript <6.1. Remove this once it supports TypeScript 7.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
