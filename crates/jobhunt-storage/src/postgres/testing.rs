@@ -49,12 +49,7 @@ impl TestDatabase {
     /// A new empty database, or `None` without a test server.
     pub async fn create() -> Option<Self> {
         let admin = admin_options()?;
-        let mut bytes = [0u8; 8];
-        aes_gcm::aead::rand_core::RngCore::fill_bytes(&mut aes_gcm::aead::OsRng, &mut bytes);
-        let name = format!(
-            "jobhunt_test_{}",
-            bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()
-        );
+        let name = format!("jobhunt_test_{}", super::accounts::random_hex(8));
         let mut conn = PgConnection::connect_with(&admin)
             .await
             .unwrap_or_else(|e| panic!("cannot reach the test Postgres: {e}"));

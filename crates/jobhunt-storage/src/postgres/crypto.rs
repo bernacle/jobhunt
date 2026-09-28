@@ -20,7 +20,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use aes_gcm::aead::{Aead, AeadCore, KeyInit, OsRng, Payload};
+use aes_gcm::aead::{Aead, Generate, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
 use base64::Engine;
 
@@ -105,7 +105,8 @@ impl Keyring {
                     "the key must be 32 bytes (openssl rand -base64 32)",
                 ));
             }
-            let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&bytes));
+            let cipher = Aes256Gcm::new_from_slice(&bytes)
+                .map_err(|_| invalid("the key must be 32 bytes (openssl rand -base64 32)"))?;
             if keys.insert(id.to_owned(), cipher).is_some() {
                 return Err(CryptoError::Duplicate(id.to_owned()));
             }
@@ -119,7 +120,7 @@ impl Keyring {
 
     /// A keyring with one random key (tests, local development).
     pub fn ephemeral() -> Self {
-        let key = Aes256Gcm::generate_key(&mut OsRng);
+        let key = Key::<Aes256Gcm>::generate();
         let spec = format!(
             "ephemeral:{}",
             base64::engine::general_purpose::STANDARD.encode(key)
@@ -145,7 +146,7 @@ impl Keyring {
     /// Encrypts `plaintext` for `context` with the active key.
     pub fn seal(&self, context: &str, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let cipher = self.keys.get(&self.active).ok_or(CryptoError::NoKeys)?;
-        let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+        let nonce = Nonce::generate();
         let sealed = cipher
             .encrypt(
                 &nonce,
@@ -189,7 +190,7 @@ impl Keyring {
         let (nonce, ciphertext) = rest.split_at(NONCE);
         cipher
             .decrypt(
-                Nonce::from_slice(nonce),
+                &Nonce::try_from(nonce).map_err(|_| CryptoError::Malformed)?,
                 Payload {
                     msg: ciphertext,
                     aad: context.as_bytes(),
@@ -239,6 +240,30 @@ mod tests {
             ring.seal("claims|usr_a|clm_1", b"secret resume").unwrap()
         );
     }
+
+    /// A value sealed by an earlier build (aes-gcm 0.10) must keep opening:
+    /// the database holds values sealed by every release since.
+    #[test]
+    fn opens_values_sealed_by_earlier_releases() {
+        let ring = Keyring::parse(&format!("k1:{}", key(7))).unwrap();
+        let sealed: Vec<u8> = (0..SEALED_BY_AES_GCM_0_10.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&SEALED_BY_AES_GCM_0_10[i..i + 2], 16).unwrap())
+            .collect();
+        assert_eq!(Keyring::key_of(&sealed).unwrap(), "k1");
+        assert_eq!(
+            ring.open("claims|usr_a|clm_1", &sealed).unwrap(),
+            b"secret resume"
+        );
+        assert_eq!(
+            ring.open("claims|usr_b|clm_1", &sealed),
+            Err(CryptoError::Unauthentic)
+        );
+    }
+
+    /// `seal("claims|usr_a|clm_1", b"secret resume")` under key `k1` = 32
+    /// bytes of 7, as written by aes-gcm 0.10.3.
+    const SEALED_BY_AES_GCM_0_10: &str = "01026b3164624b9d181a254442ad5ff27e1ed805790d0425aedacf040eca551a6c758483289c39a6cd26b70de6";
 
     #[test]
     fn rotation_keeps_old_values_readable() {
