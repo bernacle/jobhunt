@@ -318,3 +318,131 @@ fn a_town_known_only_by_its_country_field_is_an_office_not_a_scope() {
         assert_eq!(requirements(&j).options[0].label(), "Remote (Canada)");
     }
 }
+
+#[test]
+fn a_state_code_limits_remote_work_to_that_state() {
+    // "GA" is Georgia, not Gabon; "WA" Washington, not Wa, Ghana: a
+    // state-limited remote job stays in the US and is uncertain for
+    // someone elsewhere in it, never a foreign scope that rules them out.
+    for (location, state) in [
+        ("Remote - GA", "Georgia"),
+        ("Remote (WA)", "Washington State"),
+        ("Remote - NC", "North Carolina"),
+        ("Remote, AZ", "Arizona"),
+    ] {
+        let j = remote(location, "We build developer tools.");
+        assert_eq!(
+            requirements(&j).options[0].label(),
+            format!("Remote ({state}, United States)"),
+            "{location}"
+        );
+        let d = evaluate_record(&j, &at("Denver, CO"));
+        assert_eq!(d.status, Uncertain, "{location}: {:#?}", d.reasons);
+        let g = geography(&d);
+        assert_eq!(g.verdict, Verdict::Unknown, "{location}: {}", g.conclusion);
+        assert!(g.conclusion.contains(state), "{location}: {}", g.conclusion);
+    }
+    // In the state itself it fits.
+    let d = evaluate_record(
+        &remote("Remote - GA", "We build developer tools."),
+        &at("Atlanta, GA"),
+    );
+    assert_eq!(geography(&d).verdict, Verdict::Pass, "{:#?}", d.reasons);
+}
+
+#[test]
+fn a_source_country_constrains_a_bare_city_name() {
+    // The most populous "Alexandria" is in Egypt, but the source's country
+    // field says the US: the name is read there (Virginia's or
+    // Louisiana's, so only the country), or the country stands in.
+    for (town, code, country) in [
+        ("Alexandria", "US", "United States"),
+        ("St. Petersburg", "US", "United States"),
+        ("Naples", "US", "United States"),
+        ("León", "ES", "Spain"),
+    ] {
+        let mut j = remote(town, "We build developer tools.");
+        j.posting.locations = vec![SourceLocation {
+            name: Some(town.into()),
+            locality: None,
+            region: None,
+            country: Some(code.into()),
+        }];
+        let r = requirements(&j);
+        // The primary location text (the same words) adds nothing.
+        assert_eq!(r.options.len(), 1, "{town}: {:?}", r.options);
+        assert_eq!(
+            r.options[0].label(),
+            format!("Remote ({country} (inferred from {town}))"),
+            "{town}"
+        );
+        // As an office, it is in that country too.
+        j.posting.workplace_type = Some(WorkplaceType::OnSite);
+        match requirements(&j).options.as_slice() {
+            [
+                WorkOption::Office {
+                    area: Some(area), ..
+                },
+            ] => {
+                assert_eq!(area.country().unwrap().code, code, "{town}: {area}");
+            }
+            other => panic!("{town}: {other:?}"),
+        }
+    }
+    // A place in the source's country is found, not only the country.
+    let mut j = job("lever:example", "", Some(WorkplaceType::OnSite), "");
+    j.posting.location = None;
+    j.posting.locations = vec![SourceLocation {
+        name: Some("St. Petersburg".into()),
+        locality: None,
+        region: None,
+        country: Some("US".into()),
+    }];
+    match requirements(&j).options.as_slice() {
+        [
+            WorkOption::Office {
+                area: Some(area @ Area::City { .. }),
+                ..
+            },
+        ] => {
+            assert_eq!(area.to_string(), "St. Petersburg, United States");
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn hours_met_on_no_day_of_the_year_fail() {
+    // Istanbul (UTC+3 all year) is 7h from New York in summer and 8h in
+    // winter: a required EST schedule fits on no day, so it fails, and the
+    // reason doesn't say it is met for part of the year.
+    let j = remote("Remote - Worldwide", "You must work EST hours.");
+    let d = evaluate_record(&j, &at("Istanbul, Turkey"));
+    let tz = timezone(&d);
+    assert_eq!(tz.verdict, Verdict::Fail, "{}", tz.conclusion);
+    assert_eq!(d.status, Ineligible);
+    assert!(
+        !tz.conclusion.contains("part of the year"),
+        "{}",
+        tz.conclusion
+    );
+    assert!(
+        tz.conclusion.contains("8h away Nov 1–Mar 7")
+            && tz.conclusion.contains("7h away Mar 8–Oct 31"),
+        "{}",
+        tz.conclusion
+    );
+    // Met on some days and not others: still uncertain, with the dates.
+    let j = remote("Remote - Americas", "Work EST ±1 hours.");
+    let tz = evaluate_record(&j, &at("São Paulo, Brazil"))
+        .reasons
+        .into_iter()
+        .find(|r| r.rule == RuleId::Timezone)
+        .unwrap();
+    assert_eq!(tz.verdict, Verdict::Unknown);
+    assert!(
+        tz.conclusion.contains("only part of the year"),
+        "{}",
+        tz.conclusion
+    );
+}

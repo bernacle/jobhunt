@@ -1181,7 +1181,8 @@ struct Judgement {
 /// year. When the answer is the same all year it is that answer; when
 /// daylight saving time changes it (one side moves its clocks, the other
 /// doesn't, or not on the same dates), it holds only for part of the year
-/// and is uncertain, with the dates.
+/// and is uncertain, with the dates; when it holds on no day, it is the
+/// worst day's answer.
 fn zone_reason(z: &ZoneRequirement, mine: &Zone) -> Reason {
     let spread = mine.is_spread();
     let judged: Vec<(Judgement, Vec<usize>)> = day_pairs(mine, &z.zone)
@@ -1221,6 +1222,32 @@ fn zone_reason(z: &ZoneRequirement, mine: &Zone) -> Reason {
         .iter()
         .map(|(m, days)| format!("{m} {}", days_text(days)))
         .collect();
+    // Met on no day of the year: the season changes how far, not the
+    // answer, which is the worst day's ("8h away" in winter fails a
+    // required schedule even if "7h away" in summer is only uncertain).
+    if !judged.iter().any(|(j, _)| j.verdict == Verdict::Pass) {
+        let worst = judged
+            .iter()
+            .map(|(j, _)| verdict_rank(j.verdict))
+            .min()
+            .unwrap_or_default();
+        return match judged
+            .iter()
+            .filter(|(j, _)| verdict_rank(j.verdict) == worst)
+            .max_by_key(|(_, days)| days.len())
+        {
+            Some((j, _)) => Reason::new(
+                RuleId::Timezone,
+                j.verdict,
+                format!(
+                    "{} ({}, with daylight saving time)",
+                    j.text,
+                    join(&when, "and")
+                ),
+            ),
+            None => Reason::new(RuleId::Timezone, Verdict::Unknown, "unreadable"),
+        };
+    }
     let label = &z.label;
     let what = match z.kind {
         ZoneKind::Within => format!("Requires being within {label}"),

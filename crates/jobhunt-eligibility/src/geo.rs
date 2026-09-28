@@ -1296,7 +1296,10 @@ pub fn lookup_code_near(text: &str, after_city: bool, near: Option<&Country>) ->
     lookup_code(text, after_city)
 }
 
-/// [`lookup_code_near`] without a nearby country.
+/// [`lookup_code_near`] without a nearby country. Alone, Narrow's own
+/// countries come first ("CA" is Canada), then subdivisions, and only then
+/// the other ISO codes: "GA" is Georgia, not Gabon; "NC" North Carolina,
+/// not New Caledonia.
 pub fn lookup_code(text: &str, after_city: bool) -> Option<Area> {
     let code = text.trim().trim_end_matches('.').replace('.', "");
     if !(2..=3).contains(&code.len()) || !code.chars().all(|c| c.is_ascii_uppercase()) {
@@ -1309,10 +1312,12 @@ pub fn lookup_code(text: &str, after_city: bool) -> Option<Area> {
             .find(|s| s.code == code)
             .and_then(subdivision_area)
     };
-    let by_country = || match code.as_str() {
+    let by_country = |any: bool| match code.as_str() {
         "UK" => country("GB").map(Area::Country),
         "USA" => country("US").map(Area::Country),
-        _ => country(&code).map(Area::Country),
+        _ => country(&code)
+            .filter(|c| any || c.curated)
+            .map(Area::Country),
     };
     match code.as_str() {
         "EU" => return Some(Area::Region(Region::EuropeanUnion)),
@@ -1320,10 +1325,39 @@ pub fn lookup_code(text: &str, after_city: bool) -> Option<Area> {
         _ => {}
     }
     if after_city {
-        subdivision().or_else(by_country)
+        subdivision().or_else(|| by_country(true))
     } else {
-        by_country().or_else(subdivision)
+        by_country(false)
+            .or_else(subdivision)
+            .or_else(|| by_country(true))
     }
+}
+
+/// The subdivision a code names that contains one of the places a name
+/// before it could be: "MS" after "Campo Grande" is Mato Grosso do Sul,
+/// after "Jackson" Mississippi. `None` unless exactly one does.
+fn subdivision_containing(text: &str, candidates: &[(Area, u64)]) -> Option<Area> {
+    let code = text.trim().trim_end_matches('.').replace('.', "");
+    if !(2..=3).contains(&code.len()) || !code.chars().all(|c| c.is_ascii_uppercase()) {
+        return None;
+    }
+    let mut containing = SUBDIVISION_LISTS
+        .iter()
+        .flat_map(|list| list.iter())
+        .filter(|s| s.code == code)
+        .filter_map(subdivision_area)
+        .filter(|sub| candidates.iter().any(|(a, _)| a != sub && a.within(sub)));
+    match (containing.next(), containing.next()) {
+        (Some(one), None) => Some(one),
+        _ => None,
+    }
+}
+
+/// What a name means inside `outer`, from its readings there only:
+/// "Alexandria" in the United States (Virginia's or Louisiana's), not
+/// Egypt's. `None` when it has no reading there.
+pub fn resolve_within(text: &str, outer: &Area) -> Option<Resolution> {
+    narrowed(&candidates(text), outer)
 }
 
 /// A place named in a location string or a sentence.
@@ -1597,8 +1631,17 @@ fn flush(
 /// "San Francisco, CA, US" → one place; "Chicago, Seattle, NYC" → three.
 fn parse_list(text: &str, remote: bool) -> Vec<Place> {
     // A whole-string match first ("Washington, D.C.", "Rio de Janeiro").
+    // A code ("WA", "PA", "VIC") is read as a code below, never as a
+    // GeoNames place of that name (Wa, Ghana); only Narrow's own names
+    // ("LA", "NYC") match it whole.
     let whole = text.trim().trim_matches(|c: char| c == ',' || c == '-');
-    if let Some(resolution) = resolve_name(whole) {
+    let code_like = (2..=3).contains(&whole.len()) && whole.chars().all(|c| c.is_ascii_uppercase());
+    let resolution = if code_like {
+        lookup_name(whole).map(Resolution::Place)
+    } else {
+        resolve_name(whole)
+    };
+    if let Some(resolution) = resolution {
         return vec![Place::resolved(whole, Some(resolution), remote)];
     }
     // Commas separate places; dashes too, unless the name has one
@@ -1639,10 +1682,20 @@ fn parse_list(text: &str, remote: bool) -> Vec<Place> {
             || !pending.is_empty();
         // In a location field a short leftover is a code ("US Remote").
         let code = (stripped.len() <= 3).then(|| stripped.to_uppercase());
-        let coded = lookup_code_near(part.trim(), after_city, near).or_else(|| {
-            code.as_deref()
-                .and_then(|c| lookup_code_near(c, after_city, near))
+        // A code after a name it can settle means the subdivision holding
+        // one of that name's places ("Campo Grande, MS", "Jackson, MS").
+        let containing = pending.last().and_then(|(_, before)| {
+            subdivision_containing(part, before).or_else(|| {
+                code.as_deref()
+                    .and_then(|c| subdivision_containing(c, before))
+            })
         });
+        let coded = containing
+            .or_else(|| lookup_code_near(part.trim(), after_city, near))
+            .or_else(|| {
+                code.as_deref()
+                    .and_then(|c| lookup_code_near(c, after_city, near))
+            });
         let (found, resolution) = match coded {
             Some(area) => (vec![(area, 0)], Some(Resolution::Place(area))),
             None => {
@@ -1792,9 +1845,13 @@ pub fn places_in_text(text: &str) -> Vec<Area> {
                             | "AT"
                             | "BE"
                             | "IS"
+                            | "AM"
+                            | "PM"
+                            | "TO"
                     )
                 {
-                    // Only Narrow's own countries: "AM" and "PM" are times.
+                    // Only Narrow's own countries and subdivisions ("AM"
+                    // and "PM" are times, not Amazonas or Saint Pierre).
                     lookup_code(&phrase, false)
                         .filter(|a| !matches!(a, Area::Country(c) if !c.curated))
                 } else {
@@ -2176,5 +2233,90 @@ mod tests {
         );
         assert_eq!(names("We hire contractors across LATAM"), ["Latin America"]);
         assert_eq!(names("our american customers"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn state_codes_are_not_other_countries_or_towns() {
+        // Every ISO code is a country now, and GeoNames lists towns called
+        // "Wa" and "Pa": a code alone is still a state, as before.
+        assert_eq!(areas("Remote - GA"), s(&[("Georgia, United States", true)]));
+        assert_eq!(
+            areas("Remote, NC"),
+            s(&[("North Carolina, United States", true)])
+        );
+        assert_eq!(
+            areas("Remote (VA)"),
+            s(&[("Virginia, United States", true)])
+        );
+        assert_eq!(areas("Remote - AZ"), s(&[("Arizona, United States", true)]));
+        assert_eq!(
+            areas("Remote (WA)"),
+            s(&[("Washington State, United States", true)])
+        );
+        assert_eq!(areas("VIC"), s(&[("Victoria, Australia", false)]));
+        // Narrow's own names still come first, as before ("PA" alone is
+        // Panama, "LA" Los Angeles), and never a town of that name.
+        assert_eq!(areas("Remote (PA)"), s(&[("Panama", true)]));
+        assert_eq!(areas("LA"), s(&[("Los Angeles, United States", false)]));
+        // Other ISO codes still name their countries.
+        assert_eq!(areas("Tbilisi, GE"), s(&[("Tbilisi, Georgia", false)]));
+        assert_eq!(areas("Remote - KZ"), s(&[("Kazakhstan", true)]));
+
+        let names = |t: &str| {
+            places_in_text(t)
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        };
+        let found = names("Candidates must reside in GA, NC, SC, VA or TN.");
+        for state in ["Georgia", "North Carolina", "South Carolina", "Virginia"] {
+            assert!(
+                found.contains(&format!("{state}, United States")),
+                "{state} in {found:?}"
+            );
+        }
+        // Codes that are words stay words.
+        assert!(names("Standup is at 9 AM, demo at 4 PM.").is_empty());
+        assert!(names("WELCOME TO THE TEAM").is_empty());
+    }
+
+    #[test]
+    fn a_code_after_a_name_means_the_subdivision_holding_it() {
+        // The state a location resolves to, or the state of its city.
+        let state = |text: &str| -> String {
+            match one(text).area {
+                Some(Area::City { id, .. }) => GAZETTEER
+                    .city(id)
+                    .and_then(|c| c.admin1)
+                    .and_then(|a| GAZETTEER.admin1(a))
+                    .map_or_else(|| format!("{text}: no region"), |a| a.name.to_owned()),
+                Some(Area::Subdivision { name, .. }) => name.to_owned(),
+                other => format!("{text}: {other:?}"),
+            }
+        };
+        // Several places of the name, or a place in another country: the
+        // code picks the state that holds one of them, not the US state
+        // that shares its code.
+        assert_eq!(state("Campo Grande, MS"), "Mato Grosso do Sul");
+        // (GeoNames lists two São Josés, both in Santa Catarina: the state
+        // is certain, the place is not guessed.)
+        assert_eq!(state("São José, SC"), "Santa Catarina");
+        assert_eq!(
+            areas("São José, SC"),
+            s(&[("Santa Catarina, Brazil", false)])
+        );
+        assert_eq!(state("Sinop, MT"), "Mato Grosso");
+        assert_eq!(state("Santarém, PA"), "Pará");
+        assert_eq!(state("Dourados, MS"), "Mato Grosso do Sul");
+        // The same codes after US cities stay US states.
+        assert_eq!(state("Jackson, MS"), "Mississippi");
+        assert_eq!(state("Charleston, SC"), "South Carolina");
+        assert_eq!(state("Pittsburgh, PA"), "Pennsylvania");
+        // A town Narrow doesn't list gives no evidence: the code's usual
+        // reading, as before.
+        assert_eq!(
+            areas("Smallville Junction, MS"),
+            s(&[("Mississippi, United States", false)])
+        );
     }
 }

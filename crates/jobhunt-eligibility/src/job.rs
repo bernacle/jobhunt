@@ -23,7 +23,10 @@ use jobhunt_core::SourceKey;
 use jobhunt_jobs::{EmploymentType, JobRecord, WorkplaceType};
 use jobhunt_profile::words::{Pattern, words};
 
-use crate::geo::{Area, Country, Place, lookup_code, parse_places, places_in_text};
+use crate::geo::{
+    Area, Country, Place, Resolution, lookup_code, parse_places, places_in_text, resolve_name,
+    resolve_within,
+};
 use crate::zones::{Clock, Zone, zones_in};
 
 /// Where a statement was read.
@@ -644,14 +647,41 @@ fn structured_places(record: &JobRecord) -> Vec<(Place, Evidence, bool)> {
         }) else {
             continue;
         };
+        // The field names a country: an ISO code is that country ("GA" is
+        // Gabon here, not the state).
         let country = location
             .country
             .as_deref()
             .and_then(|c| {
-                lookup_code(&c.to_uppercase(), false).or_else(|| crate::geo::lookup_name(c))
+                crate::geo::country(c.trim())
+                    .map(Area::Country)
+                    .or_else(|| lookup_code(&c.to_uppercase(), false))
+                    .or_else(|| crate::geo::lookup_name(c))
             })
             .and_then(|a| a.country());
         for mut place in parse_places(&name) {
+            // A bare name read as a place in another country: the source's
+            // country is stated, a name's most populous reading only
+            // likely ("Alexandria" with country "US" is not Egypt's). Read
+            // the name inside that country; with no single reading there,
+            // the country fills in below.
+            if let Some(c) = country
+                && !place.remote
+                && let Some(area @ (Area::City { .. } | Area::Subdivision { .. })) = place.area
+                && area.country().is_some_and(|x| x.code != c.code)
+                && resolve_name(&place.raw) == Some(Resolution::Place(area))
+            {
+                match resolve_within(&place.raw, &Area::Country(c)) {
+                    Some(Resolution::Place(inside)) => place.area = Some(inside),
+                    other => {
+                        place.area = None;
+                        place.ambiguous = match other {
+                            Some(Resolution::Ambiguous(options)) => options,
+                            _ => Vec::new(),
+                        };
+                    }
+                }
+            }
             // The source's structured country chooses among the places an
             // ambiguous name could be ("Cambridge" with country "US"), or
             // fills in what the name leaves out.
@@ -682,11 +712,11 @@ fn structured_places(record: &JobRecord) -> Vec<(Place, Evidence, bool)> {
     if let Some(location) = &posting.location {
         for place in parse_places(location) {
             // The same place, or the same words a structured location
-            // already read (with its country: "Cambridge" in the US).
+            // already read (with its country: "Cambridge" or "Alexandria"
+            // in the US).
             let known = places.iter().any(|(p, _, _)| {
                 p.remote == place.remote
-                    && ((p.area == place.area && (p.area.is_some() || p.raw == place.raw))
-                        || (p.raw == place.raw && place.area.is_none()))
+                    && (p.raw == place.raw || (p.area.is_some() && p.area == place.area))
             });
             if !known {
                 places.push((place, evidence(record, "location", location), false));
