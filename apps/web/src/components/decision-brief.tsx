@@ -16,7 +16,8 @@ export function ConcernLine({ concern, size = "md", className }: { concern: Conc
 /**
  * The default view of why an opportunity is here: the strongest distinct
  * reasons and the most material concern, chosen from the API's ordered
- * lists (never all of them). The rest is in the evidence.
+ * lists (never all of them). A distinct unresolved stated requirement also
+ * appears beside a check-first note. The rest is in the evidence.
  */
 export function DecisionSummary({
   input,

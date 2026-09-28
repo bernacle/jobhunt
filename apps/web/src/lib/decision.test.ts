@@ -33,6 +33,22 @@ describe("selectDecision", () => {
     expect(concernsOf(omission).map((c) => c.kind)).toEqual(["caution", "missing"]);
   });
 
+  it("keeps a stated unresolved requirement visible when a separate gate note comes first", () => {
+    const unresolved = "Unresolved: you require remote roles open to Brazil, and the posting doesn't say where remote work is allowed";
+    const input = {
+      why,
+      caveats: ["Senior level, a step below your latest title"],
+      unknowns: [unresolved],
+      checkFirst: "The employer's board could not be verified recently",
+    };
+    for (const variant of ["lead", "peer"] as const) {
+      expect(selectDecision(input, variant).concerns).toEqual([
+        { kind: "caution", text: input.checkFirst, checkFirst: true },
+        { kind: "unresolved", text: unresolved },
+      ]);
+    }
+  });
+
   it("never drops an unknown, and says a line once when it is both a caveat and an unknown", () => {
     const input = { why: [], caveats: ["Equity not stated"], unknowns: ["Equity not stated"] };
     expect(concernsOf(input)).toEqual([{ kind: "missing", text: "Equity not stated" }]);

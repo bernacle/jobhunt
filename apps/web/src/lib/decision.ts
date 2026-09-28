@@ -34,7 +34,7 @@ export interface DecisionInput {
 
 export type DecisionVariant = "lead" | "peer";
 
-/** Two reasons and one concern on the lead; one of each on a peer. */
+/** Two reasons and one usual concern on the lead; one of each on a peer. */
 export const DECISION_LIMITS: Record<DecisionVariant, { reasons: number; concerns: number }> = {
   lead: { reasons: 2, concerns: 1 },
   peer: { reasons: 1, concerns: 1 },
@@ -78,11 +78,22 @@ export function concernsOf(input: DecisionInput): Concern[] {
   return out.filter((c, i) => out.findIndex((other) => same(other.text, c.text)) === i);
 }
 
-/** The strongest distinct reasons and the most material concerns, within a variant's limits. */
+/**
+ * The strongest distinct reasons and the most material concerns. A separate
+ * unresolved stated requirement still appears when a check-first note took
+ * the usual single concern slot; otherwise that requirement would disappear
+ * from the default view solely because the gate note came first.
+ */
 export function selectDecision(input: DecisionInput, variant: DecisionVariant): { reasons: string[]; concerns: Concern[] } {
   const limit = DECISION_LIMITS[variant];
+  const concerns = concernsOf(input);
+  const selected = concerns.slice(0, limit.concerns);
+  if (selected.some((c) => c.checkFirst) && !selected.some((c) => c.kind === "unresolved")) {
+    const unresolved = concerns.find((c) => c.kind === "unresolved");
+    if (unresolved) selected.push(unresolved);
+  }
   return {
     reasons: distinct(input.why).slice(0, limit.reasons),
-    concerns: concernsOf(input).slice(0, limit.concerns),
+    concerns: selected,
   };
 }
