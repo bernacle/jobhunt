@@ -13,8 +13,9 @@ const now = new Date("2026-09-25T12:00:00Z");
 describe("FeedSummary", () => {
   it("uses only the counts the API computed", () => {
     render(<FeedSummary summary={feedView().summary} />);
-    expect(screen.getByText(/Checked 7,500 open jobs · 312 you could take · 18 looked promising/)).toBeInTheDocument();
-    expect(screen.getByText("3 are worth your attention today")).toBeInTheDocument();
+    expect(screen.getByText(/of the 7,500 open jobs Narrow checked are worth your attention today/)).toHaveTextContent(
+      "3 of the 7,500 open jobs Narrow checked are worth your attention today.",
+    );
   });
 
   it("says nothing before anything was checked", () => {
@@ -37,7 +38,7 @@ describe("CaughtUp", () => {
     const feed = feedView({ items: [], caught_up: true });
     const { container } = render(<CaughtUp feed={feed} now={now} />);
     expect(screen.getByRole("heading", { name: "You're caught up." })).toBeInTheDocument();
-    expect(screen.getByText(/keeps checking job boards in the background/)).toBeInTheDocument();
+    expect(screen.getByText("You've been through everything worth your time for now.")).toBeInTheDocument();
     expect(screen.getByText(/Job boards last read 20 min ago · next check in about 30 min/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "2 saved · 1 applied" })).toHaveAttribute("href", "/applications");
     expect(container.textContent).not.toMatch(/0 jobs|no jobs found/i);
@@ -70,6 +71,8 @@ describe("CaughtUp, told apart", () => {
     render(<CaughtUp feed={feed} now={now} />);
     expect(screen.getByRole("heading", { name: "Nothing worth your time yet." })).toBeInTheDocument();
     expect(screen.getByText(/checked 2,882 open jobs and none fits well enough to show/)).toBeInTheDocument();
+    // One next step: the settings that decide what fits.
+    expect(screen.getByRole("link", { name: "Review preferences" })).toHaveAttribute("href", "/preferences");
     expect(screen.queryByText("You're caught up.")).not.toBeInTheDocument();
   });
 

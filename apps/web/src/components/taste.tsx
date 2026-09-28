@@ -16,16 +16,6 @@ import { RemovePreference } from "./preferences";
 
 type Remove = (id: string) => Promise<ActionResult<PreferenceUpdateResult>>;
 
-// Stated categories and learned dimensions, in the same groups.
-const GROUPS: { title: string; stated: string[]; learned: string[] }[] = [
-  { title: "Roles", stated: ["role"], learned: ["role", "seniority", "technology"] },
-  { title: "Pay", stated: ["compensation"], learned: ["compensation"] },
-  { title: "Location and work", stated: ["location"], learned: [] },
-  { title: "Company and team", stated: ["company"], learned: ["company_trait", "company"] },
-  { title: "Domains and products", stated: ["domain"], learned: ["domain", "product"] },
-  { title: "Way of working", stated: ["work_style"], learned: ["work_style"] },
-];
-
 const STANCE_ORDER = ["required", "wanted", "acceptable", "unwanted"];
 
 function learnedSentence(l: LearnedView): string {
@@ -44,7 +34,7 @@ function Square({ layer }: { layer: string }) {
 
 export function ExplicitPreference({ p, remove, clarify }: { p: PreferenceView; remove: Remove; clarify?: ClarifyAction }) {
   return (
-    <li className="flex gap-3 border-b border-line-subtle py-3">
+    <li className="flex gap-3 border-t border-line-subtle py-3">
       <Square layer={p.layer} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-3">
@@ -83,7 +73,7 @@ export function ExplicitPreference({ p, remove, clarify }: { p: PreferenceView; 
 
 function Pattern({ l }: { l: LearnedView }) {
   return (
-    <li className="flex gap-3 border-b border-line-subtle py-3">
+    <li className="flex gap-3 border-t border-line-subtle py-3">
       <Square layer="learned" />
       <div className="min-w-0 flex-1">
         <p className="text-[14px] text-fg-secondary">{learnedSentence(l)}</p>
@@ -129,78 +119,54 @@ function Pattern({ l }: { l: LearnedView }) {
 }
 
 function Empty({ children }: { children: string }) {
-  return <p className="border-b border-line-subtle py-3 text-row text-fg-muted">{children}</p>;
+  return <p className="mt-1 border-t border-line-subtle py-3 text-row text-fg-muted">{children}</p>;
 }
 
 /**
- * Preferences by group: what the person told Narrow beside what it
- * learned, so a tendency can never pass for a requirement.
+ * Everything Narrow uses, in its three layers, for "Review all": what the
+ * person said (requirements, then preferences), then what Narrow learned
+ * from their decisions, so a tendency can never pass for a requirement.
  */
-export function TasteTable({ taste, remove, clarify }: { taste: TasteView; remove: Remove; clarify?: ClarifyAction }) {
-  const stated = (categories: string[]) =>
-    taste.stated
-      .filter((p) => categories.includes(p.category))
-      .sort((a, b) => STANCE_ORDER.indexOf(a.stance) - STANCE_ORDER.indexOf(b.stance));
-  const known = GROUPS.flatMap((g) => g.learned);
-  const knownStated = GROUPS.flatMap((g) => g.stated);
-  const groups = [
-    ...GROUPS.map((g) => ({ title: g.title, told: stated(g.stated), learned: taste.learned.filter((l) => g.learned.includes(l.dimension)) })),
-    {
-      title: "Other",
-      told: taste.stated.filter((p) => !knownStated.includes(p.category)),
-      learned: taste.learned.filter((l) => !known.includes(l.dimension)),
-    },
-  ].filter((g) => g.title !== "Other" || g.told.length + g.learned.length > 0);
-  const column = "text-left align-top font-normal md:pb-3";
+export function TasteReview({ taste, remove, clarify }: { taste: TasteView; remove: Remove; clarify?: ClarifyAction }) {
+  const byStance = (a: PreferenceView, b: PreferenceView) => STANCE_ORDER.indexOf(a.stance) - STANCE_ORDER.indexOf(b.stance);
+  const layers = [
+    { title: "Requirements", items: taste.stated.filter((p) => p.layer === "requirement").sort(byStance) },
+    { title: "Preferences", items: taste.stated.filter((p) => p.layer !== "requirement").sort(byStance) },
+  ];
   return (
-    <table className="w-full table-fixed border-collapse max-md:block">
-      <thead className="max-md:hidden">
-        <tr>
-          <td className="w-[130px]" />
-          <th scope="col" className={`${column} pr-8`}>
-            <span className="block text-title-m">You told us</span>
-            <span className="mt-1 block text-[13px] text-fg-muted">Requirements and preferences. Always wins.</span>
-          </th>
-          <th scope="col" className={column}>
-            <span className="block text-title-m text-fg-secondary">We&apos;ve learned</span>
-            <span className="mt-1 block text-[13px] text-fg-muted">Tendencies from your decisions. Ranking only.</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody className="max-md:block">
-        {groups.map((g) => (
-          <tr key={g.title} className="border-t border-line-subtle max-md:block max-md:pt-1 max-md:pb-4">
-            <th scope="row" className="w-[130px] pt-[15px] text-left align-top text-label text-fg-muted max-md:block max-md:w-auto max-md:pb-1">
-              {g.title}
-            </th>
-            <td className="align-top md:pr-8 max-md:block">
-              <p className="pt-2 text-[11px] font-medium text-fg-muted md:hidden">You told us</p>
-              {g.told.length > 0 ? (
-                <ul role="list">
-                  {g.told.map((p) => (
-                    <ExplicitPreference key={p.id} p={p} remove={remove} clarify={clarify} />
-                  ))}
-                </ul>
-              ) : (
-                <Empty>Nothing stated</Empty>
-              )}
-            </td>
-            <td className="align-top max-md:block">
-              <p className="pt-2 text-[11px] font-medium text-fg-muted md:hidden">We&apos;ve learned</p>
-              {g.learned.length > 0 ? (
-                <ul role="list">
-                  {g.learned.map((l) => (
-                    <Pattern key={l.key} l={l} />
-                  ))}
-                </ul>
-              ) : (
-                <Empty>Nothing learned yet</Empty>
-              )}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="flex flex-col gap-7">
+      {layers.map((l) => (
+        <section key={l.title} aria-label={l.title}>
+          <h3 className="text-label text-fg-muted">{l.title}</h3>
+          {l.items.length > 0 ? (
+            <ul role="list" className="mt-1">
+              {l.items.map((p) => (
+                <ExplicitPreference key={p.id} p={p} remove={remove} clarify={clarify} />
+              ))}
+            </ul>
+          ) : (
+            <Empty>None stated</Empty>
+          )}
+        </section>
+      ))}
+      <section aria-label="Learned">
+        <h3 className="text-label text-fg-muted">Learned</h3>
+        {taste.learned.length > 0 ? (
+          <ul role="list" className="mt-1">
+            {taste.learned.map((l) => (
+              <Pattern key={l.key} l={l} />
+            ))}
+          </ul>
+        ) : (
+          <Empty>Nothing learned yet</Empty>
+        )}
+        <NotInUse taste={taste} />
+        <p className="mt-4 text-[13px] leading-normal text-fg-muted">
+          From {taste.feedback_events} {taste.feedback_events === 1 ? "decision" : "decisions"} on {taste.opportunities}{" "}
+          {taste.opportunities === 1 ? "job" : "jobs"}. Not now teaches nothing.
+        </p>
+      </section>
+    </div>
   );
 }
 

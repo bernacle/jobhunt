@@ -226,17 +226,6 @@ export function FactRows({ rows, labelWidth = "sm:grid-cols-[150px_minmax(0,1fr)
   );
 }
 
-export function EmptyState({ title, children, action, headingLevel = 2 }: { title: string; children?: ReactNode; action?: ReactNode; headingLevel?: 2 | 3 }) {
-  const Heading = headingLevel === 2 ? "h2" : "h3";
-  return (
-    <div className="border-t border-line-subtle py-7">
-      <Heading className="text-heading-m">{title}</Heading>
-      {children && <div className="mt-2 max-w-[420px] text-[14px] leading-relaxed text-pretty text-fg-secondary">{children}</div>}
-      {action && <div className="mt-4 flex gap-2">{action}</div>}
-    </div>
-  );
-}
-
 /**
  * A system fact in mono ("Checked 20 min ago · next check in about 30 min").
  * The dot is the one round thing in the product: mint when the service is
@@ -280,10 +269,21 @@ export function StatusText({ status, children, className = "" }: { status: Statu
 }
 
 /** Restrained loading: the shape of what is coming, softly pulsing. */
-export function Skeleton({ variant = "card" }: { variant?: "card" | "row" }) {
+export function Skeleton({ variant = "card" }: { variant?: "card" | "row" | "peer" }) {
   const bar = (width: string, height: string, tone: "strong" | "soft", extra = "") => (
     <div className={`${width} ${height} rounded-[2px] ${tone === "strong" ? "bg-overlay-hover" : "bg-selected"} ${extra}`} />
   );
+  if (variant === "peer") {
+    return (
+      <div aria-hidden="true" className="nr-skeleton border-t border-line-subtle pt-4 pb-6">
+        {bar("w-[40%]", "h-2", "soft")}
+        {bar("w-[80%]", "h-3", "strong", "mt-3.5")}
+        {bar("w-[55%]", "h-2", "soft", "mt-4")}
+        {bar("w-[45%]", "h-2", "soft", "mt-2")}
+        {bar("w-[90%]", "h-2", "soft", "mt-4")}
+      </div>
+    );
+  }
   if (variant === "row") {
     return (
       <div aria-hidden="true" className="nr-skeleton flex h-12 items-center gap-4 border-b border-line-subtle px-3">

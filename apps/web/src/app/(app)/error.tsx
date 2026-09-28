@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 
+import { StateMessage } from "@/components/summary";
 import { Button } from "@/components/ui";
 import { describeError } from "@/lib/errors";
 
@@ -38,18 +39,21 @@ export default function PageError({ error, reset }: { error: Error & { digest?: 
   }, [error]);
   const described = describeError(unreachable ? "cloud_unavailable" : undefined);
   return (
-    <div role="alert" className="max-w-[560px] border-t border-line-subtle pt-6">
-      <div className="flex items-center gap-2.5">
-        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-[1px] bg-info" />
-        <h1 className="text-heading-m">{described.title}</h1>
-      </div>
-      <p className="mt-2.5 text-body-s text-pretty text-fg-secondary">{described.message}</p>
-      <div className="mt-4 flex flex-wrap items-center gap-4">
-        <Button onClick={retry} loading={pending} disabled={pending} className="max-sm:h-11">
-          Try again
-        </Button>
-        {error.digest && <span className="font-mono text-mono-s text-fg-muted">Reference {error.digest}</span>}
-      </div>
+    <div className="border-t border-line-subtle pt-6">
+      <StateMessage
+        kind="error"
+        title={described.title}
+        headingLevel={1}
+        id="page-error"
+        action={
+          <Button onClick={retry} loading={pending} disabled={pending} className="max-sm:h-11">
+            Try again
+          </Button>
+        }
+        detail={error.digest && <p className="font-mono text-mono-s text-fg-muted">Reference {error.digest}</p>}
+      >
+        {described.message}
+      </StateMessage>
     </div>
   );
 }

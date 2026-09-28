@@ -13,6 +13,14 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
 const now = new Date("2026-09-25T12:00:00Z");
 
+/** The four decisions, in order, leaving out "See evidence". */
+function decisions(scope: HTMLElement = document.body) {
+  return within(scope)
+    .getAllByRole("button")
+    .map((b) => b.textContent)
+    .filter((t) => !t?.startsWith("See evidence"));
+}
+
 function actions(result: ActionResult<FeedbackResult> = { ok: true, data: feedbackResult() }) {
   return {
     feedback: vi.fn(async () => result),
@@ -21,7 +29,7 @@ function actions(result: ActionResult<FeedbackResult> = { ok: true, data: feedba
 }
 
 describe("OpportunityLead", () => {
-  it("shows the opportunity, its facts, why, what to consider, then verification", async () => {
+  it("shows the decision: facts, the two strongest reasons, one concern, verification, then actions", async () => {
     const { container } = render(<OpportunityLead item={feedItem()} actions={actions()} now={now} />);
     expect(screen.getByRole("heading", { level: 2, name: "Senior Backend Engineer (Go)" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Senior Backend Engineer (Go)" })).toHaveAttribute(
@@ -30,32 +38,63 @@ describe("OpportunityLead", () => {
     );
     expect(screen.getByText("Ledgerly")).toBeInTheDocument();
     expect(screen.getByText("Strong fit")).toBeInTheDocument();
-    expect(screen.getByText("Why it may be worth your time")).toBeInTheDocument();
-    expect(screen.getByText("Backend roles: a role you want")).toBeInTheDocument();
-    expect(screen.getByText("Things to consider")).toBeInTheDocument();
-    // Backend lines are shown as sentences; caveats are cautions.
+    expect(screen.getByText("Backend roles: a role you want").closest("li")).toHaveTextContent(/^Reason:/);
+    expect(screen.getByText("Small teams: a kind of company or team you want")).toBeInTheDocument();
+    // Backend lines are shown as sentences; the strongest caveat is the one concern shown.
     expect(screen.getByText("Senior level, a step below your latest title").closest("li")).toHaveTextContent(/^Caution:/);
+    expect(screen.queryByText("The posting doesn't say whether it's product companies")).not.toBeInTheDocument();
     // Verified pay carries the check (and says so to screen readers).
     expect(screen.getByText(/USD 150,000 – 190,000 per year/)).toHaveTextContent("USD 150,000 – 190,000 per year ✓ verified");
     expect(screen.getByText("Eligible")).toBeInTheDocument();
     expect(screen.getByText(/the listing is remote from anywhere/)).toBeInTheDocument();
     expect(screen.getByText("Verified 18 min ago on the employer's job board")).toBeInTheDocument();
     // The four actions, Save last and primary.
-    const buttons = screen.getAllByRole("button").map((b) => b.textContent);
-    expect(buttons).toEqual(["Not now", "Not for me", "I applied", "Save"]);
+    expect(decisions()).toEqual(["Not now", "Not for me", "I applied", "Save"]);
     // No match percentage, no score, anywhere.
     expect(container.textContent).not.toMatch(/\d+\s?%|match score|good fit|stretch/i);
     expect(await violations(container)).toEqual([]);
   });
 
-  it("marks unknowns as not stated, apart from cautions", () => {
+  it("keeps everything else one labelled action away, in an evidence panel", async () => {
+    render(<OpportunityLead item={feedItem({ sources: 3 })} actions={actions()} now={now} />);
+    const trigger = screen.getByRole("button", { name: /^See evidence for Senior Backend Engineer \(Go\) at Ledgerly/ });
+    await userEvent.click(trigger);
+    const panel = screen.getByRole("dialog", { name: "Why Narrow surfaced it" });
+    expect(within(panel).getByText("The posting doesn't say whether it's product companies").closest("li")).toHaveTextContent(/^Caution:/);
+    expect(within(panel).getByText("3 boards")).toBeInTheDocument();
+    expect(within(panel).getByText(/Greenhouse · ledgerly/)).toBeInTheDocument();
+    expect(within(panel).getByRole("link", { name: "Open the full brief" })).toHaveAttribute("href", "/opportunities/opp_0123456789abcdef0123456789abcdef");
+    expect(await violations(panel)).toEqual([]);
+    await userEvent.click(within(panel).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("marks unknowns as not stated, apart from cautions", async () => {
     const item = feedItem({
       consider: ["Requires 4 hours' overlap with Pacific time", "Equity not stated"],
       unknowns: ["Equity not stated"],
     });
     render(<OpportunityLead item={item} actions={actions()} now={now} />);
     expect(screen.getByText("Requires 4 hours' overlap with Pacific time").closest("li")).toHaveTextContent(/^Caution:/);
-    expect(screen.getByText("Equity not stated").closest("li")).toHaveTextContent(/^Not stated:/);
+    await userEvent.click(screen.getByRole("button", { name: /^See evidence/ }));
+    const panel = screen.getByRole("dialog");
+    expect(within(panel).getByText("Equity not stated").closest("li")).toHaveTextContent(/^Not stated:/);
+  });
+
+  it("puts a requirement the posting leaves unresolved before a soft caveat, and never drops it", async () => {
+    const item = feedItem({
+      compensation: { status: "not_published", ranges: [], verified: false },
+      consider: ["Senior level, a step below your latest title", "Unresolved: you require at least USD 140,000 per year, and this job's pay can't be checked against it"],
+      unknowns: ["Unresolved: you require at least USD 140,000 per year, and this job's pay can't be checked against it"],
+    });
+    render(<OpportunityLead item={item} actions={actions()} now={now} />);
+    expect(screen.getByText(/^Unresolved: you require at least USD 140,000/)).toBeInTheDocument();
+    expect(screen.queryByText("Senior level, a step below your latest title")).not.toBeInTheDocument();
+    // Unknown pay stays unknown in the facts.
+    expect(screen.getByText("Pay not published")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^See evidence/ }));
+    expect(within(screen.getByRole("dialog")).getByText("Senior level, a step below your latest title")).toBeInTheDocument();
   });
 
   it("says when pay is unknown, and never treats that as low", () => {
@@ -81,7 +120,7 @@ describe("OpportunityLead", () => {
     expect(screen.getByText("Remote · region not stated")).toHaveClass("nr-inferred");
   });
 
-  it("makes conditional eligibility and unverified listings visible", () => {
+  it("makes conditional eligibility and unverified listings visible", async () => {
     render(
       <OpportunityLead
         item={feedItem({
@@ -96,10 +135,28 @@ describe("OpportunityLead", () => {
     );
     expect(screen.getByText("Eligible on a condition")).toHaveClass("nr-inferred");
     expect(screen.getByText(/eligible if you relocate to Portugal/)).toBeInTheDocument();
-    expect(screen.getByText("Check first:")).toBeInTheDocument();
-    expect(screen.getByText(/Couldn't be verified recently: the employer's board didn't answer/)).toBeInTheDocument();
-    // No check mark on a listing that isn't verified.
-    expect(screen.getByText(/Couldn't be verified recently/).textContent).not.toContain("✓");
+    expect(screen.getByText("Check first:").closest("li")).toHaveTextContent("Caution: Check first: The listing was last verified 4 days ago");
+    // No check mark on a listing that isn't verified; the reason is in the evidence.
+    expect(screen.getByText("Couldn't be verified recently").textContent).not.toContain("✓");
+    await userEvent.click(screen.getByRole("button", { name: /^See evidence/ }));
+    expect(within(screen.getByRole("dialog")).getByText(/Couldn't be verified recently: the employer's board didn't answer/)).toBeInTheDocument();
+  });
+
+  it("doesn't repeat an unclear eligibility as a check-first note: the facts already say it", () => {
+    render(
+      <OpportunityLead
+        item={feedItem({
+          eligibility: { status: "uncertain", headline: "The listing says remote but not where from" },
+          recommendation: "eligibility_unclear" as never,
+          recommendation_note: "The listing says remote but not where from",
+        })}
+        actions={actions()}
+        now={now}
+      />,
+    );
+    expect(screen.getByText("Eligibility unclear")).toHaveClass("nr-inferred");
+    expect(screen.getAllByText(/the listing says remote but not where from/i)).toHaveLength(1);
+    expect(screen.queryByText("Check first:")).not.toBeInTheDocument();
   });
 
   it("says what changed when a reviewed job comes back", () => {
@@ -186,18 +243,45 @@ describe("OpportunityLead", () => {
 });
 
 describe("OpportunityPeer", () => {
-  it("is denser but keeps the facts, reasons, cautions, verification and all four actions", async () => {
+  it("is a comparison object: facts, one reason, one concern, verification and all four actions", async () => {
     const { container } = render(<OpportunityPeer item={feedItem({ tier: "worth_reviewing" })} actions={actions()} now={now} />);
     expect(screen.getByRole("heading", { level: 2, name: "Senior Backend Engineer (Go)" })).toBeInTheDocument();
     expect(screen.getByText("Worth reviewing")).toBeInTheDocument();
-    // Labels are for screen readers only on peers.
-    expect(screen.getByText("Why it may be worth your time")).toHaveClass("sr-only");
+    expect(screen.getByText("Why it may be worth your time:")).toHaveClass("sr-only");
     expect(screen.getByText("Backend roles: a role you want")).toBeInTheDocument();
+    expect(screen.queryByText("Small teams: a kind of company or team you want")).not.toBeInTheDocument();
+    expect(screen.getByText("Senior level, a step below your latest title").closest("li")).toHaveTextContent(/^Caution:/);
+    expect(screen.queryByText("The posting doesn't say whether it's product companies")).not.toBeInTheDocument();
     expect(screen.getByText(/USD 150,000 – 190,000 per year/)).toBeInTheDocument();
-    expect(screen.getByText("Verified 18 min ago on the employer's job board")).toBeInTheDocument();
-    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Not now", "Not for me", "I applied", "Save"]);
+    expect(screen.getByText("Remote - Worldwide")).toBeInTheDocument();
+    expect(screen.getByText("Eligible")).toBeInTheDocument();
+    expect(screen.getByText("Verified 18 min ago")).toBeInTheDocument();
+    expect(decisions()).toEqual(["Not now", "Not for me", "I applied", "Save"]);
     expect(container.textContent).not.toMatch(/\d+\s?%/);
     expect(await violations(container)).toEqual([]);
+  });
+
+  it("keeps unknown pay and unclear eligibility in its facts, never hidden to shorten it", () => {
+    render(
+      <OpportunityPeer
+        item={feedItem({
+          compensation: { status: "not_published", ranges: [], verified: false },
+          eligibility: { status: "uncertain", headline: "The listing says remote but not where from" },
+          locations: ["Remote"],
+        })}
+        actions={actions()}
+        now={now}
+      />,
+    );
+    expect(screen.getByText("Pay not published")).toBeInTheDocument();
+    expect(screen.getByText("Remote · region not stated")).toHaveClass("nr-inferred");
+    expect(screen.getByText("Eligibility unclear")).toHaveClass("nr-inferred");
+    expect(screen.getByText(/the listing says remote but not where from/)).toBeInTheDocument();
+  });
+
+  it("leaves no filler when there is nothing to flag", () => {
+    const { container } = render(<OpportunityPeer item={feedItem({ consider: [] })} actions={actions()} now={now} />);
+    expect(container.textContent).not.toMatch(/Nothing flagged|No concerns/);
   });
 });
 

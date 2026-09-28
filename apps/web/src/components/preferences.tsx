@@ -3,9 +3,10 @@
 import { useActionState, useId, useState, useTransition } from "react";
 
 import type { ActionResult, StatementState } from "@/app/actions";
-import type { PreferenceInput, PreferenceUpdateResult, PreferenceView } from "@/lib/api-types";
+import type { PreferenceInput, PreferenceUpdateResult, PreferenceView, StatementView } from "@/lib/api-types";
 import { STANCE_LABEL } from "@/lib/format";
 
+import { Disclosure } from "./summary";
 import { Button, Notice, helpClass, inlineActionClass, inputClass, labelClass, selectClass, textareaClass } from "./ui";
 
 function PreferenceLine({ p }: { p: PreferenceView }) {
@@ -68,7 +69,7 @@ export function AddPreference({ set }: { set: (input: PreferenceInput) => Promis
   return (
     <form
       aria-describedby={ids.help}
-      className="grid gap-3 rounded-lg border border-line bg-inset p-[18px] max-sm:p-4 md:grid-cols-[200px_minmax(0,1fr)_auto] md:items-end"
+      className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end"
       onSubmit={(e) => {
         e.preventDefault();
         setMessage(null);
@@ -86,7 +87,7 @@ export function AddPreference({ set }: { set: (input: PreferenceInput) => Promis
         <label htmlFor={ids.kind} className={labelClass}>
           About
         </label>
-        <select id={ids.kind} value={kind} onChange={(e) => setKind(e.target.value as Kind)} className={`${selectClass} h-10 text-[14px]`}>
+        <select id={ids.kind} value={kind} onChange={(e) => setKind(e.target.value as Kind)} className={selectClass}>
           {KINDS.map((k) => (
             <option key={k.kind} value={k.kind}>
               {k.label}
@@ -94,12 +95,12 @@ export function AddPreference({ set }: { set: (input: PreferenceInput) => Promis
           ))}
         </select>
       </div>
-      <div className="grid min-w-0 gap-3 sm:grid-cols-[160px_minmax(0,1fr)]">
+      <div className="grid min-w-0 gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
         <div className="min-w-0">
           <label htmlFor={ids.rule} className={labelClass}>
             Rule
           </label>
-          <select id={ids.rule} name="rule" defaultValue="want" className={`${selectClass} h-10 text-[14px]`}>
+          <select id={ids.rule} name="rule" defaultValue="want" className={selectClass}>
             {STANCES.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
@@ -111,14 +112,14 @@ export function AddPreference({ set }: { set: (input: PreferenceInput) => Promis
           <label htmlFor={ids.value} className={labelClass}>
             Value
           </label>
-          <input id={ids.value} name="value" required placeholder={current.placeholder} className={`${inputClass} h-10 text-[14px]`} />
+          <input id={ids.value} name="value" required placeholder={current.placeholder} className={inputClass} />
         </div>
       </div>
-      <Button type="submit" variant="primary" size="lg" disabled={pending} loading={pending} className="max-sm:h-11 max-sm:w-full">
+      <Button type="submit" variant="secondary" disabled={pending} loading={pending} className="h-9 max-sm:h-11 max-sm:w-full">
         Add preference
       </Button>
-      <p id={ids.help} className={`${helpClass} md:col-span-3 ${message?.ok === false ? "text-danger" : ""}`} aria-live="polite">
-        {message?.text ?? "What you tell Narrow always outranks what it has learned. Must have is a requirement; the others only change the order."}
+      <p id={ids.help} className={`${helpClass} empty:hidden md:col-span-3 ${message?.ok === false ? "text-danger" : ""}`} aria-live="polite">
+        {message?.text}
       </p>
     </form>
   );
@@ -162,6 +163,72 @@ export function RemovePreference({
 }
 
 /**
+ * What the person said, newest first, and a way to say more. The words
+ * are kept as written; what Narrow couldn't interpret is one disclosure
+ * away. With nothing said yet, the box is simply open.
+ */
+export function InYourWords({
+  statements,
+  action,
+}: {
+  statements: StatementView[];
+  action: (state: StatementState, form: FormData) => Promise<StatementState>;
+}) {
+  const [adding, setAdding] = useState(statements.length === 0);
+  const newest = [...statements].reverse();
+  const shown = newest.slice(0, 3);
+  const earlier = newest.slice(3);
+  const line = (s: StatementView) => (
+    <li key={s.id} className="border-t border-line-subtle py-3.5">
+      <q className="text-[15px] leading-[1.55] text-pretty text-fg-body">{s.text}</q>
+      <div className="mt-1 flex flex-wrap items-center gap-x-4">
+        <time dateTime={s.at} className="font-mono text-mono-s text-fg-muted">
+          {new Date(s.at).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}
+        </time>
+        {s.not_understood.length > 0 && (
+          <Disclosure label="How Narrow read this">
+            <p className="text-[13px] text-fg-secondary">
+              Not interpreted, kept as written: {s.not_understood.map((part) => `“${part}”`).join(", ")}
+            </p>
+          </Disclosure>
+        )}
+      </div>
+    </li>
+  );
+  return (
+    <section id="statements" aria-labelledby="statements-heading" className="scroll-mt-20">
+      <div className="mb-1.5 flex items-baseline justify-between gap-4">
+        <h2 id="statements-heading" className="text-[15px] leading-[1.4] font-semibold tracking-[-0.005em]">
+          In your words
+        </h2>
+        {!adding && (
+          <button type="button" onClick={() => setAdding(true)} className={`${inlineActionClass} max-sm:min-h-11`}>
+            Add in your words
+          </button>
+        )}
+      </div>
+      {statements.length > 0 && (
+        <ul className="border-b border-line-subtle">
+          {shown.map(line)}
+          {earlier.length > 0 && (
+            <li className="border-t border-line-subtle py-2.5">
+              <Disclosure label={`Earlier (${earlier.length})`}>
+                <ul>{earlier.map(line)}</ul>
+              </Disclosure>
+            </li>
+          )}
+        </ul>
+      )}
+      {adding && (
+        <div className={statements.length > 0 ? "mt-4" : "border-t border-line-subtle pt-3.5"}>
+          <StatementForm action={action} label="Describe what you're looking for" onCancel={statements.length > 0 ? () => setAdding(false) : undefined} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
  * What the person wants, in their own words. Narrow's reading comes back
  * in three parts: what it understood, what it isn't sure it read right,
  * and what it couldn't interpret (kept, never dropped).
@@ -169,9 +236,11 @@ export function RemovePreference({
 export function StatementForm({
   action,
   label = "What are you looking for?",
+  onCancel,
 }: {
   action: (state: StatementState, form: FormData) => Promise<StatementState>;
   label?: string;
+  onCancel?: () => void;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
   const id = useId();
@@ -198,8 +267,13 @@ export function StatementForm({
           <Button type="submit" variant="secondary" disabled={pending} loading={pending} className="max-sm:h-11">
             Update preferences
           </Button>
+          {onCancel && !result && (
+            <Button variant="ghost" onClick={onCancel} disabled={pending} className="max-sm:h-11">
+              Cancel
+            </Button>
+          )}
           <p id={help} className="text-caption text-fg-muted">
-            Say it however you like. It&apos;s kept word for word.
+            Kept word for word.
           </p>
         </div>
       </form>
