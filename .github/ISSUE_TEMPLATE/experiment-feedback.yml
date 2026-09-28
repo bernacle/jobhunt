@@ -1,0 +1,67 @@
+name: Narrow experience feedback
+description: >-
+  Tell us how using Narrow went — what worked, what confused you, what you'd
+  change. This is what we use to decide what to fix next.
+title: "[feedback] "
+labels:
+  - feedback
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Narrow. This issue is public — please **do not
+        include** resume contents, recruiter names/emails, salary tied to
+        your identity, application thread contents, your address, or
+        immigration/work-authorization details. Answer in terms of what
+        the *product* did, not the private details of your search.
+
+        There is currently no private feedback channel for product
+        experience (GitHub's private vulnerability reporting is for
+        security issues only — please don't use it for this). If something
+        you want to share doesn't fit a public issue, it's fine to skip
+        that question.
+  - type: dropdown
+    id: setup
+    attributes:
+      label: Did setup (install, build, init, preferences) complete?
+      options:
+        - "Yes, no issues"
+        - "Yes, but I hit friction"
+        - "No, I got stuck"
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: Where, if anywhere, did you get stuck or confused?
+      description: >-
+        Quote the command and the message you saw if you can. No need to
+        include anything from your resume or the jobs themselves.
+  - type: textarea
+    id: shortlist
+    attributes:
+      label: Did the shortlist feel better than browsing job boards yourself?
+      description: >-
+        Did `jobhunt find` surface anything you found genuinely worth
+        looking at? Did you end up wanting to look at raw job listings
+        instead of trusting the shortlist?
+  - type: textarea
+    id: actions
+    attributes:
+      label: What did you do with the results?
+      description: >-
+        Which of save / reject / like / applied did you use, roughly how
+        often? Did you come back and run `find` again later?
+  - type: textarea
+    id: wishlist
+    attributes:
+      label: What did you want that wasn't there?
+      description: >-
+        Anything you found yourself wishing for — notifications, running
+        without your laptop on, syncing across devices, something else
+        entirely. Say what you were trying to do when you wanted it, not
+        just the feature name.
+  - type: textarea
+    id: other
+    attributes:
+      label: Anything else?
