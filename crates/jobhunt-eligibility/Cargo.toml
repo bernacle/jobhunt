@@ -10,10 +10,12 @@ publish.workspace = true
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
+chrono-tz.workspace = true
 jobhunt-core.workspace = true
 jobhunt-jobs.workspace = true
 jobhunt-profile.workspace = true
 serde.workspace = true
+unicode-normalization.workspace = true
 
 [dev-dependencies]
 jobhunt-sources.workspace = true

@@ -10,7 +10,9 @@
 //!    rules out, and remote scope.
 //! 5. [`authorization`]: work authorization and sponsorship.
 //! 6. [`engagement`]: contractor, B2B and employer-of-record paths.
-//! 7. [`timezone`]: time-zone requirements.
+//! 7. [`timezone`]: time-zone requirements, judged on every day of the
+//!    reference year with each place's IANA rules (daylight saving time
+//!    included), never from a fixed offset.
 //! 8. [`ambiguity`]: what could not be read.
 //!
 //! A rule that has nothing to say returns no reasons. Nothing is inferred
@@ -20,13 +22,13 @@
 use jobhunt_profile::{Engagement, Stance, WorkMode};
 
 use crate::decision::{ProfileFact, Reason, RuleId, Verdict};
-use crate::geo::{Area, Country, Membership, format_offset};
+use crate::geo::{Area, Country, Membership};
 use crate::job::{
     AreaConstraint, Evidence, JobRequirements, Mechanism, Presence, Relocation, RemoteScope,
     ScopeBasis, Sponsorship, Strength, WorkOption, ZoneKind, ZoneRequirement,
 };
 use crate::profile::{FactBasis, ProfileFacts, ProfileLocation};
-use crate::zones::{Offsets, distance_hours};
+use crate::zones::{Offsets, Zone, day_pairs, days_text, distance_hours, offsets_text};
 
 /// What a rule looks at.
 #[derive(Debug, Clone, Copy)]
@@ -132,13 +134,13 @@ pub fn membership(area: Area, location: &ProfileLocation) -> Option<Membership> 
                 Membership::No
             }
         }
-        Area::Subdivision { country, name } => match location.area {
-            Some(Area::Subdivision { name: mine, .. }) if mine == name => Membership::Yes,
+        Area::Subdivision { country, .. } => match location.area {
+            Some(mine) if mine == area || mine.within(&area) => Membership::Yes,
             _ if country.code == home.code => Membership::Maybe,
             _ => Membership::No,
         },
-        Area::City { country, name } => match location.area {
-            Some(Area::City { name: mine, .. }) if mine == name => Membership::Yes,
+        Area::City { country, .. } => match location.area {
+            Some(mine) if mine == area => Membership::Yes,
             _ if country.code == home.code => Membership::Maybe,
             _ => Membership::No,
         },
@@ -316,13 +318,7 @@ pub fn presence(ctx: &Context<'_>) -> Vec<Reason> {
         ];
     };
     let Some(home) = me.country() else {
-        return vec![
-            reason(
-                Verdict::Unknown,
-                format!("Narrow doesn't recognize your location “{}”", me.raw),
-            )
-            .fact(ProfileFact::location(me)),
-        ];
+        return vec![reason(Verdict::Unknown, me.unresolved()).fact(ProfileFact::location(me))];
     };
     let place = area_name(office);
     let office_country = office.country();
@@ -344,10 +340,7 @@ pub fn presence(ctx: &Context<'_>) -> Vec<Reason> {
     };
     let mut out = Vec::new();
     if office_country.is_some_and(|c| c.code == home.code) {
-        let same_city = matches!(
-            (office, me.area),
-            (Area::City { name: a, .. }, Some(Area::City { name: b, .. })) if a == b
-        );
+        let same_city = matches!(office, Area::City { .. }) && me.area == Some(office);
         let r = if same_city {
             reason(
                 Verdict::Pass,
@@ -481,12 +474,8 @@ pub fn geography(ctx: &Context<'_>) -> Vec<Reason> {
     };
     if me.country().is_none() {
         out.push(
-            Reason::new(
-                RuleId::RemoteScope,
-                Verdict::Unknown,
-                format!("Narrow doesn't recognize your location “{}”", me.raw),
-            )
-            .fact(ProfileFact::location(me)),
+            Reason::new(RuleId::RemoteScope, Verdict::Unknown, me.unresolved())
+                .fact(ProfileFact::location(me)),
         );
         return out;
     }
@@ -1130,7 +1119,7 @@ pub fn timezone(ctx: &Context<'_>) -> Vec<Reason> {
             ),
         }];
     }
-    let Some((mine, basis)) = ctx.profile.zone_offsets() else {
+    let Some((mine, basis)) = ctx.profile.zone() else {
         let labels: Vec<String> = job.zones.iter().map(|z| z.label.clone()).collect();
         return vec![
             Reason::new(
@@ -1145,7 +1134,7 @@ pub fn timezone(ctx: &Context<'_>) -> Vec<Reason> {
             .fact(ProfileFact::missing("time zone")),
         ];
     };
-    let fact = ProfileFact::new("time zone", offsets_label(mine), basis);
+    let fact = ProfileFact::new("time zone", mine.label(), basis);
     // Zones named in one sentence are alternatives ("EST or PST"); every
     // sentence is a requirement of its own.
     let mut groups: Vec<Vec<&ZoneRequirement>> = Vec::new();
@@ -1158,17 +1147,10 @@ pub fn timezone(ctx: &Context<'_>) -> Vec<Reason> {
     groups
         .into_iter()
         .map(|group| {
-            let rank = |v: Verdict| match v {
-                Verdict::Pass => 3,
-                Verdict::NotApplicable => 3,
-                Verdict::Conditional => 2,
-                Verdict::Unknown => 1,
-                Verdict::Fail => 0,
-            };
             group
                 .iter()
-                .map(|z| zone_reason(z, mine))
-                .max_by_key(|r| rank(r.verdict))
+                .map(|z| zone_reason(z, &mine))
+                .max_by_key(|r| verdict_rank(r.verdict))
                 .unwrap_or_else(|| Reason::new(RuleId::Timezone, Verdict::Unknown, "unreadable"))
                 .evidence(group.iter().map(|z| &z.evidence))
                 .fact(fact.clone())
@@ -1176,18 +1158,102 @@ pub fn timezone(ctx: &Context<'_>) -> Vec<Reason> {
         .collect()
 }
 
-fn zone_reason(z: &ZoneRequirement, mine: Offsets) -> Reason {
-    let hard = z.strength == Strength::Required;
-    let (near, far) = distances(mine, z.offsets);
-    let spread = mine.0 != mine.1;
+fn verdict_rank(v: Verdict) -> u8 {
+    match v {
+        Verdict::Pass | Verdict::NotApplicable => 3,
+        Verdict::Conditional => 2,
+        Verdict::Unknown => 1,
+        Verdict::Fail => 0,
+    }
+}
+
+/// How one day's offsets meet a requirement.
+struct Judgement {
+    verdict: Verdict,
+    text: String,
+    /// What changes with the seasons: "4h away", "5h of overlap".
+    measure: String,
+    /// How far apart the zones are that day, in hours (worst case).
+    far: f32,
+}
+
+/// A requirement against the person's zone on every day of the reference
+/// year. When the answer is the same all year it is that answer; when
+/// daylight saving time changes it (one side moves its clocks, the other
+/// doesn't, or not on the same dates), it holds only for part of the year
+/// and is uncertain, with the dates.
+fn zone_reason(z: &ZoneRequirement, mine: &Zone) -> Reason {
+    let spread = mine.is_spread();
+    let judged: Vec<(Judgement, Vec<usize>)> = day_pairs(mine, &z.zone)
+        .into_iter()
+        .map(|((m, t), days)| (judge(z, m, t, spread), days))
+        .collect();
+    let same = judged.windows(2).all(|w| w[0].0.verdict == w[1].0.verdict);
+    if same {
+        // A pass states what holds on its worst day; anything else what
+        // holds most of the year.
+        let chosen = if judged
+            .first()
+            .is_some_and(|(j, _)| j.verdict == Verdict::Pass)
+        {
+            judged.iter().max_by(|a, b| a.0.far.total_cmp(&b.0.far))
+        } else {
+            judged.iter().max_by_key(|(_, days)| days.len())
+        };
+        return match chosen {
+            Some((j, _)) => Reason::new(RuleId::Timezone, j.verdict, j.text.clone()),
+            None => Reason::new(RuleId::Timezone, Verdict::Unknown, "unreadable"),
+        };
+    }
+    // The seasons change the answer: say how, and when.
+    let mut measures: Vec<(String, Vec<usize>)> = Vec::new();
+    for (j, days) in &judged {
+        match measures.iter_mut().find(|(m, _)| *m == j.measure) {
+            Some((_, all)) => all.extend(days),
+            None => measures.push((j.measure.clone(), days.clone())),
+        }
+    }
+    for (_, days) in &mut measures {
+        days.sort_unstable();
+    }
+    measures.sort_by_key(|(_, days)| std::cmp::Reverse(days.len()));
+    let when: Vec<String> = measures
+        .iter()
+        .map(|(m, days)| format!("{m} {}", days_text(days)))
+        .collect();
     let label = &z.label;
-    let (verdict, text) = match z.kind {
+    let what = match z.kind {
+        ZoneKind::Within => format!("Requires being within {label}"),
+        ZoneKind::Hours { .. } => format!("Expects {label} hours"),
+        ZoneKind::Overlap { hours } => format!("Requires {hours:.0}h of overlap with {label}"),
+    };
+    Reason::new(
+        RuleId::Timezone,
+        Verdict::Unknown,
+        format!(
+            "{what}, which your time zone meets for only part of the year: {} (daylight saving time)",
+            join(&when, "and")
+        ),
+    )
+}
+
+/// One day: the person's offsets `mine` against the requirement's
+/// `theirs`.
+fn judge(z: &ZoneRequirement, mine: Offsets, theirs: Offsets, spread: bool) -> Judgement {
+    let hard = z.strength == Strength::Required;
+    let (near, far) = distances(mine, theirs);
+    let label = &z.label;
+    let (verdict, text, measure) = match z.kind {
         ZoneKind::Within => {
-            let inside = mine.0 >= z.offsets.0 && mine.1 <= z.offsets.1;
+            let inside = mine.0 >= theirs.0 && mine.1 <= theirs.1;
             if inside {
                 (
                     Verdict::Pass,
-                    format!("Requires being within {label}; your time zone is"),
+                    format!(
+                        "Requires being within {label}; your time zone is ({})",
+                        offsets_text(mine)
+                    ),
+                    "inside it".to_owned(),
                 )
             } else if near > 0.0 {
                 (
@@ -1199,6 +1265,7 @@ fn zone_reason(z: &ZoneRequirement, mine: Offsets) -> Reason {
                     format!(
                         "Requires being within {label}; your time zone is {near:.0}h outside it"
                     ),
+                    format!("{near:.0}h outside it"),
                 )
             } else {
                 (
@@ -1206,25 +1273,30 @@ fn zone_reason(z: &ZoneRequirement, mine: Offsets) -> Reason {
                     format!(
                         "Requires being within {label}; only part of your country's time zones are"
                     ),
+                    "partly inside it".to_owned(),
                 )
             }
         }
         ZoneKind::Hours { tolerance } => {
             let allowed = tolerance.unwrap_or(DEFAULT_ZONE_TOLERANCE_HOURS);
+            let measure = format!("{near:.0}h away");
             if far <= allowed {
                 (
                     Verdict::Pass,
                     format!("Expects {label} hours, which fit your time zone"),
+                    measure,
                 )
             } else if near <= allowed && spread {
                 (
                     Verdict::Unknown,
                     format!("Expects {label} hours; that depends on where in your country you are"),
+                    measure,
                 )
             } else if hard && (tolerance.is_some() || near >= WORKING_DAY_HOURS) {
                 (
                     Verdict::Fail,
                     format!("Expects {label} hours; your time zone is {near:.0}h away"),
+                    measure,
                 )
             } else {
                 (
@@ -1232,18 +1304,21 @@ fn zone_reason(z: &ZoneRequirement, mine: Offsets) -> Reason {
                     format!(
                         "Expects {label} hours, {near:.0}h from your time zone; the posting doesn't say how much shift is acceptable"
                     ),
+                    measure,
                 )
             }
         }
         ZoneKind::Overlap { hours } => {
             let overlap_worst = (WORKING_DAY_HOURS - far).max(0.0);
             let overlap_best = (WORKING_DAY_HOURS - near).max(0.0);
+            let measure = format!("{overlap_best:.0}h of overlap");
             if overlap_worst >= hours {
                 (
                     Verdict::Pass,
                     format!(
                         "Requires {hours:.0}h of overlap with {label}; you'd have {overlap_worst:.0}h"
                     ),
+                    measure,
                 )
             } else if overlap_best >= hours {
                 (
@@ -1251,6 +1326,7 @@ fn zone_reason(z: &ZoneRequirement, mine: Offsets) -> Reason {
                     format!(
                         "Requires {hours:.0}h of overlap with {label}; that depends on where in your country you are"
                     ),
+                    measure,
                 )
             } else {
                 (
@@ -1262,16 +1338,17 @@ fn zone_reason(z: &ZoneRequirement, mine: Offsets) -> Reason {
                     format!(
                         "Requires {hours:.0}h of overlap with {label}; you'd have about {overlap_best:.0}h"
                     ),
+                    measure,
                 )
             }
         }
     };
-    let text = if matches!(z.kind, ZoneKind::Within) && verdict == Verdict::Pass {
-        format!("{text} ({})", offsets_label(mine))
-    } else {
-        text
-    };
-    Reason::new(RuleId::Timezone, verdict, text)
+    Judgement {
+        verdict,
+        text,
+        measure,
+        far,
+    }
 }
 
 /// Nearest and farthest distance in hours from any of `mine` to the zone.
@@ -1282,14 +1359,6 @@ fn distances(mine: Offsets, zone: Offsets) -> (f32, f32) {
         .map(|m| distance_hours((*m, *m), zone))
         .fold(0.0_f32, f32::max);
     (near, far)
-}
-
-pub fn offsets_label((lo, hi): Offsets) -> String {
-    if lo == hi {
-        format_offset(lo)
-    } else {
-        format!("{} to {}", format_offset(lo), format_offset(hi))
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1337,8 +1406,6 @@ mod tests {
             join(&["a".into(), "b".into(), "c".into()], "or"),
             "a, b or c"
         );
-        assert_eq!(offsets_label((-180, -180)), "UTC-3");
-        assert_eq!(offsets_label((-300, -120)), "UTC-5 to UTC-2");
         assert_eq!(distances((-300, -120), (-480, -480)), (3.0, 6.0));
     }
 }

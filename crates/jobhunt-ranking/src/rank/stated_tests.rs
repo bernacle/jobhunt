@@ -479,15 +479,15 @@ fn remote_geography_must_have_and_nice_to_have() {
 fn unrecognized_required_geography_stays_unresolved() {
     let mut paid = remote("Remote - Brazil", SMALL_TEAM);
     usd(&mut paid, 150_000.0, 180_000.0);
-    // Atlantis alone: shown, unresolved, never a strong fit.
+    // Narnia alone: shown, unresolved, never a strong fit.
     let mut odd = person();
-    odd.remote_geography = vec![geography("Atlantis", Stance::Required)];
+    odd.remote_geography = vec![geography("Narnia", Stance::Required)];
     let r = rank_for(&paid, &odd, &facts(Stance::Required));
     assert_eq!(r.gate, Gate::Recommended, "{:?}", r.gate);
     assert!(has(
         &r,
         SignalKind::Unknown,
-        "Unresolved: you require remote roles open to Atlantis"
+        "Unresolved: you require remote roles open to Narnia"
     ));
     assert_eq!(r.tier, Tier::WorthReviewing, "{:?}", summaries(&r));
     // The same job with a recognized, met requirement can be a strong fit.
@@ -497,19 +497,19 @@ fn unrecognized_required_geography_stays_unresolved() {
         rank_for(&paid, &latam, &facts(Stance::Required)).tier,
         Tier::StrongFit
     );
-    // Europe or Atlantis against a Brazil-only scope: Europe conflicts,
-    // Atlantis can't be checked, so not a conflict: unresolved.
+    // Europe or Narnia against a Brazil-only scope: Europe conflicts,
+    // Narnia can't be checked, so not a conflict: unresolved.
     let mut either = person();
     either.remote_geography = vec![
         geography("Europe", Stance::Required),
-        geography("Atlantis", Stance::Required),
+        geography("Narnia", Stance::Required),
     ];
     let r = rank_for(&paid, &either, &facts(Stance::Required));
     assert!(!r.gate.is_excluded(), "{:?}", r.gate);
     assert!(has(
         &r,
         SignalKind::Unknown,
-        "Unresolved: you require remote roles open to Europe or Atlantis"
+        "Unresolved: you require remote roles open to Europe or Narnia"
     ));
     assert!(r.tier <= Tier::WorthReviewing);
     // Europe or Latin America: the certain match decides.
@@ -924,4 +924,51 @@ fn team_and_project_stage_never_match_a_company_stage_wish() {
             .iter()
             .any(|s| s.summary.contains("Small teams: a kind") && s.weight < 0.0)
     );
+}
+
+/// BRU-310: offices resolved through GeoNames don't widen a stated remote
+/// scope, and a stated geography that names several places ("Georgia":
+/// the country or the US state) is unresolved, never a match.
+#[test]
+fn stated_remote_scope_and_ambiguous_geography() {
+    use crate::signals::RemoteReach;
+    use jobhunt_eligibility::geo::Area;
+
+    // "Remote (US)" at a company with offices in London and São Paulo is
+    // remote from the US only.
+    let offices = remote("London, UK; São Paulo, Brazil; Remote (US)", SMALL_TEAM);
+    let reach = RemoteReach::of(&jobhunt_eligibility::requirements(&offices));
+    match &reach {
+        RemoteReach::Areas(areas) => {
+            assert_eq!(areas.len(), 1, "{areas:?}");
+            assert_eq!(areas[0].code(), "country:US");
+        }
+        other => panic!("{other:?}"),
+    }
+    let mut latam = person();
+    latam.remote_geography = vec![geography("Latin America", Stance::Required)];
+    let r = rank_for(&offices, &latam, &facts(Stance::Required));
+    assert!(r.gate.is_excluded(), "{:?}", r.gate);
+    // "Remote, Global" is global.
+    let global = remote("Remote, Global", SMALL_TEAM);
+    assert_eq!(
+        RemoteReach::of(&jobhunt_eligibility::requirements(&global)),
+        RemoteReach::Areas(vec![Area::Worldwide])
+    );
+
+    // "Georgia" alone could be the country or the US state.
+    assert_eq!(region_area("Georgia"), None);
+    let mut georgia = person();
+    georgia.remote_geography = vec![geography("Georgia", Stance::Required)];
+    let r = rank_for(
+        &remote("Remote - Brazil", SMALL_TEAM),
+        &georgia,
+        &facts(Stance::Required),
+    );
+    assert!(!r.gate.is_excluded(), "{:?}", r.gate);
+    assert!(has(
+        &r,
+        SignalKind::Unknown,
+        "Unresolved: you require remote roles open to Georgia"
+    ));
 }

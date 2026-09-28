@@ -2,11 +2,14 @@
 //!
 //! A decision depends on the person (profile id and revision), the job
 //! (every source record's material content and lifecycle status), the
-//! verification each record rests on, and the rules
-//! ([`RULES_VERSION`]). The cache key is a digest of all of them, so a
-//! changed preference, an UPDATED job, a new verification or a rule change
-//! each produce a new key and a stored decision can never outlive what it
-//! was computed from. Old decisions are kept as an audit trail.
+//! verification each record rests on, the rules ([`RULES_VERSION`]), and
+//! the time-zone rules they apply: the IANA database compiled in
+//! ([`chrono_tz::IANA_TZDB_VERSION`]) and the year compatibility is judged
+//! over ([`REFERENCE_YEAR`]). The cache key is a digest of all of them, so
+//! a changed preference, an UPDATED job, a new verification, a rule change
+//! or a time-zone database update each produce a new key and a stored
+//! decision can never outlive what it was computed from. Old decisions are
+//! kept as an audit trail.
 
 use std::collections::{HashMap, HashSet};
 
@@ -19,6 +22,7 @@ use jobhunt_jobs::{OpportunityId, StorageError};
 use crate::decision::{EligibilityDecision, RULES_VERSION};
 use crate::evaluate::{Assessment, assess, trust};
 use crate::profile::ProfileFacts;
+use crate::zones::REFERENCE_YEAR;
 
 const CACHE_NAMESPACE: &str = "jobhunt.eligibility.v1";
 
@@ -39,6 +43,7 @@ impl CacheKey {
         let revision = profile.revision.to_string();
         let mut parts: Vec<String> = vec![
             RULES_VERSION.to_owned(),
+            format!("tz:{}:{REFERENCE_YEAR}", chrono_tz::IANA_TZDB_VERSION),
             VERIFICATION_REVISION.to_owned(),
             profile_id.clone(),
             revision,

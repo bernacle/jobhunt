@@ -1230,7 +1230,7 @@ fn overlap(a: Area, b: Area) -> Membership {
         // may include.
         _ => {
             let (mut maybe, mut yes) = (false, false);
-            for c in COUNTRIES {
+            for c in COUNTRIES.iter() {
                 match (a.contains(c), b.contains(c)) {
                     (Membership::Yes, Membership::Yes) => yes = true,
                     (Membership::No, _) | (_, Membership::No) => {}

@@ -24,7 +24,7 @@ use jobhunt_jobs::{EmploymentType, JobRecord, WorkplaceType};
 use jobhunt_profile::words::{Pattern, words};
 
 use crate::geo::{Area, Country, Place, lookup_code, parse_places, places_in_text};
-use crate::zones::{Offsets, zones_in};
+use crate::zones::{Clock, Zone, zones_in};
 
 /// Where a statement was read.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -290,7 +290,9 @@ pub enum ZoneKind {
 pub struct ZoneRequirement {
     /// The words that named the zone.
     pub label: String,
-    pub offsets: Offsets,
+    /// The IANA zones (or the fixed offsets) the words mean: "Pacific
+    /// time" is America/Los_Angeles, daylight saving included.
+    pub zone: Zone,
     pub kind: ZoneKind,
     pub strength: Strength,
     pub evidence: Evidence,
@@ -408,8 +410,8 @@ pub fn requirements(record: &JobRecord) -> JobRequirements {
     }
 
     // Mode, from the workplace type first, then the places.
-    let any_remote = places.iter().any(|(p, _)| p.remote);
-    let all_remote = !places.is_empty() && places.iter().all(|(p, _)| p.remote);
+    let any_remote = places.iter().any(|(p, _, _)| p.remote);
+    let all_remote = !places.is_empty() && places.iter().all(|(p, _, _)| p.remote);
     job.mode = match &posting.workplace_type {
         Some(WorkplaceType::Remote) => JobMode::Remote,
         Some(WorkplaceType::Hybrid) if any_remote => JobMode::Mixed,
@@ -447,7 +449,7 @@ pub fn requirements(record: &JobRecord) -> JobRequirements {
         .filter(|e| job.mode == JobMode::Remote || e.field == "is_remote")
         .cloned()
         .collect();
-    for (place, ev) in places {
+    for (place, ev, filled) in places {
         let remote_place = place.remote || job.mode == JobMode::Remote;
         // A place that is itself remote ("Remote (US)", "Remote, Global") is
         // also evidence that the job is remote.
@@ -466,6 +468,18 @@ pub fn requirements(record: &JobRecord) -> JobRequirements {
                 if !scope.iter().any(|s| s.area == country_area) {
                     scope.push(ScopedArea {
                         area: country_area,
+                        raw: place.raw.clone(),
+                        basis: ScopeBasis::OfficeCity,
+                        evidence: ev,
+                    });
+                }
+            }
+            // An office town named with only the source's country: that
+            // country is where the office is, not a stated remote scope.
+            (true, Some(area @ Area::Country(_))) if filled && !place.remote => {
+                if !scope.iter().any(|s| s.area == area) {
+                    scope.push(ScopedArea {
+                        area,
                         raw: place.raw.clone(),
                         basis: ScopeBasis::OfficeCity,
                         evidence: ev,
@@ -614,10 +628,12 @@ fn dedup(mut items: Vec<Evidence>) -> Vec<Evidence> {
 }
 
 /// Every place of the structured location fields, deduplicated, with the
-/// field it came from.
-fn structured_places(record: &JobRecord) -> Vec<(Place, Evidence)> {
+/// field it came from, and whether its area is only the source's country
+/// field standing in for a place the name doesn't settle (an office town
+/// Narrow doesn't list, or one of several places of its name).
+fn structured_places(record: &JobRecord) -> Vec<(Place, Evidence, bool)> {
     let posting = &record.posting;
-    let mut places: Vec<(Place, Evidence)> = Vec::new();
+    let mut places: Vec<(Place, Evidence, bool)> = Vec::new();
     for location in &posting.locations {
         let Some(name) = location.name.clone().or_else(|| {
             let parts: Vec<&str> = [&location.locality, &location.region, &location.country]
@@ -636,33 +652,49 @@ fn structured_places(record: &JobRecord) -> Vec<(Place, Evidence)> {
             })
             .and_then(|a| a.country());
         for mut place in parse_places(&name) {
-            // The source's structured country fills in what the name leaves out.
+            // The source's structured country chooses among the places an
+            // ambiguous name could be ("Cambridge" with country "US"), or
+            // fills in what the name leaves out.
+            let mut filled = false;
             if place.area.is_none()
                 && let Some(c) = country
                 && !place.raw.is_empty()
                 && !place.remote
             {
-                place.area = Some(Area::Country(c));
+                let mut inside = place
+                    .ambiguous
+                    .iter()
+                    .filter(|a| a.country().is_some_and(|x| x.code == c.code));
+                place.area = match (inside.next(), inside.next()) {
+                    (Some(one), None) => Some(*one),
+                    _ => {
+                        filled = true;
+                        Some(Area::Country(c))
+                    }
+                };
+                place.ambiguous.clear();
             }
-            places.push((place, evidence(record, "locations", &name)));
+            places.push((place, evidence(record, "locations", &name), filled));
         }
     }
     // The primary location text often lists more than the structured
     // locations do (Greenhouse offices).
     if let Some(location) = &posting.location {
         for place in parse_places(location) {
-            let known = places.iter().any(|(p, _)| {
-                p.area == place.area
-                    && p.remote == place.remote
-                    && (p.area.is_some() || p.raw == place.raw)
+            // The same place, or the same words a structured location
+            // already read (with its country: "Cambridge" in the US).
+            let known = places.iter().any(|(p, _, _)| {
+                p.remote == place.remote
+                    && ((p.area == place.area && (p.area.is_some() || p.raw == place.raw))
+                        || (p.raw == place.raw && place.area.is_none()))
             });
             if !known {
-                places.push((place, evidence(record, "location", location)));
+                places.push((place, evidence(record, "location", location), false));
             }
         }
     }
     let mut seen: Vec<(Option<Area>, bool, String)> = Vec::new();
-    places.retain(|(p, _)| {
+    places.retain(|(p, _, _)| {
         let key = (
             p.area,
             p.remote,
@@ -1344,7 +1376,7 @@ fn read_sentence(record: &JobRecord, sentence: &str, job: &mut JobRequirements) 
 fn read_zones(
     sentence: &str,
     ws: &[jobhunt_profile::words::Word],
-    found: Vec<(String, Offsets)>,
+    found: Vec<(String, Zone)>,
     strength: Strength,
     ev: Evidence,
     job: &mut JobRequirements,
@@ -1382,34 +1414,32 @@ fn read_zones(
         && found
             .iter()
             .all(|(l, _)| l.starts_with("UTC") || l.starts_with("GMT"));
-    let entries: Vec<(String, Offsets)> = if ranged {
-        let lo = found.iter().map(|(_, r)| r.0).min().unwrap_or(0);
-        let hi = found.iter().map(|(_, r)| r.1).max().unwrap_or(0);
-        vec![(
-            found
-                .iter()
-                .map(|(l, _)| l.as_str())
-                .collect::<Vec<_>>()
-                .join(" to "),
-            (lo, hi),
-        )]
+    let entries: Vec<(String, Zone)> = if ranged {
+        let (lo, hi) = found.iter().fold((i16::MAX, i16::MIN), |(lo, hi), (_, z)| {
+            let (a, b) = z.year_range();
+            (lo.min(a), hi.max(b))
+        });
+        let label = found
+            .iter()
+            .map(|(l, _)| l.as_str())
+            .collect::<Vec<_>>()
+            .join(" to ");
+        Zone::new([Clock::Fixed(lo), Clock::Fixed(hi)])
+            .map(|zone| vec![(label, zone)])
+            .unwrap_or_default()
     } else {
         found
     };
-    for (label, offsets) in entries {
+    for (label, zone) in entries {
         let kind = match overlap {
             Some(Some(hours)) => ZoneKind::Overlap { hours },
             _ if within || ranged => ZoneKind::Within,
             _ => ZoneKind::Hours { tolerance },
         };
-        if !job
-            .zones
-            .iter()
-            .any(|z| z.offsets == offsets && z.kind == kind)
-        {
+        if !job.zones.iter().any(|z| z.zone == zone && z.kind == kind) {
             job.zones.push(ZoneRequirement {
                 label,
-                offsets,
+                zone,
                 kind,
                 strength,
                 evidence: ev.clone(),

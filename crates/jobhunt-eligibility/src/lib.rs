@@ -8,7 +8,9 @@
 //!   each with its [`job::Evidence`].
 //! * [`profile`] reads the person's facts from the profile domain.
 //! * [`geo`] and [`zones`] normalize places and time zones: ISO country
-//!   codes, the documented region definitions, UTC offsets.
+//!   codes, the documented region definitions, GeoNames places
+//!   ([`gazetteer`]) with ambiguity kept, and IANA time zones compared day
+//!   by day, daylight saving time included.
 //! * [`rules`] are the deterministic rules, one function each, in order.
 //! * [`decision`] is the result: eligible, conditional, uncertain or
 //!   ineligible, with traceable [`decision::Reason`]s.
@@ -28,6 +30,7 @@ pub mod cache;
 pub mod decision;
 pub mod describe;
 pub mod evaluate;
+pub mod gazetteer;
 pub mod geo;
 pub mod job;
 pub mod profile;

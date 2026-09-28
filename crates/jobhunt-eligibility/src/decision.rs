@@ -15,10 +15,12 @@ use crate::job::Evidence;
 use crate::profile::{FactBasis, ProfileLocation};
 
 /// Revision of the eligibility rules and the normalization they read
-/// (geography tables, cue lists). Part of every stored decision's cache
-/// key, so changing a rule never keeps conclusions reached under the old
-/// one. Bump it with any change that can change a decision.
-pub const RULES_VERSION: &str = "3";
+/// (geography tables, the GeoNames subset, cue lists). Part of every
+/// stored decision's cache key, so changing a rule never keeps conclusions
+/// reached under the old one. Bump it with any change that can change a
+/// decision. (The IANA time-zone database version and the reference year
+/// are keyed separately; see [`crate::cache`].)
+pub const RULES_VERSION: &str = "4";
 
 /// Whether a person appears able to work a job, worst first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

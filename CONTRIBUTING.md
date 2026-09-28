@@ -70,6 +70,14 @@ The CLI and the MCP server are interfaces to one local application:
   in the API (and, when it makes sense, as an MCP tool), then regenerate
   the schema and types: `JOBHUNT_UPDATE_SCHEMA=1 cargo test -p
   jobhunt-cloud --test api_schema`, then `npm run types` in `apps/web`.
+- geography comes from Narrow's own tables in
+  `crates/jobhunt-eligibility/src/geo.rs` (regions, country aliases,
+  state codes, city nicknames) and a GeoNames subset compiled into the
+  binary. The subset under `crates/jobhunt-eligibility/data/geonames` is
+  generated (CC BY 4.0 data, attribution required): never edit it by
+  hand; refresh it with `scripts/geonames/download.sh` and
+  `scripts/geonames/generate.py`, as its README says. Nothing geographic
+  is looked up over the network, at startup or per job.
 - email goes through `jobhunt_cloud::email::EmailSender`; tests use
   `MemorySender` (or the file provider in the browser tests). No test may
   send real email.

@@ -3,7 +3,10 @@
 //!
 //! Missing information stays missing. The location comes from the
 //! `current_location` preference, or else the resume header (and says so);
-//! it is never guessed from the machine's locale or IP. Work authorization
+//! it is never guessed from the machine's locale or IP. A place that could
+//! be several ("Cambridge", "Portland") is kept with what it could be, and
+//! counts only for what those readings share (Portland's country, never
+//! one of its cities). Work authorization
 //! comes only from what the person stated: "authorized to work in X"
 //! preferences, and "no sponsorship needed" read as authorization where
 //! they live (documented, and named in every reason that relies on it).
@@ -11,7 +14,7 @@
 use jobhunt_profile::{Engagement, PreferenceValue, ProfileData, Stance, WorkMode};
 
 use crate::geo::{Area, COUNTRIES, Country, Membership, parse_places};
-use crate::zones::{Offsets, span, zones_in};
+use crate::zones::{Zone, zones_in};
 
 /// Where a profile fact came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,7 +23,7 @@ pub enum FactBasis {
     Preference,
     /// The resume header; used only when no preference says otherwise.
     Resume,
-    /// Derived from another fact (a country's time zones).
+    /// Derived from another fact (a city's or country's time zones).
     Derived,
 }
 
@@ -39,9 +42,13 @@ impl FactBasis {
 pub struct ProfileLocation {
     /// As written.
     pub raw: String,
-    /// The most specific recognized area; `None` when unrecognized.
+    /// The most specific recognized area; `None` when unrecognized. For a
+    /// place that could be several, what they all share (the country of
+    /// "Portland"), or `None`.
     pub area: Option<Area>,
     pub basis: FactBasis,
+    /// The places it could be, when it could be several; empty otherwise.
+    pub ambiguous: Vec<Area>,
 }
 
 impl ProfileLocation {
@@ -55,6 +62,42 @@ impl ProfileLocation {
             _ => None,
         }
     }
+
+    /// Reads where someone says they live.
+    pub fn read(raw: &str, basis: FactBasis) -> Self {
+        let (area, ambiguous) = home_area(raw);
+        Self {
+            raw: raw.to_owned(),
+            area,
+            basis,
+            ambiguous,
+        }
+    }
+
+    /// Why the location can't be used: "Narrow doesn't recognize your
+    /// location “Narnia”", "Your location “Cambridge” could be Cambridge,
+    /// United Kingdom, Cambridge, Canada or Cambridge, United States".
+    pub fn unresolved(&self) -> String {
+        if self.ambiguous.is_empty() {
+            format!("Narrow doesn't recognize your location “{}”", self.raw)
+        } else {
+            let names: Vec<String> = self.ambiguous.iter().map(ToString::to_string).collect();
+            format!(
+                "Your location “{}” could be {}; say which (with its country or state)",
+                self.raw,
+                or_list(&names)
+            )
+        }
+    }
+}
+
+/// "a, b or c".
+pub(crate) fn or_list(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => one.clone(),
+        [init @ .., last] => format!("{} or {last}", init.join(", ")),
+    }
 }
 
 /// Everything eligibility needs from a profile.
@@ -66,7 +109,7 @@ pub struct ProfileFacts {
     pub revision: u64,
     pub location: Option<ProfileLocation>,
     /// Time zones the person stated they can work in.
-    pub zones: Vec<(String, Offsets)>,
+    pub zones: Vec<(String, Zone)>,
     pub work_modes: Vec<(WorkMode, Stance)>,
     pub relocation: Option<bool>,
     /// When willing to relocate only to some places: those places,
@@ -90,22 +133,18 @@ impl ProfileFacts {
         for p in data.preferences().active() {
             match &p.value {
                 PreferenceValue::CurrentLocation { place } => {
-                    out.location = Some(ProfileLocation {
-                        raw: place.clone(),
-                        area: place_area(place),
-                        basis: FactBasis::Preference,
-                    });
+                    out.location = Some(ProfileLocation::read(place, FactBasis::Preference));
                 }
                 PreferenceValue::WorkMode { mode } => out.work_modes.push((*mode, p.stance)),
                 PreferenceValue::Timezone { zone } if p.stance != Stance::Unwanted => {
-                    let ranges = zones_in(zone);
-                    if ranges.is_empty() {
-                        // "Europe" alone, as a zone.
-                        if let Some(range) = place_area(zone).and_then(|a| a.utc_offsets()) {
-                            out.zones.push((zone.clone(), range));
+                    let named = zones_in(zone);
+                    if named.is_empty() {
+                        // "Europe" or "Lisbon" alone, as a zone.
+                        if let Some(z) = place_area(zone).and_then(|a| a.zone()) {
+                            out.zones.push((zone.clone(), z));
                         }
                     } else {
-                        out.zones.extend(ranges);
+                        out.zones.extend(named);
                     }
                 }
                 PreferenceValue::Relocation { willing, only_to } => {
@@ -136,11 +175,7 @@ impl ProfileFacts {
         if out.location.is_none()
             && let Some(location) = &data.profile.location
         {
-            out.location = Some(ProfileLocation {
-                raw: location.clone(),
-                area: place_area(location),
-                basis: FactBasis::Resume,
-            });
+            out.location = Some(ProfileLocation::read(location, FactBasis::Resume));
         }
         out
     }
@@ -148,11 +183,7 @@ impl ProfileFacts {
     /// A profile that only says where the person lives (tests, examples).
     pub fn living_in(place: &str) -> Self {
         Self {
-            location: Some(ProfileLocation {
-                raw: place.to_owned(),
-                area: place_area(place),
-                basis: FactBasis::Preference,
-            }),
+            location: Some(ProfileLocation::read(place, FactBasis::Preference)),
             ..Self::default()
         }
     }
@@ -162,16 +193,23 @@ impl ProfileFacts {
     }
 
     /// The person's working time zones: stated ones, or those of where
-    /// they live (city, else country), with how it is known.
-    pub fn zone_offsets(&self) -> Option<(Offsets, FactBasis)> {
-        if let Some(range) = span(&self.zones.iter().map(|(_, r)| *r).collect::<Vec<_>>()) {
-            return Some((range, FactBasis::Preference));
+    /// they live (their city's IANA zone, else their state's or country's
+    /// zones), with how it is known. Where they live is not where they are
+    /// authorized to work: this answers time zones only.
+    pub fn zone(&self) -> Option<(Zone, FactBasis)> {
+        if let Some(zone) = self
+            .zones
+            .iter()
+            .map(|(_, z)| z.clone())
+            .reduce(|a, b| a.union(&b))
+        {
+            return Some((zone, FactBasis::Preference));
         }
         self.location
             .as_ref()
             .and_then(|l| l.area)
-            .and_then(|a| a.utc_offsets())
-            .map(|r| (r, FactBasis::Derived))
+            .and_then(|a| a.zone())
+            .map(|z| (z, FactBasis::Derived))
     }
 
     /// The stance on a work mode, when stated.
@@ -291,14 +329,37 @@ fn destination(allowed: Area, place: Area) -> Membership {
 }
 
 /// The most specific recognized area in a place description ("São Paulo,
-/// Brazil" → the city; "the US" → the country).
+/// Brazil" → the city; "the US" → the country). A name that could be
+/// several places ("Cambridge", "Georgia") is `None`: stated places also
+/// bound relocation, authorization and remote preferences, where one
+/// reading must not stand for another.
 pub fn place_area(text: &str) -> Option<Area> {
+    most_specific(&parse_places(without_article(text)))
+}
+
+/// Where someone lives, with the places it could be when it could be
+/// several: then only what they all share counts ("Portland" is somewhere
+/// in the United States).
+fn home_area(text: &str) -> (Option<Area>, Vec<Area>) {
+    let places = parse_places(without_article(text));
+    if let Some(area) = most_specific(&places) {
+        return (Some(area), Vec::new());
+    }
+    match places.iter().find(|p| !p.ambiguous.is_empty()) {
+        Some(p) => (p.common_area(), p.ambiguous.clone()),
+        None => (None, Vec::new()),
+    }
+}
+
+fn without_article(text: &str) -> &str {
     let text = text.trim();
-    let text = text
-        .strip_prefix("the ")
+    text.strip_prefix("the ")
         .or_else(|| text.strip_prefix("The "))
-        .unwrap_or(text);
-    parse_places(text)
+        .unwrap_or(text)
+}
+
+fn most_specific(places: &[crate::geo::Place]) -> Option<Area> {
+    places
         .iter()
         .filter_map(|p| p.area)
         .max_by_key(|a| match a {
@@ -328,21 +389,63 @@ mod tests {
             "BR"
         );
         assert_eq!(place_area("the US").unwrap().country().unwrap().code, "US");
-        assert_eq!(place_area("Atlantis"), None);
+        assert_eq!(place_area("Narnia"), None);
+    }
+
+    #[test]
+    fn ambiguous_places_keep_what_they_could_be() {
+        // Cambridge, England; Cambridge, Ontario; Cambridge, Massachusetts.
+        assert_eq!(place_area("Cambridge"), None);
+        let home = ProfileLocation::read("Cambridge", FactBasis::Preference);
+        assert_eq!(home.area, None);
+        let countries: Vec<&str> = home
+            .ambiguous
+            .iter()
+            .filter_map(|a| a.country())
+            .map(|c| c.code)
+            .collect();
+        assert_eq!(countries, ["GB", "CA", "US", "NZ"]);
+        assert!(
+            home.unresolved()
+                .contains("could be Cambridge, United Kingdom")
+        );
+        // Context chooses.
+        let ma = place_area("Cambridge, MA").unwrap();
+        assert_eq!(ma.country().unwrap().code, "US");
+        assert!(matches!(ma, Area::City { .. }));
+        // Portland, Oregon or Portland, Maine: somewhere in the US, and no
+        // more, for where someone lives; nothing for a stated destination.
+        let portland = ProfileLocation::read("Portland", FactBasis::Preference);
+        assert_eq!(portland.area.and_then(|a| a.country()).unwrap().code, "US");
+        assert!(matches!(portland.area, Some(Area::Country(_))));
+        assert_eq!(portland.ambiguous.len(), 2);
+        assert_eq!(place_area("Portland"), None);
     }
 
     #[test]
     fn time_zones_come_from_the_city_when_known() {
         let sf = ProfileFacts::living_in("San Francisco, CA");
-        assert_eq!(sf.zone_offsets(), Some(((-480, -480), FactBasis::Derived)));
-        let us = ProfileFacts::living_in("United States");
-        assert_eq!(us.zone_offsets(), Some(((-600, -300), FactBasis::Derived)));
+        let (zone, basis) = sf.zone().unwrap();
+        assert_eq!(basis, FactBasis::Derived);
+        assert_eq!(zone, Zone::iana("America/Los_Angeles").unwrap());
+        // A city's own zone, not its country's capital's: Dourados keeps
+        // UTC-4.
+        let (zone, _) = ProfileFacts::living_in("Dourados, Brazil").zone().unwrap();
+        assert_eq!(zone, Zone::iana("America/Campo_Grande").unwrap());
+        assert_eq!(zone.year_range(), (-240, -240));
+        // A country spans its zones.
+        let (us, _) = ProfileFacts::living_in("United States").zone().unwrap();
+        assert!(us.is_spread());
+        assert_eq!(us.year_range(), (-600, -240));
         let mut stated = ProfileFacts::living_in("United States");
         stated.zones = zones_in("UTC-3");
         assert_eq!(
-            stated.zone_offsets(),
-            Some(((-180, -180), FactBasis::Preference))
+            stated.zone(),
+            Some((Zone::fixed(-180), FactBasis::Preference))
         );
-        assert_eq!(ProfileFacts::default().zone_offsets(), None);
+        assert_eq!(ProfileFacts::default().zone(), None);
+        // An ambiguous home gives no single city zone.
+        let (zone, _) = ProfileFacts::living_in("Portland").zone().unwrap();
+        assert!(zone.is_spread());
     }
 }
