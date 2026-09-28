@@ -1,4 +1,14 @@
-# JobHunt
+# Narrow
+
+Narrow is an open-source job-search agent that searches the market for you
+and surfaces only the opportunities worth your attention. It is not another
+job board: the goal is a short list you can act on, not an endless one to
+scroll.
+
+This repository is Narrow's code. Its internal name is JobHunt: the crates,
+the `jobhunt` command, the API and environment variables, and the rest of
+this README use that name. Narrow is licensed under
+[Apache-2.0](#license).
 
 High-signal job discovery, as a local product. JobHunt reads a large
 universe of jobs from company job boards, verifies them at the employers'
@@ -2019,3 +2029,11 @@ Jobs:
   serve them. Lever's EU region is supported (`region = "eu"`) but was not
   verified against a live EU site. Only public, unauthenticated endpoints
   are used.
+
+## License
+
+Narrow is licensed under the [Apache License, Version 2.0](LICENSE).
+
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Please
+report security vulnerabilities privately, as described in
+[SECURITY.md](SECURITY.md).

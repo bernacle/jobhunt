@@ -1,7 +1,17 @@
 # Contributing
 
-How changes get into `main` without breaking JobHunt. For what the product
-does and how it is built, see the [README](README.md).
+How changes get into `main` without breaking JobHunt (Narrow's internal
+name). For what the product does and how it is built, see the
+[README](README.md).
+
+Contributions from outside the project are welcome: bug reports, fixes,
+new sources, documentation. For anything large, open an issue first so we
+can agree on the direction before you spend time on it. Report security
+vulnerabilities privately, as described in [SECURITY.md](SECURITY.md),
+never in a public issue.
+
+By submitting a contribution, you agree that it is licensed under the
+[Apache License 2.0](LICENSE), as the license's section 5 describes.
 
 ## Requirements
 
@@ -198,9 +208,8 @@ Notes:
 
 ### Draft pull requests skip CI
 
-The repository is private, so Actions minutes are limited (3,000 a month
-on GitHub Pro), and one full run costs about 25 of them. CI runs when its
-result matters: on pull requests that are ready for review and on `main`.
+A full CI run is long, so it runs when its result matters: on pull
+requests that are ready for review and on `main`.
 
 - **Draft pull requests skip every job**, `ci-passed` included. GitHub counts
   a skipped required check as passing. That's acceptable because a draft
@@ -226,7 +235,8 @@ the adapter (with a new fixture) in a PR.
 
 ## Pull request workflow
 
-1. Branch from `main`.
+1. Fork the repository and branch from `main` (maintainers may branch in
+   this repository instead).
 2. Make the change with tests. A lifecycle, dedupe, storage or adapter
    change needs an offline regression test (fixture or mock server, not a
    live one); so does a change to resume parsing (a fixture under
@@ -245,10 +255,22 @@ the adapter (with a new fixture) in a PR.
    `RULE_READER_REVISION` (`reason.rs`) for how reasons are read. Ranking
    never changes an eligibility decision. Schema changes are new, additive
    migrations; never edit an existing one.
-3. Run `./scripts/check.sh`.
-4. Open a **draft** PR against `main`; CI doesn't run on drafts. When the
-   change is done, mark it ready for review, which runs CI. Merge when CI is
-   green. A solo maintainer doesn't need approvals.
+
+   Keep the product's semantics: the tests encode what Narrow decides
+   (verification, eligibility, ranking, what Today shows). Don't loosen or
+   delete an expectation to make a change pass; change it only when the
+   new behavior is intended, and say why in the PR.
+3. Keep secrets and real personal data out of the repository, fixtures
+   included: no tokens, keys or `.env` files, no real resumes, names,
+   contact details, email or anything taken from a real account. Fixture
+   people and companies are made up (addresses at `example.com`); saved
+   responses from public job boards are fine.
+4. Run `./scripts/check.sh`.
+5. Open a PR against `main`, as a **draft** while you iterate (CI doesn't
+   run on drafts), then mark it ready for review, which runs CI. For a
+   pull request from a fork, a maintainer may need to approve the
+   workflows before GitHub Actions runs them.
+6. CI must pass. A maintainer reviews the change and merges it.
 
 ## Branch protection for `main`
 
@@ -259,7 +281,8 @@ Intended rules: protection against accidents, not bureaucracy.
 - Required status checks: `fmt`, `clippy`, `test`, `cloud`, `docs`, `msrv`,
   `web`, `e2e`, `ci-passed`, from GitHub Actions, and the branch must be up to date with
   `main` before merging.
-- Zero required approvals.
+- Zero required approvals: only maintainers can merge, and they review
+  contributions before merging them.
 - Repository admins can bypass the rules when merging a pull request (an
   emergency merge with red CI). They still can't push directly.
 
@@ -269,6 +292,4 @@ Rulesets → New ruleset → Import a ruleset** and choose
 [`.github/rulesets/main.json`](.github/rulesets/main.json). The checks only
 show up after CI has run once. For admins to push directly in a real
 emergency, change the bypass mode from "For pull requests only" to
-"Always". Rulesets on a private repository need GitHub Pro or a paid
-organization plan. On the free plan, make the repository public or rely on
-the PR workflow above by convention.
+"Always".
