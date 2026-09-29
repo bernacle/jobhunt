@@ -5,7 +5,7 @@ verifying opportunities while your laptop is closed, gives you an account
 your laptop syncs with, and serves the same use cases over an HTTP API and
 a hosted MCP endpoint. It is not a second product: discovery, verification,
 eligibility, ranking, taste, the profile rules and the evidence policy are
-the same code the `jobhunt` command runs, reached through the same
+the same code the `narrow` command runs, reached through the same
 application layer.
 
 - [Architecture](#architecture)
@@ -31,8 +31,8 @@ application layer.
 ## Architecture
 
 ```text
- jobhunt (CLI) ──────┐                       ┌── domain crates ─────────────────────┐
- jobhunt mcp (stdio)─┤                       │ jobs: lifecycle, identity, discovery,│
+ narrow (CLI) ───────┐                       ┌── domain crates ─────────────────────┐
+ narrow mcp (stdio)─┤                       │ jobs: lifecycle, identity, discovery,│
                      ├── jobhunt-app ────────┤       verification                   │
  HTTP API /api/v1 ───┤   (use cases, views)  │ eligibility · profile · ranking      │
    └ web (Next.js) ──┘                       │                                      │
@@ -60,17 +60,17 @@ application layer.
 
 ## Processes
 
-One binary (`jobhunt`), one Docker image, several modes:
+One binary (`narrow`), one Docker image, several modes:
 
 | Command | Railway service | What it does |
 | --- | --- | --- |
-| `jobhunt server` | `api` | HTTP API, hosted MCP, `/health`, `/ready` |
-| `jobhunt migrate` | `api` pre-deploy | applies pending migrations, exits |
-| `jobhunt worker discovery` | `worker-discovery` (cron) | reads the sources that are due, exits |
-| `jobhunt worker verification` | `worker-verification` (cron) | re-verifies jobs that matter, exits |
-| `jobhunt worker notify` | `worker-notify` (cron) | emails strong new recommendations (and retries failed emails), exits |
+| `narrow server` | `api` | HTTP API, hosted MCP, `/health`, `/ready` |
+| `narrow migrate` | `api` pre-deploy | applies pending migrations, exits |
+| `narrow worker discovery` | `worker-discovery` (cron) | reads the sources that are due, exits |
+| `narrow worker verification` | `worker-verification` (cron) | re-verifies jobs that matter, exits |
+| `narrow worker notify` | `worker-notify` (cron) | emails strong new recommendations (and retries failed emails), exits |
 | `node server.js` (apps/web) | `web` | the web app; calls `api` over the private network |
-| `jobhunt admin status` / `reencrypt` | (run by an operator) | configuration report, schedule, usage; key rotation |
+| `narrow admin status` / `reencrypt` | (run by an operator) | configuration report, schedule, usage; key rotation |
 
 The cloud modes read their configuration from environment variables
 ([reference](#configuration-reference)); they never read the local config
@@ -134,7 +134,7 @@ settings. An account is an internal id (`usr_<32 hex>`) linked to the
   clients and scripts without OAuth. They expire (default 90 days, at most
   365), are listed without their secret, and are revocable. Only their
   SHA-256 digest is stored.
-- **Log out everywhere** (`jobhunt logout --everywhere`,
+- **Log out everywhere** (`narrow logout --everywhere`,
   `POST /api/v1/account/logout`) refuses every token issued before that
   moment and revokes every personal access token; it takes effect within
   30 seconds on every replica.
@@ -148,12 +148,12 @@ never sees tokens or the provider.
 ### The CLI
 
 ```bash
-jobhunt login --server https://jobhunt.example.com   # opens a device code sign-in
-jobhunt login --token < token.txt                    # a personal access token (or JOBHUNT_TOKEN)
-jobhunt account                                      # account and sync state
-jobhunt logout [--everywhere]
-jobhunt token create "Claude Desktop" --days 30      # prints the secret once
-jobhunt token list | jobhunt token revoke tok_…
+narrow login --server https://jobhunt.example.com   # opens a device code sign-in
+narrow login --token < token.txt                    # a personal access token (or JOBHUNT_TOKEN)
+narrow account                                      # account and sync state
+narrow logout [--everywhere]
+narrow token create "Claude Desktop" --days 30      # prints the secret once
+narrow token list | narrow token revoke tok_…
 ```
 
 `login` uses the OAuth 2.0 device authorization grant (RFC 8628): it
@@ -164,7 +164,7 @@ owner-only file (`0600` in a `0700` directory under the data directory)
 elsewhere, or where `JOBHUNT_CREDENTIALS_FILE` says. Access tokens are
 refreshed with the refresh token when they are about to expire; `logout`
 revokes the refresh token at the provider (when it has a revocation
-endpoint) and deletes the session. `jobhunt doctor` says where the session
+endpoint) and deletes the session. `narrow doctor` says where the session
 is stored and whether there is one, never its tokens.
 
 ## Encryption
@@ -190,7 +190,7 @@ Application encryption (`jobhunt_storage::postgres::crypto`):
   another account's row, or onto another record, fails to decrypt instead
   of being read (tested).
 - **Rotation**: add a new key *first* (`k2:…,k1:…`), redeploy, run
-  `jobhunt admin reencrypt` (idempotent; safe while serving), then remove
+  `narrow admin reencrypt` (idempotent; safe while serving), then remove
   the old key.
 - Plain columns are only what queries need: ids, states, timestamps, a
   job's title and company on feedback (public facts about the job), and
@@ -378,7 +378,7 @@ product's ranking (tiers, gates, briefs); only the selection is its own
 
 ## Email notifications
 
-`jobhunt worker notify` (every 15 minutes) emails people about strong new
+`narrow worker notify` (every 15 minutes) emails people about strong new
 recommendations, from the product's ranking
 (`App::notification_candidates`). Precision over recall:
 
@@ -421,7 +421,7 @@ recommendations, from the product's ranking
 
 ## Sync
 
-`jobhunt sync` merges this machine's state with the account's.
+`narrow sync` merges this machine's state with the account's.
 
 What syncs: the **profile** (every record: basics, resume documents,
 experiences, projects, education, skills, claims with their confirm/reject
@@ -471,14 +471,14 @@ Each record is decided on its own, three ways (base, here, cloud) — never
 | edited | deleted (or the reverse) | **conflict** |
 
 A conflict overwrites nothing: this machine keeps its version and does not
-push it, the cloud keeps its own, and `jobhunt sync` lists it with both
+push it, the cloud keeps its own, and `narrow sync` lists it with both
 sides ("the claim was decided differently here and in the cloud (confirmed
 vs rejected)"). It stays until you choose:
 
 ```bash
-jobhunt sync --keep local                  # every conflict: this machine's version wins
-jobhunt sync --keep cloud --record clm_…   # one record: the cloud's version wins
-jobhunt sync --status                      # where sync stands (offline)
+narrow sync --keep local                  # every conflict: this machine's version wins
+narrow sync --keep cloud --record clm_…   # one record: the cloud's version wins
+narrow sync --status                      # where sync stands (offline)
 ```
 
 Confirmed or rejected claims, explicit preferences and statements, and
@@ -495,12 +495,12 @@ reach the cloud. `find --offline`, `show`, `profile`, `claims`,
 whether the cloud is reachable or not. When it is not, `sync` fails with
 `cloud_unavailable` ("could not reach JobHunt Cloud at …") and changes
 nothing; changes made meanwhile sync next time (tested). The state file
-(`jobhunt export`) remains the portable backup, locally and via
+(`narrow export`) remains the portable backup, locally and via
 `GET /api/v1/export`.
 
 ## Scheduled discovery
 
-`jobhunt worker discovery` (a Railway cron, every 30 minutes by default)
+`narrow worker discovery` (a Railway cron, every 30 minutes by default)
 reads the corpus configured in `deploy/cloud.toml` (`JOBHUNT_CONFIG`):
 
 1. registers the configured sources in `source_schedule` (new ones are due
@@ -508,7 +508,7 @@ reads the corpus configured in `deploy/cloud.toml` (`JOBHUNT_CONFIG`):
 2. recomputes tiers: a source is **active** when someone gave feedback on,
    or was recommended, one of its jobs in the last 14 days;
 3. claims due sources (leases, see below) in batches and runs the
-   **same discovery pipeline** as `jobhunt find`: conditional requests
+   **same discovery pipeline** as `narrow find`: conditional requests
    (ETags) so unchanged boards answer "not modified", the lifecycle
    (NEW / UPDATED / CLOSED / REOPENED, with history), completeness rules
    before closing, cross-source grouping;
@@ -525,7 +525,7 @@ per-user crawling, no LLM, no browser.
 
 ## Scheduled verification
 
-`jobhunt worker verification` (hourly by default) re-verifies up to
+`narrow worker verification` (hourly by default) re-verifies up to
 `JOBHUNT_VERIFY_BATCH` (100) open jobs whose last attempt is older than
 the freshness window (`[verification] fresh_hours`, 24 h), most important
 first:
@@ -584,15 +584,15 @@ process-local state across instances.
   name or anything from the resume). They are written in batches off the request path
   (dropped rather than slowing a request when the writer is behind), can
   be turned off (`JOBHUNT_USAGE_EVENTS=false`), and are deleted with the
-  account. `jobhunt admin status` summarizes the last 7 days.
+  account. `narrow admin status` summarizes the last 7 days.
 
 ## Deploying on Railway
 
 Railway's `railway.json` / `railway.toml` config-as-code is deprecated
 (new services cannot use it); the deployment is described as
 Infrastructure as Code in [`.railway/railway.ts`](../.railway/railway.ts):
-a Postgres database, the `api` service (`jobhunt server`, pre-deploy
-`jobhunt migrate`, healthcheck `/ready`, 30 s draining on SIGTERM), the
+a Postgres database, the `api` service (`narrow server`, pre-deploy
+`narrow migrate`, healthcheck `/ready`, 30 s draining on SIGTERM), the
 `web` service (the Next.js app from
 [`apps/web/Dockerfile`](../apps/web/Dockerfile), healthcheck `/healthz`,
 calling `api` at `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8080`), and three
@@ -682,7 +682,7 @@ minutes per hour and exit, and one Postgres. Pool sizes are small
 ## Configuration reference
 
 Cloud processes read environment variables only (plus `JOBHUNT_CONFIG`).
-`jobhunt admin status` shows each as set, missing or invalid — never a
+`narrow admin status` shows each as set, missing or invalid — never a
 secret's value. Invalid or missing required values stop the process at
 startup with every problem listed.
 
@@ -755,22 +755,22 @@ curl -fsS $API/.well-known/oauth-protected-resource/mcp
 railway logs -s api --since 10m                # "JobHunt Cloud listening", migrations applied
 
 # An account, and sync
-jobhunt login --server $API                    # device sign-in in the browser
-jobhunt account
-jobhunt init resume.pdf && jobhunt sync        # the profile goes up
-jobhunt sync --status
+narrow login --server $API                    # device sign-in in the browser
+narrow account
+narrow init resume.pdf && narrow sync        # the profile goes up
+narrow sync --status
 
 # Workers, on demand
-railway run -s worker-discovery jobhunt worker discovery      # or trigger the cron in the dashboard
-railway run -s worker-verification jobhunt worker verification
-railway ssh -s api -- jobhunt admin status     # schedule, schema, usage
+railway run -s worker-discovery narrow worker discovery      # or trigger the cron in the dashboard
+railway run -s worker-verification narrow worker verification
+railway ssh -s api -- narrow admin status     # schedule, schema, usage
 
 # Stored jobs and an authenticated request
-TOKEN=$(jobhunt token create validation --days 1 | tail -1)
+TOKEN=$(narrow token create validation --days 1 | tail -1)
 curl -fsS -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"limit":3}' $API/api/v1/search
 # MCP: point an MCP client at $API/mcp with the token (or OAuth)
-jobhunt token revoke <tok_…>
+narrow token revoke <tok_…>
 
 # The web app (BRU-295)
 WEB=https://<web domain>
@@ -782,7 +782,7 @@ curl -fsS -H "Authorization: Bearer $TOKEN" $API/api/v1/feed | jq '.summary, .ca
 
 # Notifications to a controlled test recipient
 #   Settings → Email notifications → your address → follow the link → on
-railway run -s worker-notify jobhunt worker notify   # or trigger the cron
+railway run -s worker-notify narrow worker notify   # or trigger the cron
 curl -fsS -H "Authorization: Bearer $TOKEN" $API/api/v1/notifications | jq .recent
 ```
 
@@ -792,7 +792,7 @@ curl -fsS -H "Authorization: Bearer $TOKEN" $API/api/v1/notifications | jq .rece
 
 ## Known limitations
 
-- Sync is explicit (`jobhunt sync`); mutations are not pushed
+- Sync is explicit (`narrow sync`); mutations are not pushed
   automatically, and there are no server-pushed updates to the CLI.
 - A pull brings the jobs your feedback and recent cloud recommendations
   refer to; the rest of the corpus is searched in the cloud, not copied.

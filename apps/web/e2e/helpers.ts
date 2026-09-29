@@ -42,7 +42,7 @@ export async function onboardViaApi(name: string) {
   expect(prefs.ok).toBe(true);
 }
 
-/** Runs one scheduled job of the stack (`jobhunt worker notify`, …). */
+/** Runs one scheduled job of the stack (`narrow worker notify`, …). */
 export function runWorker(kind: "notify" | "verification" | "discovery"): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const child = spawn(JOBHUNT_BIN, ["worker", kind], { env: cloudEnv() });

@@ -79,7 +79,7 @@ impl Progress for StderrProgress {
     }
 }
 
-/// Ignores a closed pipe (`jobhunt find | head`).
+/// Ignores a closed pipe (`narrow find | head`).
 pub fn finish(result: io::Result<()>, what: &str) -> anyhow::Result<ExitCode> {
     match result {
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(ExitCode::SUCCESS),

@@ -1,5 +1,5 @@
-//! Process entry points: `jobhunt server`, `jobhunt migrate`,
-//! `jobhunt worker discovery|verification|notify`.
+//! Process entry points: `narrow server`, `narrow migrate`,
+//! `narrow worker discovery|verification|notify`.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -58,7 +58,7 @@ fn keys_or_ephemeral(config: &CloudConfig) -> Keyring {
     config.keyring().unwrap_or_else(|_| Keyring::ephemeral())
 }
 
-/// `jobhunt migrate`: applies pending migrations (Railway's pre-deploy
+/// `narrow migrate`: applies pending migrations (Railway's pre-deploy
 /// command). Safe to run concurrently.
 pub async fn migrate(config: CloudConfig) -> Result<SchemaStatus, CloudError> {
     let config = config.require(Role::Migrate)?;
@@ -73,7 +73,7 @@ pub async fn migrate(config: CloudConfig) -> Result<SchemaStatus, CloudError> {
     Ok(status)
 }
 
-/// `jobhunt worker discovery`: one scheduled discovery run.
+/// `narrow worker discovery`: one scheduled discovery run.
 pub async fn discovery_worker(
     config: CloudConfig,
     budget: Duration,
@@ -86,7 +86,7 @@ pub async fn discovery_worker(
     Ok(result?)
 }
 
-/// `jobhunt worker verification`: one scheduled re-verification run.
+/// `narrow worker verification`: one scheduled re-verification run.
 pub async fn verification_worker(config: CloudConfig) -> Result<VerificationSummary, CloudError> {
     let config = config.require(Role::Worker)?;
     let store = connect(&config, keys_or_ephemeral(&config)).await?;
@@ -96,7 +96,7 @@ pub async fn verification_worker(config: CloudConfig) -> Result<VerificationSumm
     Ok(result?)
 }
 
-/// `jobhunt worker notify`: one notification run (retries, then new strong
+/// `narrow worker notify`: one notification run (retries, then new strong
 /// recommendations).
 pub async fn notification_worker(
     config: CloudConfig,
@@ -139,7 +139,7 @@ pub async fn shutdown_signal() {
     tracing::info!("shutting down: finishing requests in flight");
 }
 
-/// `jobhunt server`: the HTTP API and hosted MCP until stopped.
+/// `narrow server`: the HTTP API and hosted MCP until stopped.
 pub async fn serve(config: CloudConfig) -> Result<(), CloudError> {
     let config = config.require(Role::Server)?;
     let keys = config

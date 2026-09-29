@@ -1,7 +1,7 @@
 //! Ranking end to end, offline: a resume is imported, saved real Ashby
 //! and Greenhouse responses are discovered into a temporary database
 //! through a local mock server, some jobs are verified against it
-//! (`JOBHUNT_VERIFY_ENDPOINT`), and the `jobhunt` binary ranks them, takes
+//! (`JOBHUNT_VERIFY_ENDPOINT`), and the `narrow` binary ranks them, takes
 //! feedback, learns from it, and explains itself.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -112,7 +112,7 @@ impl Env {
     }
 
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_jobhunt"))
+        Command::new(env!("CARGO_BIN_EXE_narrow"))
             .arg("--config")
             .arg(self.dir.path().join("config.toml"))
             .arg("--database")
@@ -129,7 +129,7 @@ impl Env {
         let output = self.run(args);
         assert!(
             output.status.success(),
-            "jobhunt {args:?} failed:\n{}",
+            "narrow {args:?} failed:\n{}",
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8(output.stdout).unwrap()
@@ -166,9 +166,7 @@ async fn ranks_learns_and_explains() {
     let out = env.ok(&["find", "--offline"]);
     has(
         &out,
-        &[
-            "No profile found, so these are not personalized. Start with:\n  jobhunt init resume.pdf",
-        ],
+        &["No profile found, so these are not personalized. Start with:\n  narrow init resume.pdf"],
     );
     let output = env.run(&["rank"]);
     assert!(!output.status.success());
@@ -222,7 +220,7 @@ async fn ranks_learns_and_explains() {
     );
     assert!(!out.contains('%'), "{out}");
     assert!(!out.contains("Account Manager"), "{out}");
-    assert_eq!(out.matches(" · jobhunt why opp_").count(), 2, "{out}");
+    assert_eq!(out.matches(" · narrow why opp_").count(), 2, "{out}");
 
     // Everything else is still inspectable, in its place.
     let all = env.ok(&["rank", "--all", "-n", "25"]);
@@ -236,8 +234,8 @@ async fn ranks_learns_and_explains() {
             "Account Manager | Commercial — Ramp   Low priority",
             "- Not one of the roles you listed (backend roles, infrastructure roles)",
             "- Customer-facing engineering (solutions / forward-deployed), not product engineering",
-            " · jobhunt verify opp_",
-            " · jobhunt check opp_",
+            " · narrow verify opp_",
+            " · narrow check opp_",
         ],
     );
     let first_unverified = all.find("? Not verified yet").unwrap();
@@ -276,7 +274,7 @@ async fn ranks_learns_and_explains() {
             "but verify it first: the listing has not been verified",
             "Unknown",
             "? Not verified yet: it may be closed or changed",
-            "Every signal with its evidence: jobhunt why --details",
+            "Every signal with its evidence: narrow why --details",
         ],
     );
 

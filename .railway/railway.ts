@@ -4,8 +4,8 @@
 // apps/web/Dockerfile for the web app), six resources:
 //
 //   Postgres              the database (shared corpus + private data)
-//   api                   `jobhunt server`: HTTP API and hosted MCP; runs
-//                         `jobhunt migrate` before each deploy
+//   api                   `narrow server`: HTTP API and hosted MCP; runs
+//                         `narrow migrate` before each deploy
 //   web                   the web app (Next.js), which calls `api` over
 //                         Railway's private network
 //   worker-discovery      cron: reads the sources that are due
@@ -32,10 +32,10 @@ export default defineRailway((ctx) => {
   const api = service("api", {
     source: source(),
     build,
-    start: "jobhunt server",
+    start: "narrow server",
     // Migrations run once per deploy, before the new version starts;
     // concurrent runs are serialized by a Postgres advisory lock.
-    preDeploy: "jobhunt migrate",
+    preDeploy: "narrow migrate",
     // Deploy-time check: the process answers and Postgres is reachable with
     // the current schema. (Railway does not keep polling it afterwards.)
     healthcheck: "/ready",
@@ -71,7 +71,7 @@ export default defineRailway((ctx) => {
   const discovery = service("worker-discovery", {
     source: source(),
     build,
-    start: "jobhunt worker discovery",
+    start: "narrow worker discovery",
     env: {
       DATABASE_URL: db.env.DATABASE_URL,
       JOBHUNT_DB_MAX_CONNECTIONS: "4",
@@ -88,7 +88,7 @@ export default defineRailway((ctx) => {
   const verification = service("worker-verification", {
     source: source(),
     build,
-    start: "jobhunt worker verification",
+    start: "narrow worker verification",
     env: {
       DATABASE_URL: db.env.DATABASE_URL,
       JOBHUNT_DB_MAX_CONNECTIONS: "4",
@@ -102,7 +102,7 @@ export default defineRailway((ctx) => {
   const notify = service("worker-notify", {
     source: source(),
     build,
-    start: "jobhunt worker notify",
+    start: "narrow worker notify",
     env: {
       DATABASE_URL: db.env.DATABASE_URL,
       JOBHUNT_DB_MAX_CONNECTIONS: "4",

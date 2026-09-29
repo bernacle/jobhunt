@@ -461,7 +461,7 @@ impl ProfileData {
         if self.documents.is_empty() && self.experiences.is_empty() {
             add(
                 "profile",
-                "no resume imported yet (jobhunt init <resume>)".into(),
+                "no resume imported yet (narrow init <resume>)".into(),
             );
         }
         for e in self.visible_experiences() {
@@ -494,7 +494,7 @@ impl ProfileData {
         if review > 0 {
             add(
                 "evidence",
-                format!("{review} claims need review (jobhunt claims review)"),
+                format!("{review} claims need review (narrow claims review)"),
             );
         }
         let categories = [
@@ -522,7 +522,7 @@ impl ProfileData {
                 add(
                     "preferences",
                     format!(
-                        "compensation “{}” has no currency; set it with jobhunt preferences set compensation --currency …",
+                        "compensation “{}” has no currency; set it with narrow preferences set compensation --currency …",
                         p.value
                     ),
                 );

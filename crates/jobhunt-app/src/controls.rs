@@ -4,7 +4,7 @@
 //!
 //! There is no second preference system here. Every control is *read*
 //! from the same active [`Preference`] records that a statement in the
-//! person's words, `jobhunt preferences set` and the MCP
+//! person's words, `narrow preferences set` and the MCP
 //! `update_preferences` tool write, and every control is *changed* by
 //! sending those same [`PreferenceInput`](crate::preferences::PreferenceInput)s.
 //! So a sentence ("remote from Brazil, at least USD 140k, prefer small

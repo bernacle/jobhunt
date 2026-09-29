@@ -42,7 +42,7 @@ body:
     attributes:
       label: Did the shortlist feel better than browsing job boards yourself?
       description: >-
-        Did `jobhunt find` surface anything you found genuinely worth
+        Did `narrow find` surface anything you found genuinely worth
         looking at? Did you end up wanting to look at raw job listings
         instead of trusting the shortlist?
   - type: textarea

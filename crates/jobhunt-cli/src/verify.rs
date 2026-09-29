@@ -1,4 +1,4 @@
-//! `jobhunt verify`: ask a job's authoritative sources whether it is still
+//! `narrow verify`: ask a job's authoritative sources whether it is still
 //! open, record what they say, and check it against your profile.
 
 use std::io::{self, Write};
@@ -128,14 +128,14 @@ fn write(
         None => writeln!(
             out,
             "  No career profile yet, so there is nothing to check the job against.\n  \
-             Run `jobhunt init <resume>` or `jobhunt preferences set location <place>`."
+             Run `narrow init <resume>` or `narrow preferences set location <place>`."
         )?,
     }
     if !detail {
         writeln!(out)?;
         writeln!(
             out,
-            "{DIM}Evidence and provenance: jobhunt verify --details {}{DIM:#}",
+            "{DIM}Evidence and provenance: narrow verify --details {}{DIM:#}",
             main.id
         )?;
     }

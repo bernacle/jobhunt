@@ -1225,7 +1225,7 @@ fn read_currency(amount: &Amount, clause: &[Word], statement: &str) -> CurrencyR
             }
         }
     }
-    let set_it = "set it with `jobhunt preferences set compensation --currency …`";
+    let set_it = "set it with `narrow preferences set compensation --currency …`";
     match &found[..] {
         [(code, cue)] => CurrencyReading::FromContext(
             code,

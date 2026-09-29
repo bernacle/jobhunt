@@ -1,4 +1,4 @@
-//! Configuration: the application's (shared with `jobhunt mcp`), plus the
+//! Configuration: the application's (shared with `narrow mcp`), plus the
 //! command-line spelling of the log format.
 
 pub use jobhunt_app::config::*;

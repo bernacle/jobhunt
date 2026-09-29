@@ -10,7 +10,7 @@ export const API_URL = `http://127.0.0.1:${PORTS.api}`;
 export const FIXTURES_URL = `http://127.0.0.1:${PORTS.fixtures}`;
 export const STATE_DIR = here("../.e2e/");
 export const MAIL_FILE = `${STATE_DIR}mail.jsonl`;
-export const JOBHUNT_BIN = process.env.JOBHUNT_BIN ?? here("../../../target/debug/jobhunt");
+export const JOBHUNT_BIN = process.env.JOBHUNT_BIN ?? here("../../../target/debug/narrow");
 
 /** The Postgres server; the stack uses a fresh `jobhunt_e2e` database on it. */
 export const ADMIN_DATABASE_URL =

@@ -1,4 +1,4 @@
-//! The person's portable state: `jobhunt export` and `jobhunt import`.
+//! The person's portable state: `narrow export` and `narrow import`.
 //!
 //! A state file holds what belongs to the person and cannot be rebuilt:
 //!
@@ -53,7 +53,7 @@ pub struct StateExport {
     pub format: String,
     pub version: u32,
     pub exported_at: DateTime<Utc>,
-    /// The program that wrote the file (`jobhunt 0.1.0`).
+    /// The program that wrote the file (`narrow 0.1.0`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generator: Option<String>,
     /// The profile, in the profile export format (absent when there is no
@@ -86,7 +86,7 @@ impl StateExport {
         let format = value.get("format").and_then(|f| f.as_str()).unwrap_or("");
         if format != STATE_FORMAT {
             let hint = if format == jobhunt_profile::EXPORT_FORMAT {
-                " (this is a profile file: import it with `jobhunt profile import`)"
+                " (this is a profile file: import it with `narrow profile import`)"
             } else {
                 ""
             };
@@ -235,7 +235,7 @@ impl LocalApp {
             if export.profile.is_some() && current.is_some() && !replace_profile {
                 return Err(AppError::InvalidImport(
                     "a profile already exists; importing would replace it. Export it first \
-                     (jobhunt export) and import again with --replace"
+                     (narrow export) and import again with --replace"
                         .into(),
                 ));
             }

@@ -1,4 +1,4 @@
-//! `jobhunt mcp` at the protocol level: the binary is started as a child
+//! `narrow mcp` at the protocol level: the binary is started as a child
 //! process, exactly as an MCP client starts it, and spoken to over
 //! stdin/stdout with newline-delimited JSON-RPC. Every line it writes to
 //! stdout must be a protocol message, whatever it logs.
@@ -125,7 +125,7 @@ async fn handshake_tools_errors_and_clean_shutdown_with_logs_on_stderr() {
     // Actionable errors, each with its own code.
     let error = mcp.call_error("get_profile", json!({})).await;
     assert_eq!(error["code"], "no_profile");
-    assert!(error["message"].as_str().unwrap().contains("jobhunt init"));
+    assert!(error["message"].as_str().unwrap().contains("narrow init"));
     assert!(error["hint"].is_string());
     let error = mcp.call_error("search_jobs", json!({})).await;
     assert_eq!(error["code"], "no_profile");
@@ -225,7 +225,7 @@ async fn negotiates_the_protocol_version() {
 async fn a_server_that_cannot_start_writes_nothing_to_stdout() {
     let env = Env::new().await;
     // The database path is a directory: the store can't open.
-    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_jobhunt"))
+    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_narrow"))
         .args(["--config", env.config().to_str().unwrap()])
         .args(["--database", env.dir.path().to_str().unwrap(), "mcp"])
         .stdin(Stdio::null())

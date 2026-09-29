@@ -1,4 +1,4 @@
-//! JobHunt Cloud from this machine: `jobhunt login`, `logout`, `account`,
+//! JobHunt Cloud from this machine: `narrow login`, `logout`, `account`,
 //! `sync` and `token`.
 //!
 //! Only these commands use the network to reach the cloud; every other
@@ -28,7 +28,7 @@ pub fn vault() -> anyhow::Result<Vault> {
 
 #[derive(Debug, clap::Args)]
 pub struct LoginArgs {
-    /// The JobHunt Cloud server (default: `[cloud] server` in the config,
+    /// The Narrow Cloud server (default: `[cloud] server` in the config,
     /// or JOBHUNT_CLOUD_URL).
     #[arg(long, value_name = "URL")]
     pub server: Option<String>,
@@ -124,7 +124,7 @@ fn configured_server(loaded: &LoadedConfig, explicit: Option<&str>) -> anyhow::R
 /// it is about to expire.
 pub async fn signed_in(vault: &Vault) -> anyhow::Result<(CloudClient, Session)> {
     let mut session = vault.load()?.ok_or_else(|| {
-        AppError::Unauthenticated("not signed in to JobHunt Cloud; run `jobhunt login`".into())
+        AppError::Unauthenticated("not signed in to JobHunt Cloud; run `narrow login`".into())
     })?;
     let now = Utc::now();
     if session.expiring(now) {
@@ -147,7 +147,7 @@ pub async fn signed_in(vault: &Vault) -> anyhow::Result<(CloudClient, Session)> 
             }
             _ => {
                 return Err(AppError::Unauthenticated(
-                    "the JobHunt Cloud session expired; run `jobhunt login`".into(),
+                    "the JobHunt Cloud session expired; run `narrow login`".into(),
                 )
                 .into());
             }
@@ -255,7 +255,7 @@ pub async fn login(args: LoginArgs, loaded: &LoadedConfig) -> anyhow::Result<Exi
     finish(
         writeln!(
             out,
-            "Signed in to {server} as {} ({}).\nRun `jobhunt sync` to sync this machine's \
+            "Signed in to {server} as {} ({}).\nRun `narrow sync` to sync this machine's \
              profile, preferences and feedback.",
             account.id, account.authenticated_with
         ),
@@ -396,7 +396,7 @@ fn print_report(out: &mut impl Write, report: &SyncReport) -> std::io::Result<()
     }
     writeln!(
         out,
-        "\nKeep one side with `jobhunt sync --keep local` or `--keep cloud` \
+        "\nKeep one side with `narrow sync --keep local` or `--keep cloud` \
          (add `--record <id>` for one record)."
     )
 }

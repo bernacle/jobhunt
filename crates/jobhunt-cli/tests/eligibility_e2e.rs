@@ -1,6 +1,6 @@
 //! Eligibility end to end: saved real Ashby and Greenhouse responses are
 //! discovered into a temporary database through a local mock server, then
-//! the `jobhunt` binary checks them against preferences set on the command
+//! the `narrow` binary checks them against preferences set on the command
 //! line.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -97,7 +97,7 @@ impl Env {
     }
 
     fn run(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_jobhunt"))
+        Command::new(env!("CARGO_BIN_EXE_narrow"))
             .arg("--config")
             .arg(self.path("config.toml"))
             .arg("--database")
@@ -113,7 +113,7 @@ impl Env {
         let output = self.run(args);
         assert!(
             output.status.success(),
-            "jobhunt {args:?} failed:\n{}",
+            "narrow {args:?} failed:\n{}",
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8(output.stdout).unwrap()
@@ -183,7 +183,7 @@ async fn checks_jobs_against_the_profile() {
     }
     let out = env.ok(&["show", &id]);
     assert!(out.contains("Eligibility:"), "{out}");
-    assert!(out.contains(&format!("jobhunt check {id}")), "{out}");
+    assert!(out.contains(&format!("narrow check {id}")), "{out}");
 
     // Living elsewhere changes the answer, with the reason.
     env.ok(&["preferences", "set", "location", "São Paulo, Brazil"]);

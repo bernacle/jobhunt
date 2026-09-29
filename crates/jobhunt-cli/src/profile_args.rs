@@ -78,7 +78,7 @@ pub fn date(s: &str) -> Result<Clearable<PartialDate>, String> {
     s.parse()
 }
 
-/// Ignores a closed pipe (`jobhunt profile | head`).
+/// Ignores a closed pipe (`narrow profile | head`).
 pub fn finish(result: std::io::Result<()>) -> anyhow::Result<ExitCode> {
     match result {
         Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => Ok(ExitCode::SUCCESS),

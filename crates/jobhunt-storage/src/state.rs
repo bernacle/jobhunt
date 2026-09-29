@@ -1,4 +1,4 @@
-//! Importing a person's portable state (`jobhunt import`) in one
+//! Importing a person's portable state (`narrow import`) in one
 //! transaction: their profile, the jobs their feedback is about, and the
 //! feedback itself. Either all of it is stored or none of it is.
 

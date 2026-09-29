@@ -3,8 +3,8 @@
 //
 //   1. a fresh Postgres database (jobhunt_e2e);
 //   2. the fixture job boards (fixture-server.mjs);
-//   3. `jobhunt migrate`, then the real discovery worker over the fixtures;
-//   4. `jobhunt server` (dev auth, file email, verification against the
+//   3. `narrow migrate`, then the real discovery worker over the fixtures;
+//   4. `narrow server` (dev auth, file email, verification against the
 //      fixtures);
 //   5. the web app (`next start`, which needs `npm run build` first; or
 //      `next dev` with --dev).

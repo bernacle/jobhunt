@@ -1563,7 +1563,7 @@ pub fn compensation(i: &Inputs<'_>) -> PayReading {
                     0.0,
                     format!(
                         "Your {bound} ({}) has no currency, so pay can't be compared; set one with \
-                         `jobhunt preferences set compensation --currency …`",
+                         `narrow preferences set compensation --currency …`",
                         p.text
                     ),
                 )

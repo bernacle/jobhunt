@@ -1,4 +1,4 @@
-//! One opportunity, in full: what `jobhunt show` / `why` print and the MCP
+//! One opportunity, in full: what `narrow show` / `why` print and the MCP
 //! `get_job` / `verify_job` tools return.
 
 use chrono::{DateTime, Utc};
@@ -36,7 +36,7 @@ pub struct Inspection {
 impl LocalApp {
     /// Verification, eligibility, ranking and pipeline state of one
     /// opportunity, from what is stored. With `mark_seen`, looking at it is
-    /// recorded (once), as `jobhunt show` and `why` do.
+    /// recorded (once), as `narrow show` and `why` do.
     pub async fn inspect(
         &self,
         opportunity: &Opportunity,
@@ -184,7 +184,7 @@ impl JobDetail {
     }
 }
 
-/// The answer of `verify_job` (and `jobhunt verify --json`).
+/// The answer of `verify_job` (and `narrow verify --json`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct VerificationReport {
     /// `opp_…`.

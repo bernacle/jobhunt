@@ -1,4 +1,4 @@
-//! `jobhunt why`, `taste`, `pipeline`, `feedback`, and the feedback
+//! `narrow why`, `taste`, `pipeline`, `feedback`, and the feedback
 //! commands (`save`, `unsave`, `reject`, `like`, `dislike`, `applied`,
 //! `interview`, `offer`).
 //!

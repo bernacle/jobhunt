@@ -1,4 +1,4 @@
-//! The career profile end to end: the `jobhunt` binary against a temporary
+//! The career profile end to end: the `narrow` binary against a temporary
 //! database and the resume fixtures, and the same pipeline through the
 //! libraries (resume file → parser → profile service → SQLite).
 
@@ -34,9 +34,9 @@ impl Env {
         self.dir.path().join(name)
     }
 
-    /// Runs `jobhunt` with this environment's config and database.
+    /// Runs `narrow` with this environment's config and database.
     fn run_with(&self, database: &str, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_jobhunt"))
+        Command::new(env!("CARGO_BIN_EXE_narrow"))
             .arg("--config")
             .arg(self.path("config.toml"))
             .arg("--database")
@@ -56,7 +56,7 @@ impl Env {
         let output = self.run(args);
         assert!(
             output.status.success(),
-            "jobhunt {args:?} failed:\n{}",
+            "narrow {args:?} failed:\n{}",
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8(output.stdout).unwrap()
@@ -64,7 +64,7 @@ impl Env {
 
     fn fails(&self, args: &[&str]) -> String {
         let output = self.run(args);
-        assert!(!output.status.success(), "jobhunt {args:?} should fail");
+        assert!(!output.status.success(), "narrow {args:?} should fail");
         String::from_utf8(output.stderr).unwrap()
     }
 }
@@ -82,7 +82,7 @@ fn cli_flow_from_resume_to_export() {
 
     // Nothing yet.
     let err = env.fails(&["profile"]);
-    assert!(err.contains("jobhunt init"), "{err}");
+    assert!(err.contains("narrow init"), "{err}");
 
     // Import.
     let out = env.ok(&["init", v1.to_str().unwrap()]);
@@ -99,7 +99,7 @@ fn cli_flow_from_resume_to_export() {
         "directly supported",
         "need review",
         "Full Stack Developer: no dates found",
-        "jobhunt claims review",
+        "narrow claims review",
     ] {
         assert!(out.contains(expected), "missing {expected:?} in:\n{out}");
     }
@@ -351,7 +351,7 @@ fn unreadable_resumes_fail_with_a_reason() {
     let err = env.fails(&["init", env.path("missing.pdf").to_str().unwrap()]);
     assert!(err.contains("could not read"), "{err}");
     // Nothing was stored.
-    assert!(env.fails(&["profile"]).contains("jobhunt init"));
+    assert!(env.fails(&["profile"]).contains("narrow init"));
 }
 
 #[tokio::test]

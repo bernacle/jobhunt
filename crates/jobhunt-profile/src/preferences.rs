@@ -2,7 +2,7 @@
 //!
 //! Preferences are individual [`Preference`] records with a typed
 //! [`PreferenceValue`] and a [`Stance`]. They come either from structured
-//! input (`jobhunt preferences role backend --want`) or from a
+//! input (`narrow preferences role backend --want`) or from a
 //! [`PreferenceStatement`]: a sentence in the user's own words, which is
 //! always stored verbatim, with whatever structured preferences could be
 //! read from it linked back to it (and marked [`Certainty::Uncertain`] when

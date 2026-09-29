@@ -1,4 +1,4 @@
-//! `jobhunt show`: everything stored about one opportunity, including every
+//! `narrow show`: everything stored about one opportunity, including every
 //! source that lists it and its history.
 
 use std::io::{self, Write};
@@ -130,13 +130,13 @@ fn write_details(
             }
             writeln!(
                 out,
-                "  {DIM}Why, with evidence: jobhunt check {id} · verify again: jobhunt verify {id}{DIM:#}",
+                "  {DIM}Why, with evidence: narrow check {id} · verify again: narrow verify {id}{DIM:#}",
                 id = main.id
             )?;
         }
         None => writeln!(
             out,
-            "  No career profile yet: run `jobhunt init <resume>` or `jobhunt preferences set location <place>`."
+            "  No career profile yet: run `narrow init <resume>` or `narrow preferences set location <place>`."
         )?,
     }
 
@@ -151,7 +151,7 @@ fn write_details(
             writeln!(out, "  {label}: {}", r.brief.verdict)?;
             writeln!(
                 out,
-                "  {DIM}Why, caveats and unknowns: jobhunt why {}{DIM:#}",
+                "  {DIM}Why, caveats and unknowns: narrow why {}{DIM:#}",
                 main.opportunity_id
             )?;
         }
@@ -169,7 +169,7 @@ fn write_details(
         };
         writeln!(
             out,
-            "  Your status: {}{sentiment}{since} {DIM}(jobhunt feedback {}){DIM:#}",
+            "  Your status: {}{sentiment}{since} {DIM}(narrow feedback {}){DIM:#}",
             state.stage.as_str(),
             main.opportunity_id
         )?;

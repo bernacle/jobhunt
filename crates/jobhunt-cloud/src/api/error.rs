@@ -82,7 +82,7 @@ impl ApiError {
             status,
             code,
             message,
-            hint: Some("Sign in with `jobhunt login`, or send a personal access token.".into()),
+            hint: Some("Sign in with `narrow login`, or send a personal access token.".into()),
             challenge: (status == StatusCode::UNAUTHORIZED).then_some(challenge),
         }
     }

@@ -11,7 +11,7 @@
 //! * **your history** with it.
 //!
 //! Every line comes from a [`Signal`], so each one can be traced to its
-//! evidence (`jobhunt why --details`).
+//! evidence (`narrow why --details`).
 
 use serde::{Deserialize, Serialize};
 

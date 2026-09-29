@@ -9,7 +9,7 @@
 //! * Keys come from configuration (`JOBHUNT_ENCRYPTION_KEYS`), never from
 //!   code: a comma-separated list of `<key id>:<base64 of 32 bytes>`. The
 //!   first key encrypts; every listed key decrypts. Rotating means putting
-//!   a new key first, redeploying, and running `jobhunt admin reencrypt`
+//!   a new key first, redeploying, and running `narrow admin reencrypt`
 //!   before removing the old one.
 //! * A sealed value is `0x01 | id length | key id | 96-bit random nonce |
 //!   ciphertext and tag`, so it names the key it needs.

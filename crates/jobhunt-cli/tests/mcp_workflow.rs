@@ -1,7 +1,7 @@
 //! The whole product through MCP, offline: a fixture resume, a temporary
 //! SQLite database, and mock job boards serving saved real responses for
 //! both discovery (`JOBHUNT_DISCOVERY_ENDPOINT`) and verification
-//! (`JOBHUNT_VERIFY_ENDPOINT`). An MCP client drives `jobhunt mcp` from
+//! (`JOBHUNT_VERIFY_ENDPOINT`). An MCP client drives `narrow mcp` from
 //! profile to preferences, search, inspection, verification, feedback,
 //! a second search that reflects it, and application context, which is
 //! checked claim by claim against the evidence policy in the database.

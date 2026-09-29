@@ -1,6 +1,6 @@
 //! The shortlist: the few opportunities worth the person's time right now.
 //!
-//! This is what `jobhunt find` and the MCP `search_jobs` tool answer:
+//! This is what `narrow find` and the MCP `search_jobs` tool answer:
 //!
 //! 1. refresh discovery when stored jobs are stale (or when asked);
 //! 2. rank every open opportunity against the profile, preferences and
@@ -465,9 +465,9 @@ impl ShortlistItem {
             .collect();
         let consider: Vec<String> = caveats.cloned().chain(unknowns.iter().cloned()).collect();
         let next_step = match &r.gate {
-            Gate::VerifyFirst { .. } => format!("jobhunt verify {}", short_id(&id)),
-            Gate::EligibilityUnclear { .. } => format!("jobhunt check {}", short_id(&id)),
-            _ => format!("jobhunt why {}", short_id(&id)),
+            Gate::VerifyFirst { .. } => format!("narrow verify {}", short_id(&id)),
+            Gate::EligibilityUnclear { .. } => format!("narrow check {}", short_id(&id)),
+            _ => format!("narrow why {}", short_id(&id)),
         };
         let record = best_record(&entry.checked.verified, &entry.checked.trust, None);
         let posting = record.map(|r| &r.posting);
@@ -526,7 +526,7 @@ pub struct Learning {
     pub has_preferences: bool,
 }
 
-/// The answer of `search_jobs` (and `jobhunt find --json`).
+/// The answer of `search_jobs` (and `narrow find --json`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SearchResults {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -564,7 +564,7 @@ impl SearchResults {
         if !report.person.has_preferences() {
             notes.push(
                 "Ranking improves with preferences and feedback: say what you want \
-                 (jobhunt preferences add \"…\" / update_preferences) and save or reject jobs \
+                 (narrow preferences add \"…\" / update_preferences) and save or reject jobs \
                  with a reason."
                     .to_owned(),
             );

@@ -5,10 +5,10 @@ and surfaces only the opportunities worth your attention. It is not another
 job board: the goal is a short list you can act on, not an endless one to
 scroll.
 
-This repository is Narrow's code. Its internal name is JobHunt: the crates,
-the `jobhunt` command, the API and environment variables, and the rest of
-this README use that name. Narrow is licensed under
-[Apache-2.0](#license).
+This repository is Narrow's code. The command is `narrow`. Its internal name
+is JobHunt: the crates, the API, the environment variables and the file
+locations keep that name, and so does the rest of this README's prose.
+Narrow is licensed under [Apache-2.0](#license).
 
 High-signal job discovery, as a local product. JobHunt reads a large
 universe of jobs from company job boards, verifies them at the employers'
@@ -16,17 +16,17 @@ own sources, checks whether you can take them, learns what you want from
 what you say and do, and shows you the few worth your time, with why.
 
 Everything lives on your machine, in one SQLite database. You use it from
-the terminal (`jobhunt`), or from an AI assistant that speaks the Model
-Context Protocol (`jobhunt mcp`): both are interfaces to the same
+the terminal (`narrow`), or from an AI assistant that speaks the Model
+Context Protocol (`narrow mcp`): both are interfaces to the same
 application, the same profile, jobs, rankings and feedback.
 
 Optionally, [JobHunt Cloud](#jobhunt-cloud) keeps discovering and
-verifying jobs while your laptop is closed: `jobhunt login`, `jobhunt
+verifying jobs while your laptop is closed: `narrow login`, `narrow
 sync`, and the same use cases over an HTTP API and a hosted MCP endpoint.
 The local product never needs it.
 
 ```text
-$ jobhunt find
+$ narrow find
 Checked 11 open jobs
 11 passed basic eligibility
 6 looked plausible
@@ -39,7 +39,7 @@ Checked 11 open jobs
        + Infrastructure roles: a role you want
        + Backend roles: a role you want
        + Infrastructure: a domain you want
-     opp_c22d474a · jobhunt why opp_c22d474a
+     opp_c22d474a · narrow why opp_c22d474a
 
   2. Security Engineer, Cloud — Ramp   Strong fit
      …
@@ -54,17 +54,17 @@ Checked 11 open jobs
      Things to consider
        - Not one of the roles you listed (infrastructure roles, backend roles)
        - Customer-facing engineering (solutions / forward-deployed), not product engineering
-     opp_011ee5ec · jobhunt why opp_011ee5ec
+     opp_011ee5ec · narrow why opp_011ee5ec
 
 Not shown: 8 maybe or low priority (--all).
 Used stored jobs (every source read 2 hours ago; --refresh reads the job boards now).
-Ranked against your profile. Tiers are coarse on purpose; `jobhunt why <id>` shows every reason.
+Ranked against your profile. Tiers are coarse on purpose; `narrow why <id>` shows every reason.
 ```
 
 Tiers are deliberately coarse (strong fit, worth reviewing, maybe, low
 priority); there is no match percentage. Verification and eligibility are
 on every line, and every reason can be traced to its evidence
-(`jobhunt why <id> --details`).
+(`narrow why <id> --details`).
 
 ## Install
 
@@ -73,17 +73,17 @@ supported version) and a C compiler (for the bundled SQLite and TLS
 libraries). No database server, account or API key is needed.
 
 ```bash
-cargo install --path crates/jobhunt-cli   # installs `jobhunt`
+cargo install --path crates/jobhunt-cli   # installs `narrow`
 # or, from a checkout:
-cargo build --release && ./target/release/jobhunt --help
+cargo build --release && ./target/release/narrow --help
 ```
 
 ## First run
 
 ```bash
-jobhunt init resume.pdf
-jobhunt preferences add "I want small product teams, backend/platform work, remote from Brazil, at least USD 120k."
-jobhunt find
+narrow init resume.pdf
+narrow preferences add "I want small product teams, backend/platform work, remote from Brazil, at least USD 120k."
+narrow find
 ```
 
 1. `init` builds your career profile from your resume (PDF, `.txt` or
@@ -105,16 +105,16 @@ freshness) and says that preferences and feedback sharpen it.
 ## The loop
 
 ```bash
-jobhunt find                     # the shortlist (fast: works from stored jobs while they are fresh)
-jobhunt show <id>                # everything about one opportunity, every source, its history
-jobhunt why <id>                 # the decision brief: why, caveats, unknowns (--details: every signal)
-jobhunt verify <id>              # still open? can you apply? can you take it? (asks the source now)
-jobhunt save <id>
-jobhunt reject <id> --reason "too corporate"
-jobhunt like <id> --reason "tiny team and strong ownership"
-jobhunt applied <id>
-jobhunt pipeline                 # what you saved, applied to, interview for
-jobhunt find                     # reflects all of it
+narrow find                     # the shortlist (fast: works from stored jobs while they are fresh)
+narrow show <id>                # everything about one opportunity, every source, its history
+narrow why <id>                 # the decision brief: why, caveats, unknowns (--details: every signal)
+narrow verify <id>              # still open? can you apply? can you take it? (asks the source now)
+narrow save <id>
+narrow reject <id> --reason "too corporate"
+narrow like <id> --reason "tiny team and strong ownership"
+narrow applied <id>
+narrow pipeline                 # what you saved, applied to, interview for
+narrow find                     # reflects all of it
 ```
 
 Ids are opportunity ids (`opp_…`): one job, however many boards list it.
@@ -153,30 +153,30 @@ eligibility verdict. `--source KIND:NAME|URL` (read only that source),
 `--eligible` and `--possible` imply it:
 
 ```bash
-jobhunt find --raw rust backend -n 50
-jobhunt find --source greenhouse:stripe
-jobhunt find --source https://www.notion.com/careers
-jobhunt find --raw --offline --eligible
+narrow find --raw rust backend -n 50
+narrow find --source greenhouse:stripe
+narrow find --source https://www.notion.com/careers
+narrow find --raw --offline --eligible
 ```
 
-`jobhunt rank` (the shortlist from stored jobs only, like `find
+`narrow rank` (the shortlist from stored jobs only, like `find
 --offline`) still works for scripts written before `find` was
 personalized; it is no longer listed in `--help`.
 
 ### Everything else
 
 ```bash
-jobhunt check <id>               # the full verification and eligibility report, from what is stored
-jobhunt taste                    # what JobHunt learned from your feedback, with evidence
-jobhunt feedback [<id>]          # your feedback, verbatim
-jobhunt profile                  # your profile (edit, add, remove, export, import, history)
-jobhunt claims review            # evidence waiting for your decision
-jobhunt context <id>             # the evidence an assistant may use for an application (JSON)
-jobhunt export -o jobhunt.json   # everything that is yours, one file
-jobhunt import jobhunt.json      # …restored, atomically
-jobhunt mcp                      # serve all of this to an MCP client
-jobhunt doctor                   # check the setup; prints the MCP command for your client
-jobhunt config                   # file locations and the effective configuration
+narrow check <id>               # the full verification and eligibility report, from what is stored
+narrow taste                    # what JobHunt learned from your feedback, with evidence
+narrow feedback [<id>]          # your feedback, verbatim
+narrow profile                  # your profile (edit, add, remove, export, import, history)
+narrow claims review            # evidence waiting for your decision
+narrow context <id>             # the evidence an assistant may use for an application (JSON)
+narrow export -o narrow.json   # everything that is yours, one file
+narrow import narrow.json      # …restored, atomically
+narrow mcp                      # serve all of this to an MCP client
+narrow doctor                   # check the setup; prints the MCP command for your client
+narrow config                   # file locations and the effective configuration
 ```
 
 `show`, `verify`, `pipeline` and `find` take `--json` and print the same
@@ -252,7 +252,7 @@ publish is `None`, never guessed.
 
 Everything has a default, so no config file is needed. To customize, copy
 [`config.example.toml`](config.example.toml) to the config path shown by
-`jobhunt config`. Settings are applied in this order, later winning: built-in
+`narrow config`. Settings are applied in this order, later winning: built-in
 defaults, then the config file, then environment variables, then
 command-line flags.
 
@@ -290,7 +290,7 @@ non-http careers URLs are rejected with a message naming the problem.
 `find` and the MCP `search_jobs` tool answer from them without reading the
 boards (see [`find`](#find-the-shortlist-and-when-it-reads-the-network)).
 
-`jobhunt mcp` reads exactly the same file and database as every other
+`narrow mcp` reads exactly the same file and database as every other
 command; there is no MCP-specific configuration.
 
 ## Where data lives
@@ -300,7 +300,7 @@ command; there is no MCP-specific configuration.
 | Database (jobs and your profile) | macOS: `~/Library/Application Support/jobhunt/jobhunt.db`<br>Linux: `~/.local/share/jobhunt/jobhunt.db` |
 | Config file (optional) | macOS: `~/Library/Application Support/jobhunt/config.toml`<br>Linux: `~/.config/jobhunt/config.toml` |
 
-`jobhunt config` prints the exact paths on your machine. Use a different
+`narrow config` prints the exact paths on your machine. Use a different
 database with `--database <PATH>` or `JOBHUNT_DATABASE`, and a different
 config file with `--config <PATH>` or `JOBHUNT_CONFIG`. The database is
 created and migrated automatically on first use; delete the file to start
@@ -457,7 +457,7 @@ opportunity id.
 ## Career profile
 
 ```text
-$ jobhunt init resume.pdf
+$ narrow init resume.pdf
 Imported resume.pdf (2 pages)
 ignored 3 lines repeated on every page (header, footer, page numbers)
 Marina Costa — Senior Software Engineer · Backend & Platform
@@ -483,36 +483,36 @@ Uncertain
   - Full Stack Developer: no dates found
 
 Next
-  jobhunt profile
-  jobhunt claims review
-  jobhunt preferences add "I want … and at least …; avoid …"
+  narrow profile
+  narrow claims review
+  narrow preferences add "I want … and at least …; avoid …"
 ```
 
-Everything JobHunt believes about you can be inspected (`jobhunt profile`,
-`jobhunt claims`), traced to its source (`jobhunt claims show <id>` prints
-the resume sentence behind a claim), corrected (`jobhunt profile edit`,
-`jobhunt claims reject`), and exported. Nothing needs an API key or the
+Everything JobHunt believes about you can be inspected (`narrow profile`,
+`narrow claims`), traced to its source (`narrow claims show <id>` prints
+the resume sentence behind a claim), corrected (`narrow profile edit`,
+`narrow claims reject`), and exported. Nothing needs an API key or the
 network.
 
 ### Commands
 
 | Command | Does |
 | --- | --- |
-| `jobhunt init <resume>` | Import a resume (PDF, `.txt` or `.md`), or re-import an updated one |
-| `jobhunt profile [--all]` | Experience, projects, education, skills (used vs only listed), domains, role signals, preferences, evidence counts, what is missing or uncertain |
-| `jobhunt profile edit basics\|experience\|project\|education …` | Correct a value (`--title`, `--start 2021-03`, `--end none`, `--current`, `--tech Rust,Go`, …) |
-| `jobhunt profile add experience\|project\|education\|skill …` | Add what the resume does not say |
-| `jobhunt profile remove <id>` | Delete what you added; reject (hide) what was imported |
-| `jobhunt profile export [-o file]` / `import <file> [--replace]` | Versioned JSON, all or nothing |
-| `jobhunt profile history` | Every import, decision and edit |
-| `jobhunt claims [--kind K] [--state S] [--for <id>] [--all]` | List claims, marked ✓ usable, ? needs review, ✗ rejected |
-| `jobhunt claims review [--all]` | Claims needing review, each with why JobHunt believes it and the resume text |
-| `jobhunt claims show\|confirm\|reject\|reset <id>…` | Inspect or decide (`reject --reason …`) |
-| `jobhunt claims add "…" [--for <id>] [--kind K]` / `edit <id> "…"` | State or reword a claim yourself |
-| `jobhunt preferences` | Preferences by category, and your statements verbatim |
-| `jobhunt preferences add "…"` | A preference statement in your own words |
-| `jobhunt preferences set role\|compensation\|work-mode\|work-setup\|location\|region\|timezone\|relocation\|sponsorship\|company\|domain\|work-style\|unknown-pay\|unclear-eligibility …` | One structured preference |
-| `jobhunt preferences remove <pref_…\|stmt_…>` | Remove a preference, or a statement and what was read from it |
+| `narrow init <resume>` | Import a resume (PDF, `.txt` or `.md`), or re-import an updated one |
+| `narrow profile [--all]` | Experience, projects, education, skills (used vs only listed), domains, role signals, preferences, evidence counts, what is missing or uncertain |
+| `narrow profile edit basics\|experience\|project\|education …` | Correct a value (`--title`, `--start 2021-03`, `--end none`, `--current`, `--tech Rust,Go`, …) |
+| `narrow profile add experience\|project\|education\|skill …` | Add what the resume does not say |
+| `narrow profile remove <id>` | Delete what you added; reject (hide) what was imported |
+| `narrow profile export [-o file]` / `import <file> [--replace]` | Versioned JSON, all or nothing |
+| `narrow profile history` | Every import, decision and edit |
+| `narrow claims [--kind K] [--state S] [--for <id>] [--all]` | List claims, marked ✓ usable, ? needs review, ✗ rejected |
+| `narrow claims review [--all]` | Claims needing review, each with why JobHunt believes it and the resume text |
+| `narrow claims show\|confirm\|reject\|reset <id>…` | Inspect or decide (`reject --reason …`) |
+| `narrow claims add "…" [--for <id>] [--kind K]` / `edit <id> "…"` | State or reword a claim yourself |
+| `narrow preferences` | Preferences by category, and your statements verbatim |
+| `narrow preferences add "…"` | A preference statement in your own words |
+| `narrow preferences set role\|compensation\|work-mode\|work-setup\|location\|region\|timezone\|relocation\|sponsorship\|company\|domain\|work-style\|unknown-pay\|unclear-eligibility …` | One structured preference |
+| `narrow preferences remove <pref_…\|stmt_…>` | Remove a preference, or a statement and what was read from it |
 
 Ids are printed short (`clm_3fa2b1c4`); any unique prefix works. `claim`
 and `prefs` are accepted as aliases.
@@ -563,7 +563,7 @@ understand are reported, not dropped.
 
 `ResumeParser` (resume structure) and `StatementParser` (preference
 statements) are traits. An AI-assisted parser can be plugged in later
-behind them; nothing in the profile depends on one, and `jobhunt init`
+behind them; nothing in the profile depends on one, and `narrow init`
 never needs an API key.
 
 ### The evidence graph
@@ -618,7 +618,7 @@ early-stage, founder-led, product company, agency, consulting, small team,
 management, greenfield vs maintenance, async, meetings, closeness to
 product, on-call).
 
-`jobhunt preferences add "I want small product teams and at least $120k.
+`narrow preferences add "I want small product teams and at least $120k.
 Avoid pure SRE roles."` stores the statement verbatim, then reads it with
 deterministic rules: clauses, their polarity ("avoid", "no", "open to",
 "at least", …), and known values. Each preference read from it links back
@@ -631,15 +631,15 @@ Currencies are never assumed. A code or a symbol only one currency uses
 `$`. If the rest of the statement points to exactly one of them ("I live
 in Toronto. At least $150k." → CAD), that reading is kept but marked
 uncertain, with a note naming the words it rests on; otherwise the
-currency stays unknown, the note says so, and `jobhunt profile` lists it
-until you set it (`jobhunt preferences set compensation --minimum 120k
+currency stays unknown, the note says so, and `narrow profile` lists it
+until you set it (`narrow preferences set compensation --minimum 120k
 --currency USD`). Compensation will be a hard constraint later, so a
 guessed currency could wrongly exclude or favor jobs.
 A newer preference with the same key (say, a new minimum salary) replaces
-the older one, which is kept as history. `jobhunt check` and `find` read
+the older one, which is kept as history. `narrow check` and `find` read
 the location, work-mode, time-zone, relocation, sponsorship,
 authorization and engagement preferences (see
-[Verification and eligibility](#verification-and-eligibility)); `jobhunt
+[Verification and eligibility](#verification-and-eligibility)); `narrow
 rank` reads the rest (pay, roles, companies, domains, work style; see
 [Ranking, feedback and taste](#ranking-feedback-and-taste)).
 
@@ -668,7 +668,7 @@ stated conflict (`not_shown.unmet_requirement`), not as "can't take it".
 
 ### Re-importing a resume
 
-Run `jobhunt init` again after changing your resume. It never deletes and
+Run `narrow init` again after changing your resume. It never deletes and
 re-inserts:
 
 - **Identity.** Experiences are matched by company and title (and, when the
@@ -693,8 +693,8 @@ decisions and edits it kept, and anything you need to confirm again.
 
 ### Export format
 
-`jobhunt profile export` writes the profile alone (for everything that is
-yours, feedback and pipeline included, use `jobhunt export`; see
+`narrow profile export` writes the profile alone (for everything that is
+yours, feedback and pipeline included, use `narrow export`; see
 [Your data: export and import](#your-data-export-and-import)). It is one
 JSON document:
 
@@ -703,7 +703,7 @@ JSON document:
   "format": "jobhunt.profile",
   "version": 1,
   "exported_at": "2026-09-25T12:00:00Z",
-  "generator": "jobhunt 0.1.0",
+  "generator": "narrow 0.1.0",
   "profile": { "id": "prof_…", "name": "…", "revision": 7, … },
   "documents": [ { "id": "doc_…", "sha256": "…", "text": "…", … } ],
   "experiences": [ { "id": "exp_…", "company": "…", "meta": { "origin": "resume", "verification": "unverified", "edited_fields": [], … } } ],
@@ -714,7 +714,7 @@ JSON document:
 }
 ```
 
-The file contains your resume's text and contact details. `jobhunt profile
+The file contains your resume's text and contact details. `narrow profile
 import` checks the format name and version first, parses strictly
 (unknown fields are errors), validates every reference (claim subjects,
 sources, superseded claims, project experiences, preference statements),
@@ -754,7 +754,7 @@ but not verified (and then not recommended). The two answers are never
 collapsed into one state, and neither is a percentage.
 
 ```text
-$ jobhunt verify job_02e51190085f8a9a0772e845ddd9f329
+$ narrow verify job_02e51190085f8a9a0772e845ddd9f329
 Verifying 1 source record at 1 source…
 Senior / Staff Fullstack Engineer — Linear
 job_02e51190085f8a9a0772e845ddd9f329 · opp_02e51190085f8a9a0772e845ddd9f329
@@ -804,14 +804,14 @@ work authorization.
 
 | Command | Does |
 | --- | --- |
-| `jobhunt verify <job_…\|opp_…>` | Verify every source record of the job now (reusing an attempt from the last 15 minutes), save the result, and check it against your profile |
-| `jobhunt verify --force <id>` | Ask the sources even if a recent attempt exists |
-| `jobhunt verify --details <id>` | Plus provenance: every record, the method and URLs checked, the authority chain, what changed, and the posting's words and your profile facts under every reason |
-| `jobhunt check <id>` | The detailed report from what is stored, without fetching (`--refresh` verifies first) |
-| `jobhunt show <id>` | Everything stored, with the last verification and the eligibility verdict (no fetch) |
-| `jobhunt find --eligible` / `--possible` | The inventory (`--raw`) filtered to eligible or conditional jobs / everything not ruled out. The shortlist (`find`) never recommends ineligible jobs |
-| `jobhunt preferences set authorized-in <country>` | A country (or "the EU") you may already work in |
-| `jobhunt preferences set engagement contractor\|employee --stance require\|want\|accept\|avoid` | How you can be hired |
+| `narrow verify <job_…\|opp_…>` | Verify every source record of the job now (reusing an attempt from the last 15 minutes), save the result, and check it against your profile |
+| `narrow verify --force <id>` | Ask the sources even if a recent attempt exists |
+| `narrow verify --details <id>` | Plus provenance: every record, the method and URLs checked, the authority chain, what changed, and the posting's words and your profile facts under every reason |
+| `narrow check <id>` | The detailed report from what is stored, without fetching (`--refresh` verifies first) |
+| `narrow show <id>` | Everything stored, with the last verification and the eligibility verdict (no fetch) |
+| `narrow find --eligible` / `--possible` | The inventory (`--raw`) filtered to eligible or conditional jobs / everything not ruled out. The shortlist (`find`) never recommends ineligible jobs |
+| `narrow preferences set authorized-in <country>` | A country (or "the EU") you may already work in |
+| `narrow preferences set engagement contractor\|employee --stance require\|want\|accept\|avoid` | How you can be hired |
 
 ### What "verified" means
 
@@ -1215,13 +1215,13 @@ from three things, kept separate and always inspectable:
 - **what it inferred**: patterns across that feedback, each with the
   evidence behind it.
 
-`jobhunt find` (see [The loop](#the-loop)) is where this shows: the
+`narrow find` (see [The loop](#the-loop)) is where this shows: the
 rejected and applied opportunities have left the list, learned patterns
 appear, attributed, among the reasons, and what you said always outranks
 them:
 
 ```text
-$ jobhunt reject opp_011ee5ec --reason "customer-facing, too corporate"
+$ narrow reject opp_011ee5ec --reason "customer-facing, too corporate"
 Rejected Forward Deployed Engineer - ML — Modal
 opp_011ee5ec62edd51f11dc0fd4b3edd532 · fb_a2b6d47142c401ba85154fade545fd65
 Reason: “customer-facing, too corporate”
@@ -1229,28 +1229,28 @@ Read as: avoid role: solutions / forward-deployed engineering; avoid company: la
 Status: rejected (was unseen)
 Learned: avoid company: large companies (tentative)
 Learned: avoid role: solutions / forward-deployed engineering (tentative)
-It won't be recommended again. Changed your mind: jobhunt save opp_011ee5ec62edd51f11dc0fd4b3edd532
+It won't be recommended again. Changed your mind: narrow save opp_011ee5ec62edd51f11dc0fd4b3edd532
 ```
 
 ### Commands
 
 | Command | Does |
 | --- | --- |
-| `jobhunt find [WORDS] [-n N] [--all]` | The few open opportunities most worth your time (default 5, strong fit and worth reviewing only), best first, each with its verification, eligibility and short brief (`--all`: maybe and low priority too). Refreshes and verifies as described in [`find`](#find-the-shortlist-and-when-it-reads-the-network); `--offline` (or the hidden `rank`) reads only what is stored |
-| `jobhunt why <id> [--details]` | One opportunity's decision brief; `--details` lists every signal with its group, basis, weight and evidence |
-| `jobhunt save\|unsave\|reject\|like\|dislike\|applied\|interview\|offer <id> [--reason "…"]` | Feedback on an opportunity (`opp_…`, a short id, or a `job_…` id), with how the reason was read and what was learned; a repeat already in effect changes nothing |
-| `jobhunt pipeline [--all]` | Jobs you saved, applied to, are interviewing for or got an offer from (`--all`: and rejected ones) |
-| `jobhunt taste [--all]` | What you told JobHunt, what it learned from your feedback (with evidence), what contradicts itself, and reasons it couldn't read |
-| `jobhunt feedback [<id>]` | Your feedback, verbatim |
-| `jobhunt show <id>` | Now also shows the fit verdict and your status on the job |
+| `narrow find [WORDS] [-n N] [--all]` | The few open opportunities most worth your time (default 5, strong fit and worth reviewing only), best first, each with its verification, eligibility and short brief (`--all`: maybe and low priority too). Refreshes and verifies as described in [`find`](#find-the-shortlist-and-when-it-reads-the-network); `--offline` (or the hidden `rank`) reads only what is stored |
+| `narrow why <id> [--details]` | One opportunity's decision brief; `--details` lists every signal with its group, basis, weight and evidence |
+| `narrow save\|unsave\|reject\|like\|dislike\|applied\|interview\|offer <id> [--reason "…"]` | Feedback on an opportunity (`opp_…`, a short id, or a `job_…` id), with how the reason was read and what was learned; a repeat already in effect changes nothing |
+| `narrow pipeline [--all]` | Jobs you saved, applied to, are interviewing for or got an offer from (`--all`: and rejected ones) |
+| `narrow taste [--all]` | What you told JobHunt, what it learned from your feedback (with evidence), what contradicts itself, and reasons it couldn't read |
+| `narrow feedback [<id>]` | Your feedback, verbatim |
+| `narrow show <id>` | Now also shows the fit verdict and your status on the job |
 
 ### The gate: eligibility and verification first
 
 | Situation | Where it goes |
 | --- | --- |
 | eligible or conditional, verified recently at an authoritative source (`Assessment::recommendable`) | **Worth your attention** |
-| eligible or conditional, but never verified, stale, or the last check failed | **Promising, but verify first** (`jobhunt verify <id>`) |
-| eligibility uncertain | **Could be worth it, if you can take it**, with why (`jobhunt check <id>`) |
+| eligible or conditional, but never verified, stale, or the last check failed | **Promising, but verify first** (`narrow verify <id>`) |
+| eligibility uncertain | **Could be worth it, if you can take it**, with why (`narrow check <id>`) |
 | ineligible, closed, rejected by you, already in your pipeline, or verified pay below a *required* minimum | not recommended; counted under "Not shown" |
 
 A conditional job (you would relocate; the company grants the sponsorship
@@ -1269,7 +1269,7 @@ freshness; anything you said you don't want caps a job at Maybe.
 
 ### Signals
 
-Every signal is independently inspectable (`jobhunt why --details`): its
+Every signal is independently inspectable (`narrow why --details`): its
 group, its basis (your preference, learned from your feedback, your
 resume, the posting, your feedback on this job, verification,
 eligibility), a one-line summary, and its evidence.
@@ -1311,7 +1311,7 @@ stored, which says so):
   minimum is a caveat;
 - reaching your target (across the range, or at its top) counts for it;
 - your minimum or target without a currency is never compared (set one
-  with `jobhunt preferences set compensation --currency …`);
+  with `narrow preferences set compensation --currency …`);
 - if you've turned jobs down over pay before, unknown or low pay gets a
   caveat.
 
@@ -1424,7 +1424,7 @@ is thin.
 
 ## Using JobHunt from an AI assistant (MCP)
 
-`jobhunt mcp` serves JobHunt over the [Model Context
+`narrow mcp` serves JobHunt over the [Model Context
 Protocol](https://modelcontextprotocol.io) on stdio, so an MCP client
 (Claude Code, Claude Desktop, Codex, or any other client that starts local
 stdio servers) can search, inspect, verify and record feedback for you.
@@ -1490,13 +1490,13 @@ and a JSON body `{"error": {"code", "message", "hint"}}`. Codes:
 `cancelled`. Arguments that don't match a tool's schema are rejected the
 same way before anything runs. Storage and configuration failures are
 reported without local paths or internals (the details go to the server's
-stderr; `jobhunt doctor` shows them). A cancelled `search_jobs` or
+stderr; `narrow doctor` shows them). A cancelled `search_jobs` or
 `verify_job` stops; what it already stored stays consistent (each source
 scan and verification attempt is its own transaction).
 
 ### Application context
 
-`prepare_application_context` (and `jobhunt context <id>`) prepares
+`prepare_application_context` (and `narrow context <id>`) prepares
 evidence; it writes nothing (no cover letter, no answers, no tailored
 resume). It returns the job and its decision brief, what the job asks for
 (roles, level, technologies with their requirement, domains), your
@@ -1510,23 +1510,23 @@ you confirmed or entered them, or they are quoted directly from your
 current resume with high confidence), each with its resume snippet and
 why it may be used. Inferences, uncertain readings, claims that left your
 resume, and rejected claims are withheld (not even their text is sent) and
-only counted, with how to review them (`jobhunt claims review`). An
+only counted, with how to review them (`narrow claims review`). An
 experience appears only if the claim that you held it is itself usable.
 The answer tells the client to use the facts as written, without adding
 metrics, responsibilities or accomplishments.
 
 ### Connecting a client
 
-Run `jobhunt doctor` for the exact command and arguments on your machine
+Run `narrow doctor` for the exact command and arguments on your machine
 (it prints the absolute path of the binary and your database). Use the
 absolute path when the client does not share your shell's `PATH`.
 
 **Claude Code** (tested: `claude mcp list` reports it connected):
 
 ```bash
-claude mcp add --transport stdio jobhunt -- jobhunt mcp
+claude mcp add --transport stdio narrow -- narrow mcp
 # a specific database or config:
-claude mcp add --transport stdio jobhunt -- /usr/local/bin/jobhunt --database ~/jobhunt/jobhunt.db mcp
+claude mcp add --transport stdio narrow -- /usr/local/bin/narrow --database ~/jobhunt/jobhunt.db mcp
 ```
 
 or, for a project, `.mcp.json`:
@@ -1534,9 +1534,9 @@ or, for a project, `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "jobhunt": {
+    "narrow": {
       "type": "stdio",
-      "command": "/usr/local/bin/jobhunt",
+      "command": "/usr/local/bin/narrow",
       "args": ["mcp"],
       "env": {}
     }
@@ -1551,20 +1551,20 @@ binary's absolute path.
 **Codex CLI**:
 
 ```bash
-codex mcp add jobhunt -- jobhunt mcp
+codex mcp add narrow -- narrow mcp
 ```
 
 or in `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.jobhunt]
-command = "/usr/local/bin/jobhunt"
+[mcp_servers.narrow]
+command = "/usr/local/bin/narrow"
 args = ["mcp"]
 # search_jobs may read many job boards the first time
 tool_timeout_sec = 120
 ```
 
-**Any stdio MCP client**: start `jobhunt mcp` (plus `--config` /
+**Any stdio MCP client**: start `narrow mcp` (plus `--config` /
 `--database` if you don't use the defaults) and speak MCP on its
 stdin/stdout. The official Python and TypeScript SDK clients were used to
 run the whole loop against it.
@@ -1606,13 +1606,13 @@ three per email and at most one email every few hours (or a day). Nothing
 found means no email.
 
 ```bash
-jobhunt login --server https://jobhunt.example.com   # sign in in the browser (device code)
-jobhunt sync                                         # merge profile, decisions, preferences, feedback
-jobhunt sync --status                                # offline: where sync stands, conflicts
-jobhunt sync --keep local                            # resolve conflicts (or --keep cloud, --record <id>)
-jobhunt account                                      # the account and this machine's sync state
-jobhunt token create "Claude Desktop"                # a personal access token for an MCP client
-jobhunt logout [--everywhere]
+narrow login --server https://jobhunt.example.com   # sign in in the browser (device code)
+narrow sync                                         # merge profile, decisions, preferences, feedback
+narrow sync --status                                # offline: where sync stands, conflicts
+narrow sync --keep local                            # resolve conflicts (or --keep cloud, --record <id>)
+narrow account                                      # the account and this machine's sync state
+narrow token create "Claude Desktop"                # a personal access token for an MCP client
+narrow logout [--everywhere]
 ```
 
 - **Offline first.** Only `login`, `logout`, `account`, `sync` and `token`
@@ -1631,14 +1631,14 @@ jobhunt logout [--everywhere]
 - **Private data** (profile, resume text, claims, preferences, feedback
   reasons, eligibility decisions, rankings) is isolated per account and
   encrypted by the application (AES-256-GCM) before it reaches Postgres.
-- **Deployment**: one binary with process modes (`jobhunt server`,
-  `jobhunt migrate`, `jobhunt worker discovery|verification|notify`), the
+- **Deployment**: one binary with process modes (`narrow server`,
+  `narrow migrate`, `narrow worker discovery|verification|notify`), the
   web app ([apps/web](apps/web)), two Dockerfiles, and Railway
   Infrastructure as Code in [.railway/railway.ts](.railway/railway.ts).
 
 ## Your data: export and import
 
-`jobhunt export` writes everything that is yours and can't be rebuilt, as
+`narrow export` writes everything that is yours and can't be rebuilt, as
 one versioned JSON document (`"format": "jobhunt.state"`, `"version": 1`):
 
 | Included | Why |
@@ -1652,8 +1652,8 @@ discovery runs and HTTP validators, verification history, eligibility
 decisions, stored rankings, and "looked at" marks.
 
 ```bash
-jobhunt export -o jobhunt.json      # or: jobhunt export > jobhunt.json
-jobhunt import jobhunt.json         # --replace to replace an existing profile
+narrow export -o narrow.json      # or: narrow export > narrow.json
+narrow import narrow.json         # --replace to replace an existing profile
 ```
 
 `import` checks the format and version first, parses strictly, validates
@@ -1661,7 +1661,7 @@ every reference (the embedded profile, every feedback event naming a job
 in the file), then writes everything in one transaction: an invalid file,
 or a failure halfway, changes nothing. Feedback and jobs already present
 are left alone, so importing the same file twice changes nothing; an
-existing profile is replaced only with `--replace`. `jobhunt profile
+existing profile is replaced only with `--replace`. `narrow profile
 export` / `import` remain for the profile alone.
 
 ## Privacy
@@ -1686,7 +1686,7 @@ tool is called:
 Errors sent to clients never include local file paths. Nothing is sent to
 a model provider by JobHunt itself; no AI API key is used or needed.
 
-With JobHunt Cloud, only what `jobhunt sync` sends leaves your machine
+With JobHunt Cloud, only what `narrow sync` sends leaves your machine
 (your profile records and feedback, and the jobs that feedback is about),
 to your own account. In the cloud it is isolated per account and
 encrypted by the application; logs carry ids, never your text; usage
@@ -1712,7 +1712,7 @@ withheld. The logs carry the same as events: `discovery run started`,
 `source completed`, `not closing missing jobs`, retries,
 `duplicate detected`, `discovery run completed`.
 
-The same applies to `jobhunt mcp`, where it is a protocol requirement:
+The same applies to `narrow mcp`, where it is a protocol requirement:
 stdout carries MCP messages only, and everything else (logs at any
 verbosity, progress, errors) goes to stderr, which MCP clients capture in
 their log files. Colors are used only when stderr is a terminal.
@@ -1761,8 +1761,8 @@ crates/
   jobhunt-cloud     JobHunt Cloud: environment configuration, OIDC and
                     token authentication, the HTTP API, hosted MCP,
                     scheduled workers, usage events, the cloud client.
-  jobhunt-cli       The `jobhunt` binary: arguments, logging, human output,
-                    `jobhunt mcp`, login/sync, and the cloud process modes
+  jobhunt-cli       The `narrow` binary: arguments, logging, human output,
+                    `narrow mcp`, login/sync, and the cloud process modes
                     (server, migrate, workers); every command calls
                     jobhunt-app.
 ```
@@ -1916,7 +1916,7 @@ with `JOBHUNT_REQUIRE_POSTGRES=1`, which turns a skip into a failure.
   from one mock server through one pipeline into a SQLite file, then mutated
   across runs to prove NEW / UNCHANGED / UPDATED / CLOSED / REOPENED, that
   failed and partial scans close nothing, and cross-source grouping; and the
-  `jobhunt` binary through the profile flow (`init`, `profile`,
+  `narrow` binary through the profile flow (`init`, `profile`,
   `preferences`, `claims`, edits, `export`, re-import of a changed PDF,
   `import` into a fresh database, unreadable files) with a temporary
   database; eligibility through the binary (`find` verdicts and
@@ -1944,7 +1944,7 @@ with `JOBHUNT_REQUIRE_POSTGRES=1`, which turns a skip into a failure.
     when an automatic refresh fails, "no jobs yet", `export` / `import`
     into a fresh database (pipeline and taste identical, re-import changes
     nothing, `--replace`, wrong format and version), `doctor`;
-  - `mcp_protocol`: `jobhunt mcp` as a child process spoken to over
+  - `mcp_protocol`: `narrow mcp` as a child process spoken to over
     stdin/stdout: handshake, version negotiation, `ping`, every tool's
     schemas and annotations, every error code, schema violations, a server
     that can't start writing nothing to stdout, ambiguous and unique short
@@ -2005,7 +2005,7 @@ Local product and MCP:
   tailored resumes; `prepare_application_context` only prepares evidence),
   notifications, a web interface, billing. JobHunt Cloud's own
   limitations are listed in [docs/cloud.md](docs/cloud.md#known-limitations).
-- `jobhunt mcp` speaks stdio; remote clients that need HTTPS use JobHunt
+- `narrow mcp` speaks stdio; remote clients that need HTTPS use JobHunt
   Cloud's hosted `/mcp` endpoint.
 - The MCP server has no resources or prompts; the tools cover the product.
   It reports progress on stderr, not as MCP progress notifications.
@@ -2048,7 +2048,7 @@ Eligibility:
   citizenship rules, and the answer is a compatibility signal, not legal
   advice.
 - No currency conversion, and pay is not part of eligibility (a pay
-  minimum is a ranking question, answered by `jobhunt find`).
+  minimum is a ranking question, answered by `narrow find`).
 - Verification is plain HTTP. Employer careers pages are not checked
   (so no listing reaches `employer_first_party` yet); Ashby application
   pages render in a browser and are known from the API, not requested; a
@@ -2063,7 +2063,7 @@ Ranking:
 - Job facets, levels and reasons are read with fixed English
   vocabularies. A posting that describes itself in other words (company
   size, stage, work style) simply has no such fact, and a reason with
-  nothing recognizable is kept as written and listed by `jobhunt taste`.
+  nothing recognizable is kept as written and listed by `narrow taste`.
 - Learned patterns are about single facets (a role, a domain, a company
   kind). "Fintech is fine, fintech sales isn't" is learned as two patterns
   (the domain is contradictory; sales is avoided), not as a combination.

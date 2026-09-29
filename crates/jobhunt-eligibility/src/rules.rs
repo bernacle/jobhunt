@@ -940,7 +940,7 @@ pub fn authorization(ctx: &Context<'_>) -> Vec<Reason> {
             .fact(ProfileFact::missing("work authorization"));
             if countries.len() == 1 {
                 r.conclusion.push_str(&format!(
-                    " (`jobhunt preferences set authorized-in \"{}\"`)",
+                    " (`narrow preferences set authorized-in \"{}\"`)",
                     countries[0].name
                 ));
             }

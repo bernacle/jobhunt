@@ -179,7 +179,7 @@ pub struct CloudConfig {
     pub auth: Option<AuthConfig>,
     pub db: PgSettings,
     /// Apply migrations when the server starts (they are also applied by
-    /// `jobhunt migrate`, Railway's pre-deploy command).
+    /// `narrow migrate`, Railway's pre-deploy command).
     pub migrate_on_start: bool,
     /// Browser origins allowed to call the API (BRU-295's web app).
     pub allowed_origins: Vec<String>,
@@ -225,7 +225,7 @@ pub enum Role {
     Migrate,
 }
 
-/// One line of `jobhunt doctor`'s cloud section.
+/// One line of `narrow doctor`'s cloud section.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Setting {
     pub name: &'static str,
@@ -613,7 +613,7 @@ impl CloudConfig {
         }
     }
 
-    /// What is configured, for `jobhunt doctor`, without secret values.
+    /// What is configured, for `narrow doctor`, without secret values.
     pub fn report(&self) -> Vec<Setting> {
         let secret = |present: bool| if present { "set" } else { "missing" }.to_owned();
         let mut out = vec![

@@ -1,7 +1,7 @@
 //! Shared by the local-product tests: mock job boards serving saved real
 //! responses, a temporary JobHunt home whose config lists them, the
-//! `jobhunt` binary pointed at both, and a minimal MCP client that speaks
-//! newline-delimited JSON-RPC to `jobhunt mcp` over its stdin/stdout,
+//! `narrow` binary pointed at both, and a minimal MCP client that speaks
+//! newline-delimited JSON-RPC to `narrow mcp` over its stdin/stdout,
 //! exactly as a desktop MCP client does, and checks that every line the
 //! server writes to stdout is a protocol message.
 
@@ -121,9 +121,9 @@ impl Env {
         self.dir.path().join("config.toml")
     }
 
-    /// `jobhunt` with this home's config and database, pointed at the mock.
+    /// `narrow` with this home's config and database, pointed at the mock.
     pub fn command(&self) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_jobhunt"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_narrow"));
         command
             .arg("--config")
             .arg(self.config())
@@ -144,7 +144,7 @@ impl Env {
         let output = self.run(args);
         assert!(
             output.status.success(),
-            "jobhunt {args:?} failed:\n{}",
+            "narrow {args:?} failed:\n{}",
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8(output.stdout).unwrap()
@@ -152,7 +152,7 @@ impl Env {
 
     pub fn fails(&self, args: &[&str]) -> String {
         let output = self.run(args);
-        assert!(!output.status.success(), "jobhunt {args:?} should fail");
+        assert!(!output.status.success(), "narrow {args:?} should fail");
         String::from_utf8(output.stderr).unwrap()
     }
 
@@ -185,7 +185,7 @@ pub struct McpClient {
 }
 
 impl McpClient {
-    /// Starts `jobhunt [args] mcp`.
+    /// Starts `narrow [args] mcp`.
     pub async fn start(env: &Env, args: &[&str]) -> Self {
         let stderr = env.dir.path().join(format!(
             "mcp-{}.stderr",

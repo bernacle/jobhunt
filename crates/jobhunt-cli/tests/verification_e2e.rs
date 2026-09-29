@@ -1,6 +1,6 @@
 //! Verification end to end, offline: a resume is imported, saved real
 //! Ashby, Greenhouse and Lever responses are discovered into a temporary
-//! database through a local mock server, and the `jobhunt` binary verifies
+//! database through a local mock server, and the `narrow` binary verifies
 //! jobs against mock versions of their authoritative endpoints
 //! (`JOBHUNT_VERIFY_ENDPOINT`), then shows, checks and filters them.
 
@@ -203,7 +203,7 @@ impl Env {
     }
 
     fn run(&self, endpoint: Option<&MockServer>, args: &[&str]) -> Output {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_jobhunt"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_narrow"));
         command
             .arg("--config")
             .arg(self.dir.path().join("config.toml"))
@@ -223,7 +223,7 @@ impl Env {
         let output = self.run(endpoint, args);
         assert!(
             output.status.success(),
-            "jobhunt {args:?} failed:\n{}",
+            "narrow {args:?} failed:\n{}",
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8(output.stdout).unwrap()
@@ -314,7 +314,7 @@ async fn init_verify_show_check_and_find() {
             "✓ First-party Ashby listing active",
             "Verified just now",
             "✗ INELIGIBLE: The listing limits remote work to Europe",
-            &format!("jobhunt check {linear}"),
+            &format!("narrow check {linear}"),
         ],
     );
 

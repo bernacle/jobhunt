@@ -46,13 +46,16 @@ users](#what-requires-real-users-before-bru-315-can-progress)).
 
 ### Result: the golden path works
 
+(Recorded when the command was still called `jobhunt`; commands below use
+the current name, `narrow`.)
+
 From a fresh clone, with zero source configuration: `cargo build
---release` (~7 minutes, no errors), `jobhunt init <resume>`, `jobhunt
-preferences add "..."`, `jobhunt find` — checked ~2,895 live jobs across
+--release` (~7 minutes, no errors), `narrow init <resume>`, `narrow
+preferences add "..."`, `narrow find` — checked ~2,895 live jobs across
 17 built-in company sources in under 5 seconds, returned a 5-item
-shortlist with legible, traceable reasoning (`jobhunt why`, `jobhunt
-show`). `jobhunt save` / `jobhunt like` worked, including documented
-idempotency ("Already saved ...: nothing changed."). A second `jobhunt
+shortlist with legible, traceable reasoning (`narrow why`, `narrow
+show`). `narrow save` / `narrow like` worked, including documented
+idempotency ("Already saved ...: nothing changed."). A second `narrow
 find` made no network request and reflected the new feedback in ranking,
 exactly as documented. Time to a real, reasoned shortlist from a blank
 profile: well under a minute of CLI interaction (excluding the one-time
@@ -64,9 +67,9 @@ postings — it did not degrade into an inventory dump.
 | Classification | Area | Issue |
 | --- | --- | --- |
 | Confusing | Config loading | `--config` / `JOBHUNT_CONFIG` pointed at a **not-yet-existing** file hard-errors on every command ("No such file or directory"), while the default config path — also absent on a fresh install — silently falls back to defaults. This contradicts the README's lead claim that "everything has a default, so no config file is needed," specifically for the one workflow (a custom config location) the README itself suggests. |
-| Nice-to-have | Sources / docs | The 17 built-in default sources (the companies actually searched with zero configuration) are never enumerated in the README; only discoverable by running `jobhunt config` or `jobhunt doctor` after building. |
+| Nice-to-have | Sources / docs | The 17 built-in default sources (the companies actually searched with zero configuration) are never enumerated in the README; only discoverable by running `narrow config` or `narrow doctor` after building. |
 | Nice-to-have | Sources / docs | `config.example.toml`'s sample source list differs from the real built-in defaults, which can mislead a reader about what "default" means. |
-| Annoying | `jobhunt show` output | One listing's description body was duplicated in full, with internally inconsistent employer stats between the two copies — most likely a duplicate-content artifact in the upstream posting, not deduplicated by the CLI. |
+| Annoying | `narrow show` output | One listing's description body was duplicated in full, with internally inconsistent employer stats between the two copies — most likely a duplicate-content artifact in the upstream posting, not deduplicated by the CLI. |
 | Acceptable | Search semantics | `find --raw rust` returned nothing despite "Rust" appearing in a resume's skills section, because search only matches title/company/department/team/location/workplace fields, not description text. Correctly and clearly documented ("How search works"); flagged only because a reader skimming the worked example first could be surprised. |
 | Acceptable | README structure | 2,039-line README plus a Narrow (product) / JobHunt (code) naming split adds a small orientation tax on first read — but the naming split is disclosed in the first paragraph, and headers make the document navigable. |
 | Not evaluated (gap) | Install prerequisites | The clean-room environment had Rust 1.98 and a C toolchain pre-installed, so true "I don't have Rust yet" friction (no link to rustup.rs, no one-liner) was never exercised. Worth re-testing in a container with no Rust installed before the first external invite goes out. |
@@ -292,7 +295,7 @@ Kept deliberately minimal, and no code changes were made for this.
 - If, after the first checkpoint, self-reported feedback isn't enough to
   answer "did setup complete" or "did they return," the smallest useful
   addition would be a single opt-in, anonymous, local counter file the
-  CLI can print on request (e.g. `jobhunt doctor` already prints
+  CLI can print on request (e.g. `narrow doctor` already prints
   diagnostics) — not a network call. That would be a separate, small
   proposal, reviewed on its own, only if evidence shows it's needed.
 

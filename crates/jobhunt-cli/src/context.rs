@@ -1,4 +1,4 @@
-//! `jobhunt context <id>`: the evidence-backed application context the MCP
+//! `narrow context <id>`: the evidence-backed application context the MCP
 //! `prepare_application_context` tool returns, as JSON.
 
 use std::process::ExitCode;

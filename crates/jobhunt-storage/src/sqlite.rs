@@ -269,7 +269,7 @@ impl SqliteJobStore {
         Ok(out)
     }
 
-    /// Counts for diagnostics (`jobhunt doctor`).
+    /// Counts for diagnostics (`narrow doctor`).
     pub async fn stats(&self) -> Result<StoreStats, StorageError> {
         let count = |sql: &'static str| {
             let pool = self.pool.clone();
