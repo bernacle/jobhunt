@@ -256,6 +256,7 @@ mod tests {
             edited_fields: Vec::new(),
             notes: Vec::new(),
             corroborations: Vec::new(),
+            source_snapshots: Vec::new(),
             created_at: at(0),
             updated_at: at(0),
         }

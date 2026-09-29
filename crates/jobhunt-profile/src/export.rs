@@ -10,11 +10,9 @@
 //!
 //! Version history:
 //!
-//! * `1`: first version. Later additions, all optional (a profile that
-//!   does not use them writes the same file): the `linkedin` and `github`
-//!   origins and document kinds, and `corroborations` on records and
-//!   claims. Older readers refuse files that use them, with a schema
-//!   error.
+//! * `1`: resume and user data in the original schema.
+//! * `2`: LinkedIn and GitHub sources, corroborations, and source-specific
+//!   field support. A profile that still has the original shape writes v1.
 
 use std::collections::HashSet;
 
@@ -28,7 +26,7 @@ use crate::model::{Education, Experience, Profile, Project, Skill, SourceDocumen
 use crate::preferences::{Preference, PreferenceStatement};
 
 pub const EXPORT_FORMAT: &str = "jobhunt.profile";
-pub const EXPORT_VERSION: u32 = 1;
+pub const EXPORT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -66,7 +64,7 @@ pub enum ExportError {
     #[error("not a JobHunt profile file (format is {found:?}, expected {EXPORT_FORMAT:?})")]
     Format { found: String },
     #[error(
-        "profile file version {found} is not supported (this JobHunt reads version {EXPORT_VERSION}); update JobHunt"
+        "profile file version {found} is not supported (this JobHunt reads versions 1 and {EXPORT_VERSION}); update JobHunt"
     )]
     Version { found: String },
     #[error("invalid profile file: {0}")]
@@ -77,9 +75,31 @@ pub enum ExportError {
 
 impl ProfileExport {
     pub fn from_data(data: &ProfileData, now: DateTime<Utc>, generator: Option<String>) -> Self {
+        let modern = !data.profile.basic_sources.is_empty()
+            || data.documents.iter().any(|d| {
+                matches!(
+                    d.kind,
+                    crate::model::DocumentKind::Linkedin | crate::model::DocumentKind::Github
+                )
+            })
+            || data
+                .experiences
+                .iter()
+                .map(|e| &e.meta)
+                .chain(data.projects.iter().map(|p| &p.meta))
+                .chain(data.education.iter().map(|e| &e.meta))
+                .chain(data.skills.iter().map(|s| &s.meta))
+                .any(|m| {
+                    matches!(
+                        m.origin,
+                        crate::model::Origin::Linkedin | crate::model::Origin::Github
+                    ) || !m.corroborations.is_empty()
+                        || !m.source_snapshots.is_empty()
+                })
+            || data.claims.iter().any(|c| !c.corroborations.is_empty());
         Self {
             format: EXPORT_FORMAT.to_owned(),
-            version: EXPORT_VERSION,
+            version: if modern { 2 } else { 1 },
             exported_at: now,
             generator,
             profile: data.profile.clone(),
@@ -110,7 +130,7 @@ impl ProfileExport {
             });
         }
         match value.get("version").and_then(serde_json::Value::as_u64) {
-            Some(v) if v == u64::from(EXPORT_VERSION) => {}
+            Some(1 | 2) => {}
             other => {
                 return Err(ExportError::Version {
                     found: other.map_or_else(

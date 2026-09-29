@@ -543,6 +543,8 @@ async fn a_corrected_title_keeps_the_record_and_manual_titles_win() {
     assert!(e.meta.is_edited("title"));
     let claim = after.claim(employment).unwrap();
     assert!(claim.edited && claim.verification == Verification::Confirmed);
+    assert_eq!(claim.provenance, Provenance::UserEntered);
+    assert!(after.claim_sources(claim).is_empty());
     assert!(
         claim
             .text
@@ -644,11 +646,11 @@ async fn manual_claims_and_the_evidence_policy() {
         edited.note.as_deref(),
         Some(&*format!("Originally: “{RULES}”"))
     );
-    assert_eq!(
-        edited.source.as_ref().unwrap().snippet,
-        RULES,
-        "provenance preserved"
+    assert!(
+        edited.source.is_none(),
+        "the source did not state the correction"
     );
+    assert_eq!(edited.provenance, Provenance::UserEntered);
     let (_, after) = service
         .import_resume(document("v1"), &v1(), at(4))
         .await
@@ -869,7 +871,7 @@ async fn export_round_trips_and_import_is_all_or_nothing() {
     );
 
     // Unsupported versions and other files are refused with a reason.
-    let future = json.replacen("\"version\": 1", "\"version\": 2", 1);
+    let future = json.replacen("\"version\": 1", "\"version\": 99", 1);
     assert!(matches!(
         ProfileExport::parse(&future),
         Err(ExportError::Version { .. })

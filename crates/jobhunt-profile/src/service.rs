@@ -21,8 +21,8 @@ use crate::ids::{
 use crate::import::{ImportReport, merge_resume};
 use crate::infer::{known_technology, topic_key};
 use crate::model::{
-    Education, EmploymentKind, Experience, Origin, Project, RecordMeta, Skill, SourceDocument,
-    Verification,
+    DocumentKind, Education, EmploymentKind, Experience, Origin, Project, RecordMeta, Skill,
+    SourceDocument, Verification,
 };
 use crate::preferences::{
     Certainty, Preference, PreferenceOrigin, PreferenceStatement, PreferenceValue, Stance,
@@ -218,6 +218,50 @@ impl<'a, R: ProfileRepository + ?Sized> ProfileService<'a, R> {
         now: DateTime<Utc>,
     ) -> Result<(ImportReport, ProfileData), ProfileError> {
         let mut data = self.load_or_new(now).await?;
+        let categories = |parser: &str| -> Option<std::collections::HashSet<String>> {
+            parser.split_once(";categories=").map(|(_, list)| {
+                list.split(',')
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            })
+        };
+        if let Some(previous) = data
+            .documents
+            .iter()
+            .find(|d| d.kind == DocumentKind::Linkedin)
+            && let Some(new) = categories(&document.parser)
+        {
+            // Early BRU-309 documents recorded only the parser name. Their
+            // retained text lists the career sections that had content.
+            let old = categories(&previous.parser).or_else(|| {
+                let line = previous
+                    .text
+                    .lines()
+                    .next()?
+                    .strip_prefix("LinkedIn data export: career files only (")?
+                    .strip_suffix(')')?;
+                let names = [
+                    "Profile",
+                    "Positions",
+                    "Education",
+                    "Skills",
+                    "Certifications",
+                    "Projects",
+                    "Languages",
+                ];
+                let parts: Vec<_> = line.split(", ").filter(|s| !s.is_empty()).collect();
+                parts
+                    .iter()
+                    .all(|part| names.contains(part))
+                    .then(|| parts.into_iter().map(str::to_owned).collect())
+            });
+            if old.is_none_or(|old| !old.is_subset(&new)) {
+                return Err(ProfileError::Invalid(
+                    "partial LinkedIn re-import omits categories in the current source; provide the full export or remove the source first".into(),
+                ));
+            }
+        }
         let report = crate::sources::merge_linkedin(&mut data, document, parsed, now);
         let event = ProfileEvent::new(
             now,
@@ -503,6 +547,14 @@ impl<'a, R: ProfileRepository + ?Sized> ProfileService<'a, R> {
         };
         if claim.note.is_none() && claim.provenance != Provenance::UserEntered {
             claim.note = Some(format!("Originally: “{}”", claim.text));
+        }
+        if claim.text != text {
+            // The source supports its original words, not the user's
+            // correction. Keep the correction as a manual assertion.
+            claim.provenance = Provenance::UserEntered;
+            claim.source = None;
+            claim.corroborations.clear();
+            claim.stale_since = None;
         }
         claim.text = text;
         claim.edited = true;
@@ -802,6 +854,12 @@ impl<'a, R: ProfileRepository + ?Sized> ProfileService<'a, R> {
                 .filter(|c| c.subject == subject && c.kind == ClaimKind::Employment)
             {
                 found = true;
+                if claim.text != statement {
+                    claim.provenance = Provenance::UserEntered;
+                    claim.source = None;
+                    claim.corroborations.clear();
+                    claim.stale_since = None;
+                }
                 claim.text = statement.clone();
                 claim.edited = true;
                 claim.verification = Verification::Confirmed;

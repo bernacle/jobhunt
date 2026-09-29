@@ -308,7 +308,14 @@ impl LinkedinExport {
             sha256: self.sha256.clone(),
             pages: None,
             text: self.text.clone(),
-            parser: PARSER.to_owned(),
+            parser: format!(
+                "{PARSER};categories={}",
+                self.read
+                    .iter()
+                    .map(|(file, _)| file.trim_end_matches(".csv"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
             first_imported_at: now,
             last_imported_at: now,
         }

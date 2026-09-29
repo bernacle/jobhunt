@@ -496,7 +496,7 @@ async fn profile_round_trip_revisions_and_claims(store: &dyn Store) {
 /// on every backend, and so does taking a source out. Fictional data.
 async fn evidence_sources_round_trip(store: &dyn Store) {
     use jobhunt_profile::{
-        DocumentId, DocumentKind, GithubAccount, GithubRepo, GithubSnapshot, Origin,
+        DocumentId, DocumentKind, GithubAccount, GithubRepo, GithubSnapshot, Origin, ParsedBasics,
         ParsedExperience, ParsedResume, ParsedSkillLine, SourceDocument,
     };
     let document = |kind: DocumentKind, seed: &str| SourceDocument {
@@ -535,6 +535,10 @@ async fn evidence_sources_round_trip(store: &dyn Store) {
             document(DocumentKind::Text, "resume"),
             &ParsedResume {
                 experiences: vec![position("Northwind Labs — Senior Software Engineer")],
+                basics: ParsedBasics {
+                    headline: Some("Resume headline".into()),
+                    ..ParsedBasics::default()
+                },
                 ..ParsedResume::default()
             },
             at(1),
@@ -545,9 +549,15 @@ async fn evidence_sources_round_trip(store: &dyn Store) {
         .import_linkedin(
             document(DocumentKind::Linkedin, "linkedin"),
             &ParsedResume {
-                experiences: vec![position(
-                    "Senior Software Engineer · Northwind Labs · Mar 2021 – Present",
-                )],
+                experiences: vec![ParsedExperience {
+                    location: Some("Lisbon".into()),
+                    ..position("Senior Software Engineer · Northwind Labs · Mar 2021 – Present")
+                }],
+                basics: ParsedBasics {
+                    headline: Some("LinkedIn headline".into()),
+                    location: Some("Lisbon".into()),
+                    ..ParsedBasics::default()
+                },
                 skills: vec![ParsedSkillLine {
                     category: None,
                     skills: vec!["Kafka".into()],
@@ -597,6 +607,8 @@ async fn evidence_sources_round_trip(store: &dyn Store) {
         sorted(data.clone()),
         "everything round-trips"
     );
+    assert_eq!(data.profile.basic_sources.len(), 2);
+    assert_eq!(data.experiences[0].meta.source_snapshots.len(), 2);
     let kinds: Vec<DocumentKind> = data.documents.iter().map(|d| d.kind).collect();
     assert!(kinds.contains(&DocumentKind::Linkedin) && kinds.contains(&DocumentKind::Github));
     let job = data
@@ -634,6 +646,9 @@ async fn evidence_sources_round_trip(store: &dyn Store) {
             .iter()
             .all(|d| d.kind != DocumentKind::Linkedin)
     );
+    assert_eq!(removed.profile.location, None);
+    assert_eq!(removed.profile.headline.as_deref(), Some("Resume headline"));
+    assert_eq!(removed.experiences[0].location, None);
     let events = store.profile_events(removed.id(), 3).await.unwrap();
     assert_eq!(events[0].kind, ProfileEventKind::SourceRemoved);
     assert_eq!(events[1].kind, ProfileEventKind::GithubImported);

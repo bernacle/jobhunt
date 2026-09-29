@@ -144,6 +144,26 @@ impl ProfileData {
 
     /// The sources supporting a record now (see [`ProfileData::claim_sources`]).
     pub fn record_sources(&self, meta: &crate::model::RecordMeta) -> Vec<Origin> {
+        if let Some(key) = meta
+            .import_key
+            .as_deref()
+            .and_then(|k| k.strip_prefix("skill|"))
+        {
+            let mut sources = Vec::new();
+            for claim in self.claims.iter().filter(|c| {
+                c.topic.as_deref() == Some(key)
+                    && matches!(c.kind, ClaimKind::Technology | ClaimKind::Skill)
+                    && c.stale_since.is_none()
+                    && c.verification != Verification::Rejected
+            }) {
+                for origin in self.claim_sources(claim) {
+                    if !sources.contains(&origin) {
+                        sources.push(origin);
+                    }
+                }
+            }
+            return sources;
+        }
         crate::support::supporting_origins(
             &self.documents,
             meta.source.as_ref(),
@@ -426,17 +446,20 @@ impl ProfileData {
                 Standing::NeedsReview(crate::ReviewReason::SourceRemoved)
             )
         };
-        let demonstrated = claims
-            .iter()
-            .filter(live)
-            .any(|c| c.kind == ClaimKind::Technology && c.subject != Subject::Profile);
+        let demonstrated = claims.iter().filter(live).any(|c| {
+            c.kind == ClaimKind::Technology
+                    && c.subject != Subject::Profile
+                    // Public repository language statistics prove code is
+                    // present, not that this person used it in their work.
+                    && self.claim_sources(c).iter().any(|source| *source != Origin::Github)
+        });
         let user = skill.meta.origin == crate::Origin::User
             || claims
                 .iter()
                 .any(|c| c.provenance == Provenance::UserEntered);
         let listed = claims
             .iter()
-            .filter(live)
+            .filter(|c| self.standing(c).is_usable())
             .any(|c| c.kind == ClaimKind::Skill);
         let strength = if skill.meta.is_rejected() {
             EvidenceStrength::Unsupported

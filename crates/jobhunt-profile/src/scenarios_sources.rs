@@ -326,7 +326,9 @@ async fn resume_and_linkedin_support_one_position() {
         jobs[0].corroborations[0].snippet,
         "Senior Software Engineer · Northwind Labs · 2021-03 – Present"
     );
-    // The same bullet and the same skill are one claim each.
+    // The same bullet is one claim. The resume alone supplied the
+    // "Languages" category, so its more specific skill assertion stays
+    // separate from LinkedIn's uncategorized listing.
     assert_eq!(
         data.claims
             .iter()
@@ -339,10 +341,16 @@ async fn resume_and_linkedin_support_one_position() {
         .iter()
         .filter(|c| c.kind == ClaimKind::Skill && c.topic.as_deref() == Some("rust"))
         .collect();
-    assert_eq!(rust_skill.len(), 1);
-    assert_eq!(
-        data.claim_sources(rust_skill[0]),
-        vec![Origin::Resume, Origin::Linkedin]
+    assert_eq!(rust_skill.len(), 2);
+    assert!(
+        rust_skill
+            .iter()
+            .any(|c| c.text == "Lists Rust as a skill (Languages)"
+                && data.claim_sources(c) == vec![Origin::Resume])
+    );
+    assert!(
+        rust_skill.iter().any(|c| c.text == "Lists Rust as a skill"
+            && data.claim_sources(c) == vec![Origin::Linkedin])
     );
     // Education: one entry, two sources.
     assert_eq!(data.education.len(), 1);
@@ -911,12 +919,12 @@ async fn github_evidence_is_about_public_code_not_expertise() {
             c.text
         );
     }
-    // A project with Rust code is demonstrated use, for ranking.
+    // Public code alone is not evidence that the user personally used Rust.
     let skill = data.skills.iter().find(|s| s.name == "Rust").unwrap();
     assert_eq!(skill.meta.origin, Origin::Github);
     assert_eq!(
         data.skill_evidence(skill).strength,
-        EvidenceStrength::Demonstrated
+        EvidenceStrength::Unsupported
     );
 }
 
@@ -1048,11 +1056,12 @@ async fn resume_linkedin_and_github_meet_in_one_graph() {
         data.record_sources(&lox[0].meta),
         vec![Origin::Resume, Origin::Github]
     );
-    // The resume's "Used Rust at lox" and GitHub's code evidence: one claim.
+    // Personal use and repository code presence are separate assertions.
     let used = claim(&data, "Used Rust at lox");
+    assert_eq!(data.claim_sources(used), vec![Origin::Resume]);
     assert_eq!(
-        data.claim_sources(used),
-        vec![Origin::Resume, Origin::Github]
+        data.claim_sources(claim(&data, "Rust code in rileyx/lox (GitHub)")),
+        vec![Origin::Github]
     );
     // Related but different: the repository fact is its own claim.
     let owns = claim(&data, "Owns the public GitHub repository rileyx/lox");
@@ -1082,4 +1091,692 @@ async fn resume_linkedin_and_github_meet_in_one_graph() {
     ProfileExport::from_data(&data, at(5), None)
         .validate()
         .unwrap();
+}
+
+#[tokio::test]
+async fn removing_linkedin_reconciles_fields_of_a_shared_position() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    import_linkedin(&repo, "v1", &linkedin(), 1).await;
+    service
+        .import_resume(resume_doc("resume"), &resume(), at(2))
+        .await
+        .unwrap();
+    let (_, data) = service
+        .remove_source(Origin::Linkedin, at(3))
+        .await
+        .unwrap();
+    let position = data
+        .experiences
+        .iter()
+        .find(|e| e.company.as_deref() == Some("Northwind Labs"))
+        .unwrap();
+    assert_eq!(data.record_sources(&position.meta), vec![Origin::Resume]);
+    assert_eq!(position.location, None, "the resume never stated Lisbon");
+}
+
+#[tokio::test]
+async fn edited_position_field_survives_removal_of_its_original_source() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let (_, linked) = import_linkedin(&repo, "v1", &linkedin(), 1).await;
+    let id = linked
+        .experiences
+        .iter()
+        .find(|e| e.company.as_deref() == Some("Northwind Labs"))
+        .unwrap()
+        .id;
+    service
+        .import_resume(resume_doc("resume"), &resume(), at(2))
+        .await
+        .unwrap();
+    service
+        .edit_experience(
+            &id.to_string(),
+            ExperienceEdit {
+                location: Some(Some("Porto".into())),
+                ..ExperienceEdit::default()
+            },
+            at(3),
+        )
+        .await
+        .unwrap();
+    let (_, removed) = service
+        .remove_source(Origin::Linkedin, at(4))
+        .await
+        .unwrap();
+    let position = removed.experiences.iter().find(|e| e.id == id).unwrap();
+    assert_eq!(position.location.as_deref(), Some("Porto"));
+    assert_eq!(removed.record_sources(&position.meta), vec![Origin::Resume]);
+    service
+        .import_resume(resume_doc("resume-v2"), &resume(), at(5))
+        .await
+        .unwrap();
+    assert_eq!(
+        service
+            .require()
+            .await
+            .unwrap()
+            .experiences
+            .iter()
+            .find(|e| e.id == id)
+            .unwrap()
+            .location
+            .as_deref(),
+        Some("Porto")
+    );
+}
+
+#[tokio::test]
+async fn a_changed_linkedin_date_does_not_replace_the_resume_date() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let original = with_resume(&repo).await;
+    let id = original
+        .experiences
+        .iter()
+        .find(|e| e.company.as_deref() == Some("Northwind Labs"))
+        .unwrap()
+        .id;
+    import_linkedin(&repo, "v1", &linkedin(), 2).await;
+    let mut changed = linkedin();
+    changed.experiences[0].start = d("2020-06");
+    changed.experiences[0].header =
+        "Senior Software Engineer · Northwind Labs · Jun 2020 – Present".into();
+    import_linkedin(&repo, "v2", &changed, 3).await;
+    let (_, removed) = service
+        .remove_source(Origin::Linkedin, at(4))
+        .await
+        .unwrap();
+    let position = removed.experiences.iter().find(|e| e.id == id).unwrap();
+    assert_eq!(position.start, d("2021-03"));
+    assert_eq!(removed.record_sources(&position.meta), vec![Origin::Resume]);
+}
+
+#[tokio::test]
+async fn github_code_does_not_back_a_personal_use_claim_after_resume_drops_it() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let mut first = resume();
+    first.projects.push(ParsedProject {
+        name: "lox".into(),
+        url: Some("https://github.com/rileyx/lox".into()),
+        header: "lox — https://github.com/rileyx/lox".into(),
+        tech_line: Some("Tech: Rust".into()),
+        technologies: vec!["Rust".into()],
+        ..ParsedProject::default()
+    });
+    service
+        .import_resume(resume_doc("resume"), &first, at(1))
+        .await
+        .unwrap();
+    service.import_github(&snapshot(), at(2)).await.unwrap();
+    let (_, data) = service
+        .import_resume(resume_doc("resume-v2"), &resume(), at(3))
+        .await
+        .unwrap();
+    let personal = claim(&data, "Used Rust at lox");
+    assert!(personal.stale_since.is_some() || data.claim_sources(personal).is_empty());
+    assert!(!data.standing(personal).is_usable());
+    assert_eq!(
+        data.claim_sources(claim(&data, "Rust code in rileyx/lox (GitHub)")),
+        vec![Origin::Github]
+    );
+}
+
+#[tokio::test]
+async fn linkedin_owned_basics_refresh_and_disappear_but_manual_edits_remain() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let mut first = linkedin();
+    first.basics.languages = vec![SpokenLanguage {
+        name: "Portuguese".into(),
+        level: None,
+    }];
+    import_linkedin(&repo, "v1", &first, 1).await;
+    let mut second = first.clone();
+    second.basics.headline = Some("New headline".into());
+    let (_, data) = import_linkedin(&repo, "v2", &second, 2).await;
+    assert_eq!(data.profile.headline.as_deref(), Some("New headline"));
+    service
+        .edit_basics(
+            BasicsEdit {
+                headline: Some("My headline".into()),
+                ..BasicsEdit::default()
+            },
+            at(3),
+        )
+        .await
+        .unwrap();
+    let (_, data) = service
+        .remove_source(Origin::Linkedin, at(4))
+        .await
+        .unwrap();
+    assert_eq!(data.profile.headline.as_deref(), Some("My headline"));
+    assert_eq!(data.profile.location, None);
+    assert!(data.profile.languages.is_empty());
+}
+
+#[tokio::test]
+async fn a_resume_language_remains_when_linkedin_is_removed() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let english = SpokenLanguage {
+        name: "English".into(),
+        level: None,
+    };
+    let portuguese = SpokenLanguage {
+        name: "Portuguese".into(),
+        level: None,
+    };
+    let mut resume = resume();
+    resume.basics.languages = vec![english.clone()];
+    service
+        .import_resume(resume_doc("resume"), &resume, at(1))
+        .await
+        .unwrap();
+    let mut linked = linkedin();
+    linked.basics.languages = vec![english.clone(), portuguese];
+    import_linkedin(&repo, "v1", &linked, 2).await;
+    let (_, data) = service
+        .remove_source(Origin::Linkedin, at(3))
+        .await
+        .unwrap();
+    assert_eq!(data.profile.languages, vec![english]);
+}
+
+#[tokio::test]
+async fn partial_linkedin_reimport_cannot_withdraw_unmentioned_categories() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let mut full = linkedin_doc("full");
+    full.parser =
+        "linkedin-export/1;categories=Profile,Positions,Education,Skills,Certifications".into();
+    let (_, before) = service
+        .import_linkedin(full, &linkedin(), at(1))
+        .await
+        .unwrap();
+    let mut positions = linkedin_doc("positions");
+    positions.parser = "linkedin-export/1;categories=Positions".into();
+    let parsed = ParsedResume {
+        experiences: linkedin().experiences,
+        ..ParsedResume::default()
+    };
+    let outcome = service.import_linkedin(positions, &parsed, at(2)).await;
+    assert!(matches!(outcome, Err(ProfileError::Invalid(message)) if message.contains("partial")));
+    assert_eq!(
+        service.require().await.unwrap(),
+        before,
+        "a refused import changes nothing"
+    );
+}
+
+#[tokio::test]
+async fn legacy_linkedin_document_also_rejects_a_destructive_partial_reimport() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let mut legacy = linkedin_doc("legacy");
+    legacy.text = "LinkedIn data export: career files only (Profile, Positions, Skills)\n".into();
+    let (_, before) = service
+        .import_linkedin(legacy, &linkedin(), at(1))
+        .await
+        .unwrap();
+    let mut positions = linkedin_doc("positions");
+    positions.parser = "linkedin-export/1;categories=Positions".into();
+    let parsed = ParsedResume {
+        experiences: linkedin().experiences,
+        ..ParsedResume::default()
+    };
+    let outcome = service.import_linkedin(positions, &parsed, at(2)).await;
+    assert!(matches!(outcome, Err(ProfileError::Invalid(message)) if message.contains("partial")));
+    assert_eq!(service.require().await.unwrap(), before);
+}
+
+#[tokio::test]
+async fn corrected_claim_never_attributes_the_users_words_to_linkedin() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let (_, imported) = import_linkedin(&repo, "v1", &linkedin(), 1).await;
+    let original = employment(&imported, "Northwind Labs")[0];
+    let id = original.id;
+    let corrected = "Principal Engineer at Northwind Labs (2021-03 – present)";
+    service
+        .edit_claim(&id.to_string(), corrected, at(2))
+        .await
+        .unwrap();
+    let after_edit = service.require().await.unwrap();
+    assert_eq!(
+        claim(&after_edit, corrected).verification,
+        Verification::Confirmed
+    );
+    assert!(
+        after_edit
+            .claim_sources(claim(&after_edit, corrected))
+            .is_empty()
+    );
+
+    let (_, reimported) = import_linkedin(&repo, "v2", &linkedin(), 3).await;
+    assert_eq!(claim(&reimported, corrected).id, id);
+    assert_eq!(
+        claim(&reimported, corrected).verification,
+        Verification::Confirmed
+    );
+    assert!(
+        reimported
+            .claim_sources(claim(&reimported, corrected))
+            .is_empty()
+    );
+    let (_, removed) = service
+        .remove_source(Origin::Linkedin, at(4))
+        .await
+        .unwrap();
+    assert_eq!(
+        claim(&removed, corrected).verification,
+        Verification::Confirmed
+    );
+    assert!(removed.claim_sources(claim(&removed, corrected)).is_empty());
+}
+
+#[tokio::test]
+async fn correcting_one_bullet_does_not_hide_other_bullets_on_reimport() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let mut parsed = linkedin();
+    parsed.experiences[0]
+        .bullets
+        .push("Reduced incident response time by 30%.".into());
+    let (_, imported) = import_linkedin(&repo, "v1", &parsed, 1).await;
+    let original = claim(&imported, "Built the settlement pipeline in Rust.");
+    service
+        .edit_claim(
+            &original.id.to_string(),
+            "Led the settlement program",
+            at(2),
+        )
+        .await
+        .unwrap();
+    let (_, again) = import_linkedin(&repo, "v2", &parsed, 3).await;
+    assert_eq!(
+        again.claim_sources(claim(&again, "Reduced incident response time by 30%.")),
+        vec![Origin::Linkedin]
+    );
+    assert!(
+        again
+            .claim_sources(claim(&again, "Led the settlement program"))
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn same_named_projects_at_different_companies_stay_separate() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let mut a = resume();
+    a.projects.push(ParsedProject {
+        name: "Migration".into(),
+        description: Some("Migrated the legacy data platform".into()),
+        header: "Migration at Northwind Labs".into(),
+        ..ParsedProject::default()
+    });
+    service
+        .import_resume(resume_doc("resume"), &a, at(1))
+        .await
+        .unwrap();
+    let b = ParsedResume {
+        experiences: vec![contoso("Software Engineer")],
+        projects: vec![ParsedProject {
+            name: "Migration".into(),
+            description: Some("Migrated the legacy data platform".into()),
+            header: "Migration at Contoso Freight".into(),
+            ..ParsedProject::default()
+        }],
+        ..ParsedResume::default()
+    };
+    let (_, data) = import_linkedin(&repo, "v1", &b, 2).await;
+    assert_eq!(
+        data.projects
+            .iter()
+            .filter(|p| p.name == "Migration")
+            .count(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn project_name_needs_shared_context_but_exact_url_is_sufficient() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let mut first = resume();
+    first.projects.push(ParsedProject {
+        name: "Migration".into(),
+        header: "Migration at Northwind Labs".into(),
+        start: d("2023"),
+        end: d("2024"),
+        ..ParsedProject::default()
+    });
+    first.projects.push(ParsedProject {
+        name: "old display".into(),
+        url: Some("https://github.com/rileyx/shared".into()),
+        header: "old display".into(),
+        ..ParsedProject::default()
+    });
+    service
+        .import_resume(resume_doc("resume"), &first, at(1))
+        .await
+        .unwrap();
+    let second = ParsedResume {
+        experiences: vec![northwind_linkedin("2021-03")],
+        projects: vec![
+            ParsedProject {
+                name: "Migration".into(),
+                header: "Migration at Northwind Labs".into(),
+                start: d("2023-01"),
+                end: d("2024-12"),
+                ..ParsedProject::default()
+            },
+            ParsedProject {
+                name: "new display".into(),
+                url: Some("https://github.com/rileyx/shared".into()),
+                header: "new display".into(),
+                ..ParsedProject::default()
+            },
+        ],
+        ..ParsedResume::default()
+    };
+    let (_, data) = import_linkedin(&repo, "v1", &second, 2).await;
+    assert_eq!(data.projects.len(), 2);
+    assert!(
+        data.projects
+            .iter()
+            .all(|p| data.record_sources(&p.meta) == vec![Origin::Resume, Origin::Linkedin])
+    );
+}
+
+#[tokio::test]
+async fn differing_project_assertions_keep_their_own_source_words() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let shared = "https://github.com/rileyx/shared";
+    let linkedin_project = ParsedProject {
+        name: "Migration".into(),
+        description: Some("migrated billing".into()),
+        url: Some(shared.into()),
+        header: "Migration · migrated billing".into(),
+        ..ParsedProject::default()
+    };
+    import_linkedin(
+        &repo,
+        "v1",
+        &ParsedResume {
+            projects: vec![linkedin_project],
+            ..ParsedResume::default()
+        },
+        1,
+    )
+    .await;
+    let resume_project = ParsedProject {
+        name: "Migration".into(),
+        description: Some("migrated search".into()),
+        url: Some(shared.into()),
+        header: "Migration · migrated search".into(),
+        ..ParsedProject::default()
+    };
+    let (_, shared_data) = service
+        .import_resume(
+            resume_doc("resume"),
+            &ParsedResume {
+                projects: vec![resume_project],
+                ..ParsedResume::default()
+            },
+            at(2),
+        )
+        .await
+        .unwrap();
+    assert_eq!(shared_data.projects.len(), 1);
+    let linkedin_claim = claim(&shared_data, "Built Migration (migrated billing)");
+    let resume_claim = claim(&shared_data, "Built Migration (migrated search)");
+    assert_eq!(
+        shared_data.claim_sources(linkedin_claim),
+        vec![Origin::Linkedin]
+    );
+    assert_eq!(
+        shared_data.claim_sources(resume_claim),
+        vec![Origin::Resume]
+    );
+    let (_, remaining) = service
+        .remove_source(Origin::Linkedin, at(3))
+        .await
+        .unwrap();
+    assert_eq!(
+        remaining.projects[0].description.as_deref(),
+        Some("migrated search")
+    );
+    assert_eq!(
+        remaining.claim_sources(claim(&remaining, "Built Migration (migrated search)")),
+        vec![Origin::Resume]
+    );
+    assert!(!remaining.claims.iter().any(
+        |c| c.text == "Built Migration (migrated billing)" && remaining.standing(c).is_usable()
+    ));
+}
+
+#[tokio::test]
+async fn removing_a_primary_source_with_two_different_live_names_clears_its_fields() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let url = "https://github.com/rileyx/shared";
+    let linked = ParsedProject {
+        name: "LinkedIn label".into(),
+        description: Some("LinkedIn-only description".into()),
+        url: Some(url.into()),
+        header: "LinkedIn label".into(),
+        ..ParsedProject::default()
+    };
+    import_linkedin(
+        &repo,
+        "v1",
+        &ParsedResume {
+            projects: vec![linked],
+            ..ParsedResume::default()
+        },
+        1,
+    )
+    .await;
+    let resume_project = ParsedProject {
+        name: "Resume label".into(),
+        url: Some(url.into()),
+        header: "Resume label".into(),
+        ..ParsedProject::default()
+    };
+    service
+        .import_resume(
+            resume_doc("resume"),
+            &ParsedResume {
+                projects: vec![resume_project],
+                ..ParsedResume::default()
+            },
+            at(2),
+        )
+        .await
+        .unwrap();
+    let mut github = snapshot();
+    github.repos = vec![gh_repo(42, "shared", "Rust", at(0))];
+    service.import_github(&github, at(3)).await.unwrap();
+    let (_, data) = service
+        .remove_source(Origin::Linkedin, at(4))
+        .await
+        .unwrap();
+    assert_eq!(data.projects.len(), 1);
+    let project = &data.projects[0];
+    assert_ne!(project.name, "LinkedIn label");
+    assert!(project.name == "Resume label" || project.name == "rileyx/shared");
+    assert_eq!(project.description, None);
+    assert_eq!(
+        data.record_sources(&project.meta),
+        vec![Origin::Resume, Origin::Github]
+    );
+}
+
+#[tokio::test]
+async fn github_rename_keeps_a_resume_owned_project_identity() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let mut parsed = resume();
+    parsed.projects.push(ParsedProject {
+        name: "old".into(),
+        url: Some("https://github.com/rileyx/old".into()),
+        header: "old — https://github.com/rileyx/old".into(),
+        ..ParsedProject::default()
+    });
+    service
+        .import_resume(resume_doc("resume"), &parsed, at(1))
+        .await
+        .unwrap();
+    let mut github = snapshot();
+    github.repos = vec![gh_repo(42, "old", "Rust", at(0))];
+    let (_, first) = service.import_github(&github, at(2)).await.unwrap();
+    let id = first.projects[0].id;
+    github.repos[0].name = "new".into();
+    github.repos[0].full_name = "rileyx/new".into();
+    github.repos[0].html_url = "https://github.com/rileyx/new".into();
+    let (_, second) = service.import_github(&github, at(3)).await.unwrap();
+    assert_eq!(second.projects.len(), 1);
+    assert_eq!(second.projects[0].id, id);
+    assert_eq!(
+        second.projects[0].url.as_deref(),
+        Some("https://github.com/rileyx/new")
+    );
+    // A later resume drops its project. GitHub keeps the same logical
+    // record, and the GitHub URL must not revert to the absent resume URL.
+    let (_, third) = service
+        .import_resume(resume_doc("resume-new"), &resume(), at(4))
+        .await
+        .unwrap();
+    assert_eq!(third.projects.len(), 1);
+    assert_eq!(third.projects[0].id, id);
+    assert_eq!(
+        third.projects[0].url.as_deref(),
+        Some("https://github.com/rileyx/new")
+    );
+    assert_eq!(
+        third.record_sources(&third.projects[0].meta),
+        vec![Origin::Github]
+    );
+}
+
+#[tokio::test]
+async fn removed_linkedin_is_not_current_support_for_a_surviving_skill() {
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    let linked = ParsedResume {
+        skills: vec![ParsedSkillLine {
+            category: None,
+            skills: vec!["Rust".into()],
+            line: "Rust".into(),
+        }],
+        ..ParsedResume::default()
+    };
+    import_linkedin(&repo, "v1", &linked, 1).await;
+    service.import_github(&snapshot(), at(2)).await.unwrap();
+    let (_, data) = service
+        .remove_source(Origin::Linkedin, at(3))
+        .await
+        .unwrap();
+    let rust = data.skills.iter().find(|s| s.key == "rust").unwrap();
+    assert!(!data.record_sources(&rust.meta).contains(&Origin::Linkedin));
+    assert_eq!(
+        data.skill_evidence(rust).strength,
+        EvidenceStrength::Unsupported
+    );
+
+    let repo = MemoryProfiles::default();
+    let service = ProfileService::new(&repo);
+    import_linkedin(&repo, "v1", &linked, 1).await;
+    let (_, data) = service.import_github(&snapshot(), at(2)).await.unwrap();
+    let rejected: Vec<String> = data
+        .claims
+        .iter()
+        .filter(|c| {
+            c.topic.as_deref() == Some("rust") && data.claim_sources(c).contains(&Origin::Github)
+        })
+        .map(|c| c.id.to_string())
+        .collect();
+    service
+        .decide_claims(&rejected, Verification::Rejected, None, at(3))
+        .await
+        .unwrap();
+    let (_, data) = service
+        .remove_source(Origin::Linkedin, at(4))
+        .await
+        .unwrap();
+    assert!(
+        data.skills
+            .iter()
+            .all(|s| s.key != "rust" || s.meta.is_stale())
+    );
+}
+
+#[tokio::test]
+async fn export_version_tracks_incompatible_source_data() {
+    let legacy =
+        ProfileExport::from_data(&with_resume(&MemoryProfiles::default()).await, at(2), None);
+    assert_eq!(legacy.version, 1);
+    assert!(ProfileExport::parse(&legacy.to_json().unwrap()).is_ok());
+    let repo = MemoryProfiles::default();
+    import_linkedin(&repo, "v1", &linkedin(), 1).await;
+    let modern = ProfileService::new(&repo)
+        .export(at(2), None)
+        .await
+        .unwrap();
+    assert_eq!(modern.version, 2);
+    assert!(ProfileExport::parse(&modern.to_json().unwrap()).is_ok());
+    let future = modern
+        .to_json()
+        .unwrap()
+        .replacen("\"version\": 2", "\"version\": 99", 1);
+    assert!(matches!(
+        ProfileExport::parse(&future),
+        Err(ExportError::Version { .. })
+    ));
+
+    // The version check must run before strict schema parsing, as it does
+    // for an older v1 reader confronted with a v2 file.
+    let malformed_future =
+        r#"{"format":"jobhunt.profile","version":99,"profile":{"not":"a profile"}}"#;
+    assert!(matches!(
+        ProfileExport::parse(malformed_future),
+        Err(ExportError::Version { .. })
+    ));
+
+    let source_repo = MemoryProfiles::default();
+    let source_service = ProfileService::new(&source_repo);
+    let before = with_resume(&source_repo).await;
+    let rejected = claim(&before, "Built the settlement pipeline in Rust.").id;
+    source_service
+        .decide_claims(&[rejected.to_string()], Verification::Rejected, None, at(2))
+        .await
+        .unwrap();
+    import_linkedin(&source_repo, "v1", &linkedin(), 3).await;
+    let export = source_service.export(at(4), None).await.unwrap();
+    assert_eq!(export.version, 2);
+    assert!(
+        export
+            .experiences
+            .iter()
+            .any(|e| !e.meta.corroborations.is_empty())
+    );
+    let restored_repo = MemoryProfiles::default();
+    let restored = ProfileService::new(&restored_repo)
+        .import_export(
+            ProfileExport::parse(&export.to_json().unwrap()).unwrap(),
+            at(5),
+        )
+        .await
+        .unwrap();
+    assert_eq!(restored.experiences, export.experiences);
+    assert_eq!(restored.profile.basic_sources, export.profile.basic_sources);
+    assert_eq!(
+        restored.claim(rejected).unwrap().verification,
+        Verification::Rejected
+    );
 }

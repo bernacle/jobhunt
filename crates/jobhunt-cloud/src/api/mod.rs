@@ -1096,7 +1096,7 @@ async fn import_github(
     Body(request): Body<GithubImportRequest>,
 ) -> Result<Json<SourceImportResult>, ApiError> {
     let access = GithubAccess::at(
-        state.config().github_api.clone(),
+        state.config().github_endpoint().map(str::to_owned),
         state.config().github_token.clone(),
     );
     let result = run(state.app_for(&principal), move |app| async move {

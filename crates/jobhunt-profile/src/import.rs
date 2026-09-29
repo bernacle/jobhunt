@@ -55,8 +55,10 @@ use chrono::{DateTime, Utc};
 use jobhunt_core::text::search_key;
 
 use crate::aggregate::ProfileData;
+use crate::basic_support;
 use crate::date::{PartialDate, Period};
 use crate::evidence::{Claim, ClaimKind, Confidence, Provenance, Subject};
+use crate::field_support;
 use crate::ids::{ClaimId, DocumentId, EducationId, ExperienceId, ProfileId, ProjectId, SkillId};
 use crate::infer::{
     domains_in, is_accomplishment, known_technology, ownership_in, role_signals, technologies_in,
@@ -364,7 +366,16 @@ fn merge_basics(
     report: &mut ImportReport,
     now: DateTime<Utc>,
 ) {
+    // GitHub's public API has no career basics to import. In particular,
+    // an empty GitHub snapshot must not become a purported source for them.
+    if origin == Origin::Github {
+        return;
+    }
     let basics = &parsed.basics;
+    let has_resume = data
+        .documents
+        .iter()
+        .any(|d| d.kind.origin() == Origin::Resume);
     let profile = &mut data.profile;
     let mut preserved = false;
     let edited: HashSet<String> = profile.edited_fields.iter().cloned().collect();
@@ -387,9 +398,14 @@ fn merge_basics(
         *target = value.clone();
     };
     assign("name", &mut profile.name, &basics.name);
-    assign("headline", &mut profile.headline, &basics.headline);
-    assign("location", &mut profile.location, &basics.location);
-    assign("summary", &mut profile.summary, &basics.summary);
+    let managed = origin == Origin::Linkedin || !profile.basic_sources.is_empty();
+    if managed {
+        preserved |= basic_support::import(profile, basics, origin, has_resume);
+    } else {
+        assign("headline", &mut profile.headline, &basics.headline);
+        assign("location", &mut profile.location, &basics.location);
+        assign("summary", &mut profile.summary, &basics.summary);
+    }
     if !basics.contacts.is_empty() && !(fill_only && !profile.contacts.is_empty()) {
         if edited.contains("contacts") {
             preserved |= profile.contacts != basics.contacts;
@@ -397,7 +413,7 @@ fn merge_basics(
             profile.contacts = basics.contacts.clone();
         }
     }
-    if !basics.languages.is_empty() && !(fill_only && !profile.languages.is_empty()) {
+    if !managed && !basics.languages.is_empty() && !(fill_only && !profile.languages.is_empty()) {
         if edited.contains("languages") {
             preserved |= profile.languages != basics.languages;
         } else {
@@ -448,6 +464,7 @@ fn new_meta(
         edited_fields: Vec::new(),
         notes,
         corroborations: Vec::new(),
+        source_snapshots: Vec::new(),
         created_at: now,
         updated_at: now,
     }
@@ -718,9 +735,13 @@ fn merge_experiences(
             .notes
             .extend(p.notes.iter().map(|n| format!("{label}: {n}")));
         let position = u32::try_from(i).unwrap_or(u32::MAX);
+        let parsed_fields = field_support::experience(p);
         let (id, how) = match matched[i] {
             Some((idx, Match::Own)) => {
                 let e = &mut data.experiences[idx];
+                if !e.meta.source_snapshots.is_empty() {
+                    field_support::put(&mut e.meta, origin, key.clone(), parsed_fields.clone());
+                }
                 let mut preserved = false;
                 let mut changed = false;
                 let meta = e.meta.clone();
@@ -762,6 +783,14 @@ fn merge_experiences(
                 (e.id, Match::Own)
             }
             Some((idx, how)) => {
+                let previous = data.experiences[idx].clone();
+                field_support::backfill(&previous, &mut data.experiences[idx].meta);
+                field_support::put(
+                    &mut data.experiences[idx].meta,
+                    origin,
+                    key.clone(),
+                    parsed_fields.clone(),
+                );
                 let mut tally = ctx.report.experiences;
                 corroborate(&mut data.experiences[idx].meta, source, &mut tally, ctx);
                 ctx.report.experiences = tally;
@@ -769,7 +798,7 @@ fn merge_experiences(
             }
             None => {
                 let id = ExperienceId::derive(&[&ctx.profile.to_string(), &key]);
-                data.experiences.push(Experience {
+                let mut experience = Experience {
                     id,
                     company: p.company.clone(),
                     title: p.title.clone(),
@@ -780,8 +809,12 @@ fn merge_experiences(
                     location: p.location.clone(),
                     summary: p.summary.clone(),
                     position,
-                    meta: new_meta(origin, key, source, p.notes.clone(), ctx.now),
-                });
+                    meta: new_meta(origin, key.clone(), source, p.notes.clone(), ctx.now),
+                };
+                if origin != Origin::Resume {
+                    field_support::put(&mut experience.meta, origin, key, parsed_fields);
+                }
+                data.experiences.push(experience);
                 ctx.report.experiences.added += 1;
                 (id, Match::Own)
             }
@@ -800,6 +833,15 @@ fn merge_experiences(
         ctx,
     );
     ctx.report.experiences = tally;
+    for e in &mut data.experiences {
+        if !seen_ids.contains(&e.id.to_string())
+            && e.meta.source_snapshots.iter().any(|s| s.origin == origin)
+        {
+            field_support::forget(&mut e.meta, origin);
+            let meta = e.meta.clone();
+            field_support::reconcile(e, &meta, &ctx.documents, field_support::EXPERIENCE_FIELDS);
+        }
+    }
 
     for ((p, id), how) in parsed.iter().zip(&ids).zip(how_matched) {
         let Some(experience) = data.experience(*id).cloned() else {
@@ -1027,7 +1069,11 @@ fn technology_claims(
         ctx.claim(
             subject,
             ClaimKind::Technology,
-            format!("technology|{key}"),
+            match ctx.origin {
+                Origin::Github if listed => format!("repository-code|{key}"),
+                Origin::Github => format!("repository-mention|{key}"),
+                _ => format!("technology|{key}"),
+            },
             text,
             Some(key),
             Provenance::Extracted,
@@ -1080,7 +1126,11 @@ fn domain_claims(subject: Subject, at: &str, texts: &[&str], section: &str, ctx:
         ctx.claim(
             subject,
             ClaimKind::Domain,
-            format!("domain|{domain}"),
+            if ctx.origin == Origin::Github {
+                format!("repository-domain|{domain}")
+            } else {
+                format!("domain|{domain}")
+            },
             text,
             Some(domain.to_owned()),
             Provenance::Inferred,
@@ -1149,7 +1199,12 @@ fn url_key(url: &str) -> Option<String> {
 /// Whether an existing project and a source's entry are clearly the same
 /// project: the same URL, or the same name (as a whole, or the repository
 /// part of `owner/name`).
-fn same_project(x: &Project, p: &ParsedProject) -> bool {
+fn same_project(
+    x: &Project,
+    p: &ParsedProject,
+    experience: Option<ExperienceId>,
+    today: PartialDate,
+) -> bool {
     if let (Some(a), Some(b)) = (
         x.url.as_deref().and_then(url_key),
         p.url.as_deref().and_then(url_key),
@@ -1160,7 +1215,36 @@ fn same_project(x: &Project, p: &ParsedProject) -> bool {
         let key = opt_key(Some(name.rsplit('/').next().unwrap_or(name)));
         (key != "?").then_some(key)
     };
-    short(&x.name).is_some() && short(&x.name) == short(&p.name)
+    if short(&x.name).is_none() || short(&x.name) != short(&p.name) {
+        return false;
+    }
+    // A company conflict is decisive. Otherwise the same linked position
+    // or an exact, substantial description supplies the missing context;
+    // name alone never does.
+    if x.experience.is_some() && experience.is_some() && x.experience != experience {
+        return false;
+    }
+    let same_description = x
+        .description
+        .as_deref()
+        .zip(p.description.as_deref())
+        .is_some_and(|(a, b)| {
+            let a = search_key(a);
+            a.len() >= 20 && a == search_key(b)
+        });
+    if x.experience.is_none_or(|linked| Some(linked) != experience) && !same_description {
+        return false;
+    }
+    let theirs = Period {
+        start: p.start,
+        end: p.end,
+        current: p.current,
+    };
+    !(x.period().start.is_some()
+        && (x.period().current || x.period().end.is_some())
+        && theirs.start.is_some()
+        && (theirs.current || theirs.end.is_some()))
+        || x.period().overlaps(&theirs, today)
 }
 
 fn merge_projects(
@@ -1194,16 +1278,30 @@ fn merge_projects(
                 .and_then(|e| e.company.as_deref())
                 .is_some_and(|company| contains_words(&text, company))
         });
+        let parsed_fields = field_support::project(p, experience);
         let own = data.projects.iter().position(|x| {
             x.meta.origin == origin && x.meta.import_key.as_deref() == Some(key.as_str())
         });
         let other = || -> Result<Option<usize>, usize> {
+            if let Some(idx) = data
+                .projects
+                .iter()
+                .enumerate()
+                .find(|(idx, x)| {
+                    !taken.contains(idx) && field_support::has_key(&x.meta, origin, &key)
+                })
+                .map(|(idx, _)| idx)
+            {
+                return Ok(Some(idx));
+            }
             let candidates: Vec<usize> = data
                 .projects
                 .iter()
                 .enumerate()
                 .filter(|(idx, x)| {
-                    !taken.contains(idx) && may_match(origin, x.meta.origin) && same_project(x, p)
+                    !taken.contains(idx)
+                        && may_match(origin, x.meta.origin)
+                        && same_project(x, p, experience, PartialDate::of(ctx.now))
                 })
                 .map(|(idx, _)| idx)
                 .collect();
@@ -1217,6 +1315,9 @@ fn merge_projects(
             (Some(idx), _) => {
                 taken.insert(idx);
                 let x = &mut data.projects[idx];
+                if !x.meta.source_snapshots.is_empty() {
+                    field_support::put(&mut x.meta, origin, key.clone(), parsed_fields.clone());
+                }
                 let meta = x.meta.clone();
                 let mut preserved = false;
                 let mut changed = false;
@@ -1257,6 +1358,24 @@ fn merge_projects(
             }
             (None, Ok(Some(idx))) => {
                 taken.insert(idx);
+                let previous = data.projects[idx].clone();
+                field_support::backfill(&previous, &mut data.projects[idx].meta);
+                if origin == Origin::Github && !data.projects[idx].meta.is_edited("url") {
+                    let prior_url = field_support::snapshot(&data.projects[idx].meta, origin)
+                        .and_then(|s| s.fields.get("url"))
+                        .and_then(serde_json::Value::as_str);
+                    if prior_url == data.projects[idx].url.as_deref()
+                        && prior_url != p.url.as_deref()
+                    {
+                        data.projects[idx].url = p.url.clone();
+                    }
+                }
+                field_support::put(
+                    &mut data.projects[idx].meta,
+                    origin,
+                    key.clone(),
+                    parsed_fields.clone(),
+                );
                 let mut tally = ctx.report.projects;
                 corroborate(&mut data.projects[idx].meta, source, &mut tally, ctx);
                 ctx.report.projects = tally;
@@ -1270,7 +1389,7 @@ fn merge_projects(
                     ));
                 }
                 let id = ProjectId::derive(&[&ctx.profile.to_string(), &key]);
-                data.projects.push(Project {
+                let mut project = Project {
                     id,
                     name: p.name.clone(),
                     description: p.description.clone(),
@@ -1281,8 +1400,12 @@ fn merge_projects(
                     current: p.current,
                     experience,
                     position,
-                    meta: new_meta(origin, key, source, p.notes.clone(), ctx.now),
-                });
+                    meta: new_meta(origin, key.clone(), source, p.notes.clone(), ctx.now),
+                };
+                if origin != Origin::Resume {
+                    field_support::put(&mut project.meta, origin, key, parsed_fields);
+                }
+                data.projects.push(project);
                 ctx.report.projects.added += 1;
                 id
             }
@@ -1300,6 +1423,24 @@ fn merge_projects(
         ctx,
     );
     ctx.report.projects = tally;
+    for project in &mut data.projects {
+        if !seen_ids.contains(&project.id.to_string())
+            && project
+                .meta
+                .source_snapshots
+                .iter()
+                .any(|s| s.origin == origin)
+        {
+            field_support::forget(&mut project.meta, origin);
+            let meta = project.meta.clone();
+            field_support::reconcile(
+                project,
+                &meta,
+                &ctx.documents,
+                field_support::PROJECT_FIELDS,
+            );
+        }
+    }
     for (id, p) in ids {
         let subject = Subject::Project(id);
         let section = "Projects";
@@ -1387,6 +1528,7 @@ fn merge_education(data: &mut ProfileData, parsed: &[ParsedEducation], ctx: &mut
         let position = u32::try_from(i).unwrap_or(u32::MAX);
         let institution = opt_key(Some(&p.institution));
         let degree = opt_key(p.degree.as_deref());
+        let parsed_fields = field_support::education(p);
         let found = data
             .education
             .iter()
@@ -1430,6 +1572,9 @@ fn merge_education(data: &mut ProfileData, parsed: &[ParsedEducation], ctx: &mut
             (Some(idx), _) => {
                 taken.insert(idx);
                 let x = &mut data.education[idx];
+                if !x.meta.source_snapshots.is_empty() {
+                    field_support::put(&mut x.meta, origin, key.clone(), parsed_fields.clone());
+                }
                 let meta = x.meta.clone();
                 let mut preserved = false;
                 let mut changed = false;
@@ -1462,6 +1607,14 @@ fn merge_education(data: &mut ProfileData, parsed: &[ParsedEducation], ctx: &mut
             }
             (None, Some([idx])) => {
                 taken.insert(*idx);
+                let previous = data.education[*idx].clone();
+                field_support::backfill(&previous, &mut data.education[*idx].meta);
+                field_support::put(
+                    &mut data.education[*idx].meta,
+                    origin,
+                    key.clone(),
+                    parsed_fields.clone(),
+                );
                 let mut tally = ctx.report.education;
                 corroborate(&mut data.education[*idx].meta, source, &mut tally, ctx);
                 ctx.report.education = tally;
@@ -1476,7 +1629,7 @@ fn merge_education(data: &mut ProfileData, parsed: &[ParsedEducation], ctx: &mut
                     ));
                 }
                 let id = EducationId::derive(&[&ctx.profile.to_string(), &key]);
-                data.education.push(Education {
+                let mut education = Education {
                     id,
                     institution: p.institution.clone(),
                     degree: p.degree.clone(),
@@ -1485,8 +1638,12 @@ fn merge_education(data: &mut ProfileData, parsed: &[ParsedEducation], ctx: &mut
                     end: p.end,
                     current: p.current,
                     position,
-                    meta: new_meta(origin, key, source, p.notes.clone(), ctx.now),
-                });
+                    meta: new_meta(origin, key.clone(), source, p.notes.clone(), ctx.now),
+                };
+                if origin != Origin::Resume {
+                    field_support::put(&mut education.meta, origin, key, parsed_fields);
+                }
+                data.education.push(education);
                 ctx.report.education.added += 1;
                 id
             }
@@ -1504,6 +1661,24 @@ fn merge_education(data: &mut ProfileData, parsed: &[ParsedEducation], ctx: &mut
         ctx,
     );
     ctx.report.education = tally;
+    for education in &mut data.education {
+        if !seen_ids.contains(&education.id.to_string())
+            && education
+                .meta
+                .source_snapshots
+                .iter()
+                .any(|s| s.origin == origin)
+        {
+            field_support::forget(&mut education.meta, origin);
+            let meta = education.meta.clone();
+            field_support::reconcile(
+                education,
+                &meta,
+                &ctx.documents,
+                field_support::EDUCATION_FIELDS,
+            );
+        }
+    }
     for (id, p) in ids {
         let what = match (&p.degree, &p.field) {
             (Some(d), Some(f)) => format!("{d} in {f}, {}", p.institution),
@@ -1618,7 +1793,56 @@ fn merge_claims(
 ) {
     let mut seen: HashSet<ClaimId> = HashSet::new();
     let mut new_claims: Vec<Claim> = Vec::new();
-    for candidate in candidates {
+    for mut candidate in candidates {
+        let Some(key) = candidate.import_key.clone() else {
+            continue;
+        };
+        // A hand-corrected assertion replaces the imported wording for
+        // this subject and topic. Re-import must not attach the old source
+        // to the user's new words or resurrect the superseded assertion.
+        if data.claims.iter().any(|c| {
+            c.provenance == Provenance::UserEntered
+                && c.edited
+                && c.import_key.as_deref() == Some(key.as_str())
+                && (c.text != candidate.text || !states_the_record(&candidate))
+        }) {
+            continue;
+        }
+        // A shared logical record can have different source statements
+        // (for example, project descriptions). One source must never take
+        // over another source's words merely because the claim key matches.
+        let distinct_key = format!("{key}|assertion|{}", origin.as_str());
+        let already_distinct = data
+            .claims
+            .iter()
+            .any(|c| c.import_key.as_deref() == Some(distinct_key.as_str()));
+        let differing_shared = data.claims.iter().any(|c| {
+            c.import_key.as_deref() == Some(key.as_str()) && c.text != candidate.text && {
+                let sources = crate::support::supporting_origins(
+                    documents,
+                    c.source.as_ref(),
+                    &c.corroborations,
+                    if c.provenance == Provenance::UserEntered {
+                        Origin::User
+                    } else {
+                        Origin::Resume
+                    },
+                    c.stale_since.is_some(),
+                );
+                sources.iter().any(|source| *source != origin)
+            }
+        });
+        if already_distinct || differing_shared {
+            if let Some(base) = data
+                .claims
+                .iter_mut()
+                .find(|c| c.import_key.as_deref() == Some(key.as_str()))
+            {
+                Support::of_claim(base).detach(origin, documents, now);
+            }
+            candidate.import_key = Some(distinct_key.clone());
+            candidate.id = ClaimId::derive(&[&data.id().to_string(), &distinct_key]);
+        }
         let Some(key) = candidate.import_key.clone() else {
             continue;
         };
@@ -1634,6 +1858,7 @@ fn merge_claims(
                     c.provenance == Provenance::UserEntered
                         && c.subject == candidate.subject
                         && c.kind == candidate.kind
+                        && c.text == candidate.text
                 })
             {
                 seen.insert(user.id);

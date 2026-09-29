@@ -29,15 +29,17 @@ These held before LinkedIn and GitHub imports existed (resume import only,
 `crates/jobhunt-profile/src/import.rs`), and still hold:
 
 1. **Records** (experiences, projects, education, skills) carry a
-   `RecordMeta`: an `origin` (`resume` or `user`), the `source` they were
+   `RecordMeta`: an `origin` (`resume`, `linkedin`, `github`, or `user`), the `source` they were
    read from (document + verbatim snippet + section), an `import_key`
    identifying them across re-imports, the person's `verification`,
-   `stale_since`, and `edited_fields` a re-import never overwrites.
+   `stale_since`, and `edited_fields` a re-import never overwrites. Shared
+   records also retain each source's exact field values.
 2. **Claims** are keyed by *what they are about and what they say*: the
    subject's id plus the bullet's normalized words, or the technology,
    domain or role topic (`exp_…|technology|rust`). The key does not
-   depend on the document, so the same statement found again is the same
-   claim.
+   depend on the document when the assertion is the same. Repository code
+   presence and personal use have different identities, as do materially
+   different source statements.
 3. **The evidence policy** (`Claim::standing`) decides what may be used:
    rejected claims never; a claim whose source disappeared needs review
    even if it was confirmed (until confirmed again); confirmed and
@@ -87,13 +89,13 @@ name, and never the rest of the archive:
 
 | File | Read | Becomes |
 | --- | --- | --- |
-| `Profile.csv` | Headline, Summary, Geo Location, Websites | headline/summary/location when the profile has none; websites as claims |
+| `Profile.csv` | Headline, Summary, Geo Location, Websites | source-owned headline/summary/location; websites as claims |
 | `Positions.csv` | Company Name, Title, Description, Location, Started On, Finished On | experiences, employment claims, description sentences, technologies, inferred domains/roles |
 | `Education.csv` | School Name, Degree Name, Start Date, End Date | education |
 | `Skills.csv` | Name | skill claims |
 | `Certifications.csv` | Name, Authority, Started On, Finished On | certification claims |
 | `Projects.csv` | Title, Description, Url, Started On, Finished On | projects |
-| `Languages.csv` | Name, Proficiency | spoken languages when the profile has none |
+| `Languages.csv` | Name, Proficiency | source-owned spoken languages |
 
 Everything else (messages, connections, invitations, contacts, email
 addresses, phone numbers, ads, search history, recommendations, …) is never
@@ -161,7 +163,8 @@ Matching across sources is conservative:
 
 - **experiences:** same company and same title (normalized), and periods
   that overlap (unknown dates do not conflict); exactly one candidate.
-- **projects:** same URL, or same name with exactly one candidate.
+- **projects:** same URL, or same name with compatible experience or an
+  exact substantial description and no conflicting period.
 - **education:** same institution and same degree.
 - **claims:** the same key (same subject, same statement or topic).
 
@@ -173,9 +176,10 @@ Present)") with medium confidence and the difference as its basis, so it
 waits in the review queue. A different title at the same company is a
 different position until the person says otherwise.
 
-There is no source precedence. The source that created a record owns its
-fields (a re-import of that source updates them); other sources only add
-evidence. Fields the person edited are never overwritten by anyone.
+There is no source precedence. Each source's field values are retained on
+shared records. Removing a source keeps a displayed value only if a live
+source states that value; a sole surviving value can replace it. Fields
+the person edited are never overwritten by anyone.
 Records the person added are matched too (LinkedIn/GitHub add evidence to
 them) but never changed.
 
@@ -193,6 +197,11 @@ changes:
 - confirmed claims stay confirmed, rejected ones stay rejected and are
   never resurrected, edits are kept.
 
+A partial LinkedIn export cannot replace a source whose retained career
+categories it omits. Older BRU-309 documents use the career sections in
+their retained text for this check. A user correction to a claim becomes
+a manual assertion; the imported source is not credited with the new words.
+
 ## Removing a source
 
 `narrow profile remove-source linkedin|github` (and the web's Remove
@@ -202,9 +211,9 @@ button) takes a source out:
 - records and claims that other sources also support stay, and their
   provenance moves to the remaining source;
 - records and claims only this source supported are deleted, unless the
-  person decided about them (confirmed, rejected, edited): those are kept
-  without a source, stale, so a confirmation needs renewing before use
-  and a rejection keeps protecting against a later re-import;
+  person decided about them: confirmed or rejected imports are kept stale
+  (confirmations need renewing; rejections still protect re-imports), and
+  manual corrections remain user assertions;
 - what the person entered is never touched.
 
 Resumes are not removed this way; import an updated resume instead.
@@ -242,9 +251,10 @@ widened without rebuilding tables other tables reference, so the legacy
 columns keep a value they accept (`resume`, `text`) and the new column
 says which source it really is. Existing rows read exactly as before.
 Postgres stores profile entities as sealed JSON and needs no migration.
-The export format stays version 1: a profile without the new sources
-writes the same file; one with them uses optional additions older
-versions refuse with a schema error.
+Profiles with only legacy data still export as version 1. Exports containing
+LinkedIn or GitHub sources, corroborations, or source-specific field ownership
+use version 2. Current Narrow imports either version; older readers reject
+version 2 at the version check.
 
 ## Commands, API and web
 
@@ -262,9 +272,11 @@ claims review`, Profile → Review).
 - LinkedIn exports are parsed from the columns LinkedIn used when this was
   written (2026); a changed layout fails clearly rather than guessing.
   Field of study is not a separate column (it stays inside the degree).
-- LinkedIn fills the headline, summary, location and spoken languages
-  only when the profile has none; removing the LinkedIn source does not
-  clear those basics (edit them with `narrow profile edit basics`).
+- LinkedIn can fill headline, summary, location and spoken languages. A
+  later export refreshes LinkedIn-owned values; removing the source clears
+  values only it supplied and keeps manual edits or values another source
+  still supplies. A partial CSV cannot replace a full LinkedIn export if it
+  omits categories from that export.
 - Web uploads are limited to 16 MB (the API's body limit); the CLI reads
   any size from disk, opening only the career files.
 - GitHub: only repositories the account owns. Contributions to others'

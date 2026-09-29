@@ -541,6 +541,13 @@ impl CloudConfig {
         self.environment.eq_ignore_ascii_case("production")
     }
 
+    /// Development fixture endpoint; production always uses GitHub's API.
+    pub fn github_endpoint(&self) -> Option<&str> {
+        (!self.is_production())
+            .then_some(self.github_api.as_deref())
+            .flatten()
+    }
+
     /// The database URL (a secret: never log it).
     pub fn database_url(&self) -> Option<&str> {
         self.database_url.as_deref()
@@ -558,6 +565,9 @@ impl CloudConfig {
     /// Everything wrong for `role`, as sentences. Empty means ready.
     pub fn problems(&self, role: Role) -> Vec<String> {
         let mut out = self.problems.clone();
+        if self.is_production() && self.github_api.is_some() {
+            out.push("JOBHUNT_GITHUB_ENDPOINT is refused in production; GitHub imports use the official HTTPS API".into());
+        }
         if self.database_url.is_none() {
             out.push("DATABASE_URL is not set (use ${{Postgres.DATABASE_URL}} on Railway)".into());
         }
@@ -845,6 +855,37 @@ mod tests {
             ),
         ]);
         assert!(staging.problems(Role::Server).is_empty());
+    }
+
+    #[test]
+    fn production_refuses_github_endpoint_override_before_a_token_can_be_used() {
+        let production = config(&[
+            ("JOBHUNT_ENV", "production"),
+            ("JOBHUNT_GITHUB_TOKEN", "secret-test-token"),
+            ("JOBHUNT_GITHUB_ENDPOINT", "http://127.0.0.1:9876"),
+        ]);
+        assert!(
+            production
+                .problems(Role::Server)
+                .iter()
+                .any(|p| p.contains("JOBHUNT_GITHUB_ENDPOINT") && p.contains("production"))
+        );
+        assert_eq!(
+            production.github_endpoint(),
+            None,
+            "a token can only go to the official endpoint"
+        );
+        let development = config(&[
+            ("JOBHUNT_ENV", "development"),
+            ("JOBHUNT_GITHUB_ENDPOINT", "http://127.0.0.1:9876"),
+        ]);
+        assert!(
+            !development
+                .problems(Role::Server)
+                .iter()
+                .any(|p| p.contains("JOBHUNT_GITHUB_ENDPOINT"))
+        );
+        assert_eq!(development.github_endpoint(), Some("http://127.0.0.1:9876"));
     }
 
     #[test]

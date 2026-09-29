@@ -15,6 +15,8 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
 
 use crate::date::{PartialDate, Period};
 use crate::ids::{DocumentId, EducationId, ExperienceId, ProfileId, ProjectId, SkillId};
@@ -117,6 +119,17 @@ pub struct SourceRef {
     pub section: Option<String>,
 }
 
+/// Field values one imported source actually stated for a logical record.
+/// These are kept separately from the displayed values so removing a source
+/// can reconcile fields without attributing its words to another source.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecordSourceSnapshot {
+    pub origin: Origin,
+    pub import_key: String,
+    pub fields: BTreeMap<String, Value>,
+}
+
 /// Bookkeeping shared by experiences, projects, education and skills.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -143,6 +156,10 @@ pub struct RecordMeta {
     /// See [`crate::support`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub corroborations: Vec<SourceRef>,
+    /// Source-specific field values and stable source identities for a
+    /// shared record. Empty on legacy single-resume records.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_snapshots: Vec<RecordSourceSnapshot>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -158,6 +175,7 @@ impl RecordMeta {
             edited_fields: Vec::new(),
             notes: Vec::new(),
             corroborations: Vec::new(),
+            source_snapshots: Vec::new(),
             created_at: now,
             updated_at: now,
         }
@@ -223,6 +241,21 @@ pub struct SpokenLanguage {
     pub level: Option<String>,
 }
 
+/// Basic profile values actually supplied by one imported source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BasicSourceSnapshot {
+    pub origin: Origin,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub headline: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub languages: Vec<SpokenLanguage>,
+}
+
 /// Who the user is, briefly. Contact details are kept only because resumes
 /// contain them; JobHunt does not need them for anything yet.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -244,6 +277,9 @@ pub struct Profile {
     /// Basics the user set by hand (`name`, `headline`, ...).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub edited_fields: Vec<String>,
+    /// Present only once a non-resume source has contributed basics.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub basic_sources: Vec<BasicSourceSnapshot>,
     /// Incremented by every change; guards against concurrent writers.
     pub revision: u64,
     pub created_at: DateTime<Utc>,
@@ -261,6 +297,7 @@ impl Profile {
             contacts: Vec::new(),
             languages: Vec::new(),
             edited_fields: Vec::new(),
+            basic_sources: Vec::new(),
             revision: 0,
             created_at: now,
             updated_at: now,
@@ -542,8 +579,8 @@ pub enum EvidenceStrength {
     Listed,
     /// The user said so.
     UserStated,
-    /// Used in at least one experience or project, with the source's words
-    /// (a resume bullet, a LinkedIn description, a repository's code).
+    /// Personal use in an experience or project, backed by a resume,
+    /// LinkedIn export or user evidence; repository code alone is weaker.
     Demonstrated,
 }
 

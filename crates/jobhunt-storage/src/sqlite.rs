@@ -118,11 +118,28 @@ impl SqliteJobStore {
             .synchronous(SqliteSynchronous::Normal)
             .foreign_keys(true)
             .busy_timeout(Duration::from_secs(5));
-        let pool = SqlitePoolOptions::new()
-            .max_connections(4)
-            .connect_with(options)
-            .await
-            .map_err(|e| open_error(Box::new(e)))?;
+        // Journal setup can race another process opening this database for
+        // the first time. The busy timeout does not cover every PRAGMA lock,
+        // so retry only SQLite lock errors before running migrations.
+        let mut attempt = 0;
+        let pool = loop {
+            match SqlitePoolOptions::new()
+                .max_connections(4)
+                .connect_with(options.clone())
+                .await
+            {
+                Ok(pool) => break pool,
+                Err(error)
+                    if attempt < MIGRATION_ATTEMPTS
+                        && matches!(&error, sqlx::Error::Database(db) if matches!(db.code().as_deref(), Some("5" | "6"))) =>
+                {
+                    attempt += 1;
+                    debug!(%error, attempt, "database opening raced another process; retrying");
+                    tokio::time::sleep(Duration::from_millis(50 * u64::from(attempt))).await;
+                }
+                Err(error) => return Err(open_error(Box::new(error))),
+            }
+        };
         Self::initialize(pool, location).await
     }
 

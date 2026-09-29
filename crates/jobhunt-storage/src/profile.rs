@@ -167,6 +167,7 @@ impl<'r> Cols<'r> {
             edited_fields: self.json("edited_fields")?,
             notes: self.json("notes")?,
             corroborations: self.json("corroborations")?,
+            source_snapshots: self.json("source_snapshots")?,
             created_at: self.time("created_at")?,
             updated_at: self.time("updated_at")?,
         })
@@ -207,6 +208,8 @@ fn bind_meta<'q>(
     let notes = serde_json::to_string(&meta.notes).map_err(encode_error("encoding a record"))?;
     let corroborations =
         serde_json::to_string(&meta.corroborations).map_err(encode_error("encoding a record"))?;
+    let source_snapshots =
+        serde_json::to_string(&meta.source_snapshots).map_err(encode_error("encoding a record"))?;
     let (origin, import_origin) = origin_columns(meta.origin);
     Ok(q.bind(origin)
         .bind(meta.source.as_ref().map(|s| s.document.to_string()))
@@ -220,10 +223,11 @@ fn bind_meta<'q>(
         .bind(encode_timestamp(meta.created_at))
         .bind(encode_timestamp(meta.updated_at))
         .bind(import_origin)
-        .bind(corroborations))
+        .bind(corroborations)
+        .bind(source_snapshots))
 }
 
-const META_COLUMNS: [&str; 13] = [
+const META_COLUMNS: [&str; 14] = [
     "origin",
     "document_id",
     "source_snippet",
@@ -237,6 +241,7 @@ const META_COLUMNS: [&str; 13] = [
     "updated_at",
     "import_origin",
     "corroborations",
+    "source_snapshots",
 ];
 
 /// `INSERT … ON CONFLICT (id) DO UPDATE` over `columns` (the first is `id`).
@@ -284,6 +289,7 @@ impl SqliteJobStore {
             contacts: c.json::<Vec<Contact>>("contacts")?,
             languages: c.json::<Vec<SpokenLanguage>>("languages")?,
             edited_fields: c.json("edited_fields")?,
+            basic_sources: c.json("basic_sources")?,
             revision: u64::try_from(c.int("revision")?)
                 .map_err(|e| corrupt(&pid, e.to_string()))?,
             created_at: c.time("created_at")?,
@@ -564,6 +570,7 @@ async fn write_profile(
             "contacts",
             "languages",
             "edited_fields",
+            "basic_sources",
             "revision",
             "created_at",
             "updated_at",
@@ -577,6 +584,7 @@ async fn write_profile(
     .bind(serde_json::to_string(&p.contacts).map_err(enc)?)
     .bind(serde_json::to_string(&p.languages).map_err(encode_error("encoding a profile"))?)
     .bind(serde_json::to_string(&p.edited_fields).map_err(encode_error("encoding a profile"))?)
+    .bind(serde_json::to_string(&p.basic_sources).map_err(encode_error("encoding a profile"))?)
     .bind(i64::try_from(p.revision).unwrap_or(i64::MAX))
     .bind(encode_timestamp(p.created_at))
     .bind(encode_timestamp(p.updated_at))

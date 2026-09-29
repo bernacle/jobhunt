@@ -148,6 +148,10 @@ fn reads_the_career_files_of_an_export_folder() {
     let doc = export.source_document(chrono::Utc::now());
     assert_eq!(doc.kind, jobhunt_profile::DocumentKind::Linkedin);
     assert_eq!(doc.sha256.len(), 64);
+    assert_eq!(
+        doc.parser,
+        "linkedin-export/1;categories=Profile,Positions,Education,Skills,Certifications,Projects,Languages"
+    );
 }
 
 #[test]

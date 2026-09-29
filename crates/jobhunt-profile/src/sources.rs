@@ -20,7 +20,9 @@ use std::collections::HashSet;
 use chrono::{DateTime, Utc};
 
 use crate::aggregate::ProfileData;
+use crate::basic_support;
 use crate::evidence::{ClaimKind, Provenance, Subject};
+use crate::field_support;
 use crate::ids::{ClaimId, EducationId, ExperienceId, ProjectId};
 use crate::import::{ImportReport, document_index, merge_source, source_document_id};
 use crate::model::{Origin, RecordMeta, SourceDocument, Verification};
@@ -207,6 +209,13 @@ pub fn remove_source(
         if release(&mut e.meta, Subject::Experience(e.id)) {
             deleted_experiences.insert(e.id);
         }
+        if cited {
+            field_support::forget(&mut e.meta, origin);
+            if e.meta.stale_since.is_none() {
+                let meta = e.meta.clone();
+                field_support::reconcile(e, &meta, &documents, field_support::EXPERIENCE_FIELDS);
+            }
+        }
     }
     for p in &mut data.projects {
         let cited = cites(
@@ -219,6 +228,13 @@ pub fn remove_source(
         if release(&mut p.meta, Subject::Project(p.id)) {
             deleted_projects.insert(p.id);
         }
+        if cited {
+            field_support::forget(&mut p.meta, origin);
+            if p.meta.stale_since.is_none() {
+                let meta = p.meta.clone();
+                field_support::reconcile(p, &meta, &documents, field_support::PROJECT_FIELDS);
+            }
+        }
     }
     for x in &mut data.education {
         let cited = cites(
@@ -230,6 +246,13 @@ pub fn remove_source(
         touched += usize::from(cited);
         if release(&mut x.meta, Subject::Education(x.id)) {
             deleted_education.insert(x.id);
+        }
+        if cited {
+            field_support::forget(&mut x.meta, origin);
+            if x.meta.stale_since.is_none() {
+                let meta = x.meta.clone();
+                field_support::reconcile(x, &meta, &documents, field_support::EDUCATION_FIELDS);
+            }
         }
     }
     data.experiences
@@ -267,10 +290,38 @@ pub fn remove_source(
         .claims
         .iter()
         .filter(|c| {
-            c.stale_since.is_none() && matches!(c.kind, ClaimKind::Technology | ClaimKind::Skill)
+            c.stale_since.is_none()
+                && c.verification != Verification::Rejected
+                && matches!(c.kind, ClaimKind::Technology | ClaimKind::Skill)
         })
         .filter_map(|c| c.topic.clone())
         .collect();
+    let mut skill_origins = std::collections::HashMap::<String, Vec<Origin>>::new();
+    for claim in data.claims.iter().filter(|c| {
+        c.stale_since.is_none()
+            && c.verification != Verification::Rejected
+            && matches!(c.kind, ClaimKind::Technology | ClaimKind::Skill)
+    }) {
+        if let Some(topic) = &claim.topic {
+            let origins = crate::support::supporting_origins(
+                &documents,
+                claim.source.as_ref(),
+                &claim.corroborations,
+                if claim.provenance == Provenance::UserEntered {
+                    Origin::User
+                } else {
+                    Origin::Resume
+                },
+                false,
+            );
+            let entry = skill_origins.entry(topic.clone()).or_default();
+            for source in origins {
+                if source != origin && !entry.contains(&source) {
+                    entry.push(source);
+                }
+            }
+        }
+    }
     data.skills.retain(|s| {
         !(s.meta.origin == origin
             && !live.contains(&s.key)
@@ -278,6 +329,20 @@ pub fn remove_source(
             && s.meta.edited_fields.is_empty())
     });
     for s in &mut data.skills {
+        if s.meta.origin == origin
+            && let Some(next) = skill_origins
+                .get(&s.key)
+                .and_then(|sources| sources.first())
+        {
+            s.meta.origin = *next;
+            s.meta.source = None;
+            s.meta.corroborations.clear();
+            if !s.meta.is_edited("category") {
+                s.category = crate::infer::known_technology(&s.key)
+                    .map(|technology| technology.category.to_owned());
+            }
+            s.meta.updated_at = now;
+        }
         if s.meta.origin.is_imported() && !live.contains(&s.key) && s.meta.stale_since.is_none() {
             s.meta.stale_since = Some(now);
             s.meta.updated_at = now;
@@ -285,6 +350,9 @@ pub fn remove_source(
     }
 
     data.documents.retain(|d| !gone.contains(&d.id));
+    if origin == Origin::Linkedin {
+        basic_support::remove(&mut data.profile, origin);
+    }
     data.profile.updated_at = now;
     Some(out)
 }
