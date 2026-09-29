@@ -1,7 +1,7 @@
 //! Feedback on an opportunity: save, reject, applied, like, …
 //!
 //! Recording goes through [`jobhunt_ranking::RankingService::record`],
-//! the one place feedback is stored, so `jobhunt reject <id> --reason "…"`
+//! the one place feedback is stored, so `narrow reject <id> --reason "…"`
 //! and the MCP `reject_job` tool produce the same event, the same state and
 //! the same learned taste. A repeat of an action whose effect is already in
 //! place (saving a saved job, the same rejection with the same reason) is
@@ -156,7 +156,7 @@ impl FeedbackResult {
             Some("Already recorded: nothing changed.".to_owned())
         } else if r.after.stage == Stage::Rejected {
             Some(format!(
-                "It won't be recommended again. To undo, save it: jobhunt save {}",
+                "It won't be recommended again. To undo, save it: narrow save {}",
                 e.opportunity
             ))
         } else {

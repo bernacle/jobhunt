@@ -1,4 +1,4 @@
-//! `jobhunt doctor`: is everything where it should be, and how does an MCP
+//! `narrow doctor`: is everything where it should be, and how does an MCP
 //! client start this JobHunt?
 
 use std::io::{self, Write};
@@ -39,7 +39,7 @@ async fn cloud_lines(app: &jobhunt_app::App) -> Vec<(bool, String)> {
                         session.user_id,
                         session.kind,
                         if session.expiring(chrono::Utc::now()) && session.refresh_token.is_none() {
-                            "; the session expired, run `jobhunt login`"
+                            "; the session expired, run `narrow login`"
                         } else {
                             ""
                         }
@@ -47,7 +47,7 @@ async fn cloud_lines(app: &jobhunt_app::App) -> Vec<(bool, String)> {
                 )),
                 Ok(None) => lines.push((
                     true,
-                    "Cloud: not signed in (optional; `jobhunt login` to sync)".into(),
+                    "Cloud: not signed in (optional; `narrow login` to sync)".into(),
                 )),
                 Err(e) => lines.push((false, format!("Cloud: {e}"))),
             }
@@ -149,7 +149,7 @@ fn write(out: &mut impl Write, d: &Diagnostics, loaded: &LoadedConfig) -> io::Re
                 plural(p.preferences as u64, "preference", "preferences"),
             ),
         )?,
-        None => ok(out, false, "Profile: none yet (jobhunt init resume.pdf)")?,
+        None => ok(out, false, "Profile: none yet (narrow init resume.pdf)")?,
     }
     ok(
         out,
@@ -184,7 +184,7 @@ fn write(out: &mut impl Write, d: &Diagnostics, loaded: &LoadedConfig) -> io::Re
     writeln!(out)?;
     let exe = std::env::current_exe()
         .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| "jobhunt".to_owned());
+        .unwrap_or_else(|_| "narrow".to_owned());
     let mut args = vec!["mcp".to_owned()];
     if let Some(file) = &loaded.file {
         args.push("--config".into());
@@ -194,7 +194,7 @@ fn write(out: &mut impl Write, d: &Diagnostics, loaded: &LoadedConfig) -> io::Re
     args.push(d.database.display().to_string());
     writeln!(
         out,
-        "MCP: `jobhunt mcp` serves this profile and database over stdio. For a client:"
+        "MCP: `narrow mcp` serves this profile and database over stdio. For a client:"
     )?;
     writeln!(out, "  command: {exe}")?;
     writeln!(

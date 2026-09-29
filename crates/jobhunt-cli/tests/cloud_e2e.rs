@@ -1,5 +1,5 @@
-//! JobHunt Cloud end to end, through the real binary: `jobhunt server`,
-//! `jobhunt migrate`, scheduled workers (two at once) against recorded job
+//! JobHunt Cloud end to end, through the real binary: `narrow server`,
+//! `narrow migrate`, scheduled workers (two at once) against recorded job
 //! boards, and a person's `init` → `login` → `sync` flow on a laptop, with
 //! the laptop working offline before and after.
 //!
@@ -29,9 +29,9 @@ impl Cloud {
         format!("http://127.0.0.1:{}", self.port)
     }
 
-    /// `jobhunt <args>` as a cloud process (configured by environment).
+    /// `narrow <args>` as a cloud process (configured by environment).
     fn command(&self, env: &Env) -> Command {
-        let mut c = Command::new(env!("CARGO_BIN_EXE_jobhunt"));
+        let mut c = Command::new(env!("CARGO_BIN_EXE_narrow"));
         c.env_remove("JOBHUNT_LOG")
             .env_remove("RUST_LOG")
             .env_remove("JOBHUNT_DATABASE")
@@ -56,7 +56,7 @@ impl Cloud {
         let output = self.command(env).args(args).output().unwrap();
         assert!(
             output.status.success(),
-            "jobhunt {args:?} failed:\n{}",
+            "narrow {args:?} failed:\n{}",
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8(output.stdout).unwrap()
@@ -92,7 +92,7 @@ impl Cloud {
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        panic!("jobhunt server did not become ready");
+        panic!("narrow server did not become ready");
     }
 
     fn stop(&mut self) {
@@ -215,7 +215,7 @@ async fn workers_discover_once_and_a_laptop_syncs_with_the_cloud() {
     // Not signed in: sync says so, and nothing else needs the cloud.
     let not_signed = jobhunt(&["sync"]);
     assert!(!not_signed.status.success());
-    assert!(String::from_utf8_lossy(&not_signed.stderr).contains("jobhunt login"));
+    assert!(String::from_utf8_lossy(&not_signed.stderr).contains("narrow login"));
 
     let login = stdout_of(&jobhunt(&["login", "--as", "marina"]), "login");
     assert!(login.contains("Signed in"));

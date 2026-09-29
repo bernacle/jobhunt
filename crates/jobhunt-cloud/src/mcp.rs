@@ -32,9 +32,9 @@ pub fn hosted_instructions() -> String {
             "Narrow is the person's job-search assistant",
         )
         .replace(
-            "Everything is stored locally; these tools work on the same state as the `jobhunt` \
+            "Everything is stored locally; these tools work on the same state as the `narrow` \
 command.",
-            "This is the person's Narrow account, synced with their `jobhunt` command. Job \
+            "This is the person's Narrow account, synced with their `narrow` command. Job \
 boards are read in the background, so searches never wait for them.",
         )
         .replace("what JobHunt believes", "what Narrow believes")

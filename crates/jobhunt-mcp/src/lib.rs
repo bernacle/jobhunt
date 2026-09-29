@@ -1,9 +1,9 @@
 //! The JobHunt MCP server: the local product's use cases, exposed as
 //! Model Context Protocol tools so an assistant (Claude, ChatGPT, Codex,
 //! or any MCP client) can work with the same profile, jobs, rankings and
-//! feedback as the `jobhunt` command.
+//! feedback as the `narrow` command.
 //!
-//! `jobhunt mcp` runs it over stdio: newline-delimited JSON-RPC on stdin
+//! `narrow mcp` runs it over stdio: newline-delimited JSON-RPC on stdin
 //! and stdout, as the MCP specification defines, using the official Rust
 //! SDK (`rmcp`). Stdout carries protocol messages only; logs go to stderr.
 //!
@@ -58,7 +58,7 @@ use serde::Deserialize;
 pub const INSTRUCTIONS: &str = "JobHunt is the person's local job-search assistant: it discovers \
 jobs from company job boards, verifies them at the employer's own sources, checks eligibility \
 against the person's profile, and ranks them by what the person wants and has told it through \
-feedback. Everything is stored locally; these tools work on the same state as the `jobhunt` \
+feedback. Everything is stored locally; these tools work on the same state as the `narrow` \
 command.\n\
 Typical flow: get_feed for what is new since the person last looked (\"find me new jobs\"), \
 or search_jobs for the short list worth their time; get_job or verify_job to \

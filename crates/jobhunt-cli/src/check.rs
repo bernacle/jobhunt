@@ -1,4 +1,4 @@
-//! `jobhunt check`: the full verification and eligibility report of one
+//! `narrow check`: the full verification and eligibility report of one
 //! opportunity, with the evidence behind every reason, from what is stored
 //! (no network unless `--refresh`).
 
@@ -17,7 +17,7 @@ pub struct CheckArgs {
     #[arg(value_name = "ID")]
     pub id: String,
 
-    /// Verify the job's sources first (`jobhunt verify --force`), so the
+    /// Verify the job's sources first (`narrow verify --force`), so the
     /// answer rests on what the company publishes right now.
     #[arg(long)]
     pub refresh: bool,

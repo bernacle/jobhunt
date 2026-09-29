@@ -1,7 +1,7 @@
 //! The local JobHunt application: one composition of configuration,
 //! storage and the domain services, shared by every front-end.
 //!
-//! `jobhunt` commands and the MCP server (`jobhunt mcp`) are both thin
+//! `narrow` commands and the MCP server (`narrow mcp`) are both thin
 //! interfaces over [`LocalApp`]: they parse arguments, call a use case
 //! here, and present the answer. So both read the same configuration, open
 //! the same SQLite database, and reach the same decisions: a job rejected

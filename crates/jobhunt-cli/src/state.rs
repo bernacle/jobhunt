@@ -1,5 +1,5 @@
-//! `jobhunt export` and `jobhunt import`: everything that is yours, as one
-//! versioned file (see [`jobhunt_app::state`]). `jobhunt profile export`
+//! `narrow export` and `narrow import`: everything that is yours, as one
+//! versioned file (see [`jobhunt_app::state`]). `narrow profile export`
 //! remains the profile alone.
 
 use std::io::Write;
@@ -22,7 +22,7 @@ pub struct ExportArgs {
 
 #[derive(Debug, clap::Args)]
 pub struct ImportArgs {
-    /// A file written by `jobhunt export`.
+    /// A file written by `narrow export`.
     #[arg(value_name = "FILE")]
     pub file: PathBuf,
 
@@ -34,7 +34,7 @@ pub struct ImportArgs {
 
 pub async fn export(args: ExportArgs, loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
     with_app!(loaded, |app| {
-        let generator = Some(format!("jobhunt {}", env!("CARGO_PKG_VERSION")));
+        let generator = Some(format!("narrow {}", env!("CARGO_PKG_VERSION")));
         let state = app.export_state(jobhunt_app::now(), generator).await?;
         let json = state.to_json()?;
         match &args.output {

@@ -1,4 +1,4 @@
-//! `jobhunt claims`: the evidence behind the profile.
+//! `narrow claims`: the evidence behind the profile.
 
 use std::io::Write;
 use std::process::ExitCode;

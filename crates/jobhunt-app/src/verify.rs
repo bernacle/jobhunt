@@ -1,4 +1,4 @@
-//! Verification and eligibility of one opportunity, as `jobhunt verify`,
+//! Verification and eligibility of one opportunity, as `narrow verify`,
 //! `check`, `show` and the MCP `verify_job` / `get_job` tools use them.
 
 use std::collections::BTreeSet;

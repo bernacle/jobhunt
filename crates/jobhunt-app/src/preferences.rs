@@ -1,5 +1,5 @@
 //! Updating what the person wants: a statement in their own words, precise
-//! structured values, or removals. `jobhunt preferences add|set|remove`
+//! structured values, or removals. `narrow preferences add|set|remove`
 //! and the MCP `update_preferences` tool both come here, so a preference
 //! means the same thing whichever way it was given.
 //!

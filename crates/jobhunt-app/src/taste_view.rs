@@ -1,7 +1,7 @@
 //! What JobHunt believes the person wants, in two parts kept apart:
 //! what they said (preferences and statements, which always win) and what
 //! it learned from their feedback (patterns, each with its evidence). The
-//! answer of `jobhunt taste --json`'s equivalent, the MCP `get_taste` tool
+//! answer of `narrow taste --json`'s equivalent, the MCP `get_taste` tool
 //! and `GET /api/v1/taste`.
 //!
 //! Nothing is computed here: the patterns, their status and confidence are

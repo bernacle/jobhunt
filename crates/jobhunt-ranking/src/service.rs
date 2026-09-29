@@ -32,8 +32,8 @@ pub enum RankingError {
     #[error(transparent)]
     Profile(#[from] ProfileError),
     #[error(
-        "ranking needs a career profile: run `jobhunt init <resume>` or \
-         `jobhunt preferences set location <place>`"
+        "ranking needs a career profile: run `narrow init <resume>` or \
+         `narrow preferences set location <place>`"
     )]
     NoProfile,
     #[error("no source records to act on")]

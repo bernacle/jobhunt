@@ -31,7 +31,7 @@ export function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
     why: ["Backend roles: a role you want", "Small teams: a kind of company or team you want"],
     consider: ["senior level, a step below your latest title", "The posting doesn't say whether it's product companies"],
     sources: 1,
-    next_step: "jobhunt why opp_01234567",
+    next_step: "narrow why opp_01234567",
     reason: "new",
     stage: "unseen",
     ...overrides,

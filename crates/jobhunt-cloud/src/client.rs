@@ -289,7 +289,7 @@ impl DeviceFlow {
         let missing = |what: &str| {
             AppError::Config(format!(
                 "this JobHunt Cloud server does not support CLI sign-in ({what} is not \
-                 configured); use a personal access token: jobhunt login --token"
+                 configured); use a personal access token: narrow login --token"
             ))
         };
         Ok(Self {
@@ -399,7 +399,7 @@ impl DeviceFlow {
         loop {
             if std::time::Instant::now() > deadline {
                 return Err(AppError::Unauthenticated(
-                    "the sign-in code expired; run `jobhunt login` again".into(),
+                    "the sign-in code expired; run `narrow login` again".into(),
                 ));
             }
             tokio::time::sleep(interval).await;
@@ -440,7 +440,7 @@ impl DeviceFlow {
         .await?
         .map_err(|e| {
             AppError::Unauthenticated(format!(
-                "the session expired ({}); run `jobhunt login` again",
+                "the session expired ({}); run `narrow login` again",
                 e.error
             ))
         })

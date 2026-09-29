@@ -1,8 +1,8 @@
 //! The portable profile format.
 //!
-//! `jobhunt profile export` writes a [`ProfileExport`]: one JSON object
+//! `narrow profile export` writes a [`ProfileExport`]: one JSON object
 //! with a `format` name and a `version`, then every record of the profile
-//! with its provenance and verification state. `jobhunt profile import`
+//! with its provenance and verification state. `narrow profile import`
 //! reads it back. Import is all or nothing: the file is parsed strictly
 //! (unknown fields are errors), then [`ProfileExport::validate`] checks
 //! that every reference points to a record in the file, and only then is
@@ -32,7 +32,7 @@ pub struct ProfileExport {
     pub format: String,
     pub version: u32,
     pub exported_at: DateTime<Utc>,
-    /// The program that wrote the file (`jobhunt 0.1.0`).
+    /// The program that wrote the file (`narrow 0.1.0`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generator: Option<String>,
     pub profile: Profile,

@@ -1,4 +1,4 @@
-//! Changing the profile from a client that is not the `jobhunt` command
+//! Changing the profile from a client that is not the `narrow` command
 //! (the web app, over the HTTP API): importing a resume from its bytes,
 //! and reviewing the claims JobHunt could not settle on its own.
 //!

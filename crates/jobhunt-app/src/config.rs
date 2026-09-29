@@ -1,5 +1,5 @@
-//! Configuration, shared by every front-end (`jobhunt` commands and
-//! `jobhunt mcp` read exactly the same file and database).
+//! Configuration, shared by every front-end (`narrow` commands and
+//! `narrow mcp` read exactly the same file and database).
 //!
 //! Everything has a default, so no config file is needed. Values are resolved
 //! in this order (later wins):
@@ -30,12 +30,12 @@ pub struct AppConfig {
     pub cloud: CloudClientConfig,
 }
 
-/// JobHunt Cloud, as this machine's client (`jobhunt login`, `jobhunt
+/// JobHunt Cloud, as this machine's client (`narrow login`, `jobhunt
 /// sync`). Nothing here is needed to use JobHunt locally.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CloudClientConfig {
-    /// The server `jobhunt login` signs in to when `--server` is not
+    /// The server `narrow login` signs in to when `--server` is not
     /// given (`JOBHUNT_CLOUD_URL` overrides it).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server: Option<String>,
@@ -94,7 +94,7 @@ pub struct DiscoveryConfig {
     /// Hours a source's "not modified" answer may stand in for a full
     /// fetch. After that the listing is re-read in full. 0 always re-reads.
     pub revalidate_after_hours: u32,
-    /// Hours the stored jobs of a source count as fresh. `jobhunt find`
+    /// Hours the stored jobs of a source count as fresh. `narrow find`
     /// (and the MCP `search_jobs` tool) refresh sources read longer ago than
     /// this, and otherwise work from what is stored. 0 refreshes every time.
     pub refresh_after_hours: u32,
@@ -137,7 +137,7 @@ impl DiscoveryConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct VerificationConfig {
-    /// Minutes an attempt is reused by `jobhunt verify` instead of asking
+    /// Minutes an attempt is reused by `narrow verify` instead of asking
     /// the source again (`--force` always asks).
     pub reuse_minutes: u32,
     /// Hours a successful verification counts as fresh.

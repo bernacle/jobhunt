@@ -1,7 +1,7 @@
-//! The `jobhunt` command.
+//! The `narrow` command.
 //!
 //! Every command is a thin interface over [`jobhunt_app::LocalApp`], the
-//! same application the MCP server (`jobhunt mcp`) runs: arguments in, a
+//! same application the MCP server (`narrow mcp`) runs: arguments in, a
 //! use case, output on stdout (progress and logs on stderr).
 
 mod check;
@@ -41,10 +41,10 @@ use crate::config::{LoadedConfig, LogFormatArg, Paths};
 /// High-signal job discovery: a tiny, verified, personalized shortlist
 /// from a large universe of jobs.
 ///
-/// Start with `jobhunt init resume.pdf`, say what you want with
-/// `jobhunt preferences add "…"`, then run `jobhunt find`.
+/// Start with `narrow init resume.pdf`, say what you want with
+/// `narrow preferences add "…"`, then run `narrow find`.
 #[derive(Debug, Parser)]
-#[command(name = "jobhunt", version, about, propagate_version = true)]
+#[command(name = "narrow", version, about, propagate_version = true)]
 struct Cli {
     /// Config file to use instead of the default location.
     #[arg(long, global = true, env = "JOBHUNT_CONFIG", value_name = "PATH")]
@@ -96,7 +96,7 @@ enum Command {
     /// Save an opportunity for later.
     Save(rank::FeedbackArgs),
     /// Not interested. Say why with --reason ("too corporate", "pure SRE"):
-    /// JobHunt learns from your words and keeps them verbatim.
+    /// Narrow learns from your words and keeps them verbatim.
     Reject(rank::FeedbackArgs),
     /// You like this opportunity (independent of saving or applying).
     Like(rank::FeedbackArgs),
@@ -115,7 +115,7 @@ enum Command {
     Pipeline(rank::PipelineArgs),
     /// Your feedback, verbatim, for every opportunity or one.
     Feedback(rank::LogArgs),
-    /// What JobHunt learned from your feedback, with the evidence behind
+    /// What Narrow learned from your feedback, with the evidence behind
     /// every pattern, next to what you told it.
     Taste(rank::TasteArgs),
     /// Show, correct, export or import your career profile.
@@ -129,7 +129,7 @@ enum Command {
     /// Write everything that is yours (profile, evidence decisions,
     /// preferences, feedback and pipeline) as one versioned JSON file.
     Export(state::ExportArgs),
-    /// Restore a file written by `jobhunt export`, atomically.
+    /// Restore a file written by `narrow export`, atomically.
     Import(state::ImportArgs),
     /// Serve the Model Context Protocol on stdin/stdout, so an MCP client
     /// (Claude, ChatGPT, Codex, …) can use this same profile, jobs and
@@ -138,35 +138,35 @@ enum Command {
     /// Check the setup: config and database paths, schema, profile, stored
     /// jobs, sources, and the MCP command for your client.
     Doctor,
-    /// Show where JobHunt keeps its files and the effective configuration.
+    /// Show where Narrow keeps its files and the effective configuration.
     Config,
-    /// Sign in to JobHunt Cloud (in the browser, or with --token).
+    /// Sign in to Narrow Cloud (in the browser, or with --token).
     Login(cloud::LoginArgs),
-    /// Sign out of JobHunt Cloud on this machine (--everywhere: on every
+    /// Sign out of Narrow Cloud on this machine (--everywhere: on every
     /// device). Local data is kept.
     Logout(cloud::LogoutArgs),
-    /// Your JobHunt Cloud account and where this machine's sync stands.
+    /// Your Narrow Cloud account and where this machine's sync stands.
     Account(cloud::AccountArgs),
     /// Sync your profile, evidence decisions, preferences and feedback with
-    /// JobHunt Cloud, and bring back what changed there. Conflicting
+    /// Narrow Cloud, and bring back what changed there. Conflicting
     /// changes are shown, never overwritten.
     Sync(cloud::SyncArgs),
     /// Personal access tokens for MCP clients and scripts.
     Token(cloud::TokenArgs),
-    /// JobHunt Cloud: serve the HTTP API and hosted MCP (configured by
+    /// Narrow Cloud: serve the HTTP API and hosted MCP (configured by
     /// environment variables; see the README).
     #[command(hide = true)]
     Server,
-    /// JobHunt Cloud: run one scheduled job (a cron run), then exit.
+    /// Narrow Cloud: run one scheduled job (a cron run), then exit.
     #[command(hide = true)]
     Worker(serve::WorkerArgs),
-    /// JobHunt Cloud: apply database migrations (the pre-deploy command).
+    /// Narrow Cloud: apply database migrations (the pre-deploy command).
     #[command(hide = true)]
     Migrate,
-    /// JobHunt Cloud: operator commands.
+    /// Narrow Cloud: operator commands.
     #[command(hide = true)]
     Admin(serve::AdminArgs),
-    /// The shortlist from stored jobs only (`jobhunt find --offline`); kept
+    /// The shortlist from stored jobs only (`narrow find --offline`); kept
     /// for scripts written before `find` became personalized.
     #[command(hide = true)]
     Rank(find::RankArgs),
@@ -280,7 +280,7 @@ async fn run(cli: Cli) -> anyhow::Result<ExitCode> {
     }
 }
 
-/// `jobhunt mcp`: the same configuration and database, served over stdio.
+/// `narrow mcp`: the same configuration and database, served over stdio.
 /// Nothing but protocol messages is written to stdout; logs go to stderr.
 async fn mcp(loaded: &LoadedConfig) -> anyhow::Result<ExitCode> {
     let app = local::open(loaded).await?;
@@ -319,7 +319,7 @@ mod tests {
     #[test]
     fn parses_find_arguments() {
         let cli = Cli::try_parse_from([
-            "jobhunt",
+            "narrow",
             "find",
             "rust",
             "backend",
@@ -345,11 +345,11 @@ mod tests {
 
     #[test]
     fn parses_show_and_url_sources() {
-        let cli = Cli::try_parse_from(["jobhunt", "show", "job_02e51190085f8a9a0772e845ddd9f329"])
+        let cli = Cli::try_parse_from(["narrow", "show", "job_02e51190085f8a9a0772e845ddd9f329"])
             .unwrap();
         assert!(matches!(cli.command, Command::Show(_)));
         let cli = Cli::try_parse_from([
-            "jobhunt",
+            "narrow",
             "find",
             "--source",
             "https://www.notion.com/careers",
@@ -363,15 +363,15 @@ mod tests {
 
     #[test]
     fn parses_profile_commands() {
-        let cli = Cli::try_parse_from(["jobhunt", "init", "resume.pdf"]).unwrap();
+        let cli = Cli::try_parse_from(["narrow", "init", "resume.pdf"]).unwrap();
         assert!(matches!(cli.command, Command::Init(_)));
-        let cli = Cli::try_parse_from(["jobhunt", "profile"]).unwrap();
+        let cli = Cli::try_parse_from(["narrow", "profile"]).unwrap();
         let Command::Profile(args) = cli.command else {
             panic!("expected profile");
         };
         assert!(args.command.is_none());
         let cli = Cli::try_parse_from([
-            "jobhunt",
+            "narrow",
             "profile",
             "edit",
             "experience",
@@ -385,20 +385,16 @@ mod tests {
         ])
         .unwrap();
         assert!(matches!(cli.command, Command::Profile(_)));
-        let cli = Cli::try_parse_from(["jobhunt", "claim", "confirm", "clm_1", "clm_2"]).unwrap();
+        let cli = Cli::try_parse_from(["narrow", "claim", "confirm", "clm_1", "clm_2"]).unwrap();
         assert!(matches!(cli.command, Command::Claims(_)));
-        let cli = Cli::try_parse_from(["jobhunt", "claims", "--state", "review"]).unwrap();
+        let cli = Cli::try_parse_from(["narrow", "claims", "--state", "review"]).unwrap();
         assert!(matches!(cli.command, Command::Claims(_)));
-        let cli = Cli::try_parse_from([
-            "jobhunt",
-            "preferences",
-            "add",
-            "I want small product teams",
-        ])
-        .unwrap();
+        let cli =
+            Cli::try_parse_from(["narrow", "preferences", "add", "I want small product teams"])
+                .unwrap();
         assert!(matches!(cli.command, Command::Preferences(_)));
         let cli = Cli::try_parse_from([
-            "jobhunt",
+            "narrow",
             "prefs",
             "set",
             "compensation",
@@ -411,7 +407,7 @@ mod tests {
         assert!(matches!(cli.command, Command::Preferences(_)));
         assert!(
             Cli::try_parse_from([
-                "jobhunt",
+                "narrow",
                 "profile",
                 "edit",
                 "experience",
@@ -426,7 +422,7 @@ mod tests {
     #[test]
     fn parses_verify() {
         let cli = Cli::try_parse_from([
-            "jobhunt",
+            "narrow",
             "verify",
             "opp_02e51190085f8a9a0772e845ddd9f329",
             "--force",
@@ -442,7 +438,7 @@ mod tests {
     #[test]
     fn parses_ranking_and_feedback() {
         let cli = Cli::try_parse_from([
-            "jobhunt",
+            "narrow",
             "reject",
             "opp_02e51190085f8a9a0772e845ddd9f329",
             "--reason",
@@ -464,77 +460,76 @@ mod tests {
             "why",
         ] {
             assert!(
-                Cli::try_parse_from(["jobhunt", verb, "job_1"]).is_ok(),
+                Cli::try_parse_from(["narrow", verb, "job_1"]).is_ok(),
                 "{verb}"
             );
         }
-        let cli = Cli::try_parse_from(["jobhunt", "rank", "rust", "-n", "3", "--all"]).unwrap();
+        let cli = Cli::try_parse_from(["narrow", "rank", "rust", "-n", "3", "--all"]).unwrap();
         let Command::Rank(args) = cli.command else {
             panic!("expected rank");
         };
         assert_eq!((args.query.len(), args.limit, args.all), (1, 3, true));
-        let cli =
-            Cli::try_parse_from(["jobhunt", "find", "--refresh", "--all", "-n", "3"]).unwrap();
+        let cli = Cli::try_parse_from(["narrow", "find", "--refresh", "--all", "-n", "3"]).unwrap();
         let Command::Find(args) = cli.command else {
             panic!("expected find");
         };
         assert!(args.refresh && args.all && !args.raw);
-        assert!(Cli::try_parse_from(["jobhunt", "find", "--refresh", "--offline"]).is_err());
-        assert!(Cli::try_parse_from(["jobhunt", "find", "--raw", "--json"]).is_err());
+        assert!(Cli::try_parse_from(["narrow", "find", "--refresh", "--offline"]).is_err());
+        assert!(Cli::try_parse_from(["narrow", "find", "--raw", "--json"]).is_err());
         for command in [
-            vec!["jobhunt", "mcp"],
-            vec!["jobhunt", "doctor"],
-            vec!["jobhunt", "export", "-o", "state.json"],
-            vec!["jobhunt", "import", "state.json", "--replace"],
-            vec!["jobhunt", "context", "opp_1234", "--contact"],
-            vec!["jobhunt", "show", "opp_1234", "--json"],
-            vec!["jobhunt", "verify", "opp_1234", "--json"],
-            vec!["jobhunt", "pipeline", "--json"],
+            vec!["narrow", "mcp"],
+            vec!["narrow", "doctor"],
+            vec!["narrow", "export", "-o", "state.json"],
+            vec!["narrow", "import", "state.json", "--replace"],
+            vec!["narrow", "context", "opp_1234", "--contact"],
+            vec!["narrow", "show", "opp_1234", "--json"],
+            vec!["narrow", "verify", "opp_1234", "--json"],
+            vec!["narrow", "pipeline", "--json"],
         ] {
             assert!(Cli::try_parse_from(&command).is_ok(), "{command:?}");
         }
-        assert!(Cli::try_parse_from(["jobhunt", "taste", "--all"]).is_ok());
-        assert!(Cli::try_parse_from(["jobhunt", "pipeline"]).is_ok());
-        assert!(Cli::try_parse_from(["jobhunt", "feedback"]).is_ok());
-        assert!(Cli::try_parse_from(["jobhunt", "reject"]).is_err());
+        assert!(Cli::try_parse_from(["narrow", "taste", "--all"]).is_ok());
+        assert!(Cli::try_parse_from(["narrow", "pipeline"]).is_ok());
+        assert!(Cli::try_parse_from(["narrow", "feedback"]).is_ok());
+        assert!(Cli::try_parse_from(["narrow", "reject"]).is_err());
     }
 
     #[test]
     fn parses_cloud_commands() {
         for command in [
-            vec!["jobhunt", "login", "--server", "https://api.example.com"],
-            vec!["jobhunt", "login", "--token"],
-            vec!["jobhunt", "logout", "--everywhere"],
-            vec!["jobhunt", "account", "--json"],
-            vec!["jobhunt", "sync"],
-            vec!["jobhunt", "sync", "--status"],
-            vec!["jobhunt", "sync", "--keep", "local", "--record", "clm_1"],
+            vec!["narrow", "login", "--server", "https://api.example.com"],
+            vec!["narrow", "login", "--token"],
+            vec!["narrow", "logout", "--everywhere"],
+            vec!["narrow", "account", "--json"],
+            vec!["narrow", "sync"],
+            vec!["narrow", "sync", "--status"],
+            vec!["narrow", "sync", "--keep", "local", "--record", "clm_1"],
             vec![
-                "jobhunt",
+                "narrow",
                 "token",
                 "create",
                 "Claude Desktop",
                 "--days",
                 "30",
             ],
-            vec!["jobhunt", "token", "list"],
-            vec!["jobhunt", "token", "revoke", "tok_1"],
-            vec!["jobhunt", "server"],
-            vec!["jobhunt", "worker", "discovery", "--budget-minutes", "5"],
-            vec!["jobhunt", "worker", "verification"],
-            vec!["jobhunt", "worker", "notify"],
-            vec!["jobhunt", "migrate"],
-            vec!["jobhunt", "admin", "status", "--json"],
-            vec!["jobhunt", "admin", "reencrypt"],
+            vec!["narrow", "token", "list"],
+            vec!["narrow", "token", "revoke", "tok_1"],
+            vec!["narrow", "server"],
+            vec!["narrow", "worker", "discovery", "--budget-minutes", "5"],
+            vec!["narrow", "worker", "verification"],
+            vec!["narrow", "worker", "notify"],
+            vec!["narrow", "migrate"],
+            vec!["narrow", "admin", "status", "--json"],
+            vec!["narrow", "admin", "reencrypt"],
         ] {
             assert!(Cli::try_parse_from(&command).is_ok(), "{command:?}");
         }
-        assert!(Cli::try_parse_from(["jobhunt", "sync", "--record", "clm_1"]).is_err());
-        assert!(Cli::try_parse_from(["jobhunt", "sync", "--status", "--keep", "cloud"]).is_err());
+        assert!(Cli::try_parse_from(["narrow", "sync", "--record", "clm_1"]).is_err());
+        assert!(Cli::try_parse_from(["narrow", "sync", "--status", "--keep", "cloud"]).is_err());
     }
 
     #[test]
     fn rejects_malformed_source_keys() {
-        assert!(Cli::try_parse_from(["jobhunt", "find", "--source", "linear"]).is_err());
+        assert!(Cli::try_parse_from(["narrow", "find", "--source", "linear"]).is_err());
     }
 }

@@ -128,12 +128,12 @@ pub fn brief(
     let id = ranking.opportunity;
     writeln!(
         out,
-        "{DIM}Decide: jobhunt save|reject|like|dislike {id} --reason \"…\" · evidence: jobhunt check {id}{DIM:#}"
+        "{DIM}Decide: narrow save|reject|like|dislike {id} --reason \"…\" · evidence: narrow check {id}{DIM:#}"
     )?;
     if !details {
         writeln!(
             out,
-            "{DIM}Every signal with its evidence: jobhunt why --details {id}{DIM:#}"
+            "{DIM}Every signal with its evidence: narrow why --details {id}{DIM:#}"
         )?;
     }
     out.flush()
@@ -196,7 +196,7 @@ pub fn recorded(out: &mut impl Write, outcome: &FeedbackOutcome) -> io::Result<(
     if r.after.stage == Stage::Rejected {
         writeln!(
             out,
-            "{DIM}It won't be recommended again. Changed your mind: jobhunt save {}{DIM:#}",
+            "{DIM}It won't be recommended again. Changed your mind: narrow save {}{DIM:#}",
             e.opportunity
         )?;
     }
@@ -294,7 +294,7 @@ pub fn taste(
     if said.is_empty() {
         writeln!(
             out,
-            "  Nothing yet. jobhunt preferences add \"I want backend roles at small companies; avoid pure SRE\""
+            "  Nothing yet. narrow preferences add \"I want backend roles at small companies; avoid pure SRE\""
         )?;
     }
     for line in said {
@@ -388,7 +388,7 @@ pub fn taste(
     writeln!(out)?;
     writeln!(
         out,
-        "{DIM}Reasons are read with {}; every one is kept verbatim (jobhunt feedback).{DIM:#}",
+        "{DIM}Reasons are read with {}; every one is kept verbatim (narrow feedback).{DIM:#}",
         model.reader
     )?;
     out.flush()
@@ -399,8 +399,8 @@ pub fn pipeline(out: &mut impl Write, entries: &[PipelineEntry]) -> io::Result<(
     if entries.is_empty() {
         writeln!(
             out,
-            "Nothing in your pipeline yet. Save a job with `jobhunt save <id>`, or record an \
-             application with `jobhunt applied <id>`."
+            "Nothing in your pipeline yet. Save a job with `narrow save <id>`, or record an \
+             application with `narrow applied <id>`."
         )?;
         return out.flush();
     }

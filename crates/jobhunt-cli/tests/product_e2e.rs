@@ -1,6 +1,6 @@
 //! The terminal product, offline: first run, the shortlist and when it
 //! reads the network, short ids, the whole-product export and import, and
-//! `jobhunt doctor`.
+//! `narrow doctor`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -26,7 +26,7 @@ async fn first_run_then_a_fast_repeated_shortlist() {
     has(
         &out,
         &[
-            "No profile found, so these are not personalized. Start with:\n  jobhunt init resume.pdf",
+            "No profile found, so these are not personalized. Start with:\n  narrow init resume.pdf",
             "Checked 4 sources",
         ],
     );
@@ -176,7 +176,7 @@ async fn no_jobs_yet_says_how_to_start() {
     env.with_profile();
     let stderr = env.fails(&["find", "--offline"]);
     assert!(
-        stderr.contains("No discovered opportunities yet. Run:\n  jobhunt find --refresh"),
+        stderr.contains("No discovered opportunities yet. Run:\n  narrow find --refresh"),
         "{stderr}"
     );
 }
@@ -285,7 +285,7 @@ async fn export_and_import_move_everything_that_is_yours() {
     let profile = env.dir.path().join("profile.json");
     env.ok(&["profile", "export", "-o", profile.to_str().unwrap()]);
     let stderr = other.fails(&["import", profile.to_str().unwrap()]);
-    assert!(stderr.contains("jobhunt profile import"), "{stderr}");
+    assert!(stderr.contains("narrow profile import"), "{stderr}");
     let broken = env.dir.path().join("broken.json");
     std::fs::write(&broken, text.replace("\"version\":1", "\"version\":99")).unwrap();
     assert!(
@@ -306,9 +306,9 @@ async fn doctor_reports_the_setup_and_the_mcp_command() {
             "config.toml",
             "Database: ",
             "migrations applied",
-            "Profile: none yet (jobhunt init resume.pdf)",
+            "Profile: none yet (narrow init resume.pdf)",
             "Sources: 4 configured; 4 sources were never read",
-            "MCP: `jobhunt mcp` serves this profile and database over stdio.",
+            "MCP: `narrow mcp` serves this profile and database over stdio.",
             "args:    [\"mcp\",\"--config\"",
         ],
     );

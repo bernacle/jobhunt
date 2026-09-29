@@ -47,7 +47,7 @@ pub struct CloudSyncState {
 }
 
 impl PgUserStore {
-    /// Where the person's data stands (for `jobhunt account`).
+    /// Where the person's data stands (for `narrow account`).
     pub async fn sync_state(&self) -> Result<CloudSyncState, StorageError> {
         let row = sqlx::query(
             "SELECT u.change_seq, s.last_sync_at, s.last_shortlist_at, \

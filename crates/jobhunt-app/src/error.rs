@@ -40,7 +40,7 @@ pub enum ErrorKind {
     Config,
     /// The local database failed.
     Storage,
-    /// No valid credentials: sign in (`jobhunt login`) or send a token.
+    /// No valid credentials: sign in (`narrow login`) or send a token.
     Unauthenticated,
     /// JobHunt Cloud could not be reached, or answered with an error.
     CloudUnavailable,
@@ -83,9 +83,9 @@ pub enum AppError {
         input: String,
         candidates: Vec<String>,
     },
-    #[error("No profile found. Start with:\n  jobhunt init resume.pdf")]
+    #[error("No profile found. Start with:\n  narrow init resume.pdf")]
     NoProfile,
-    #[error("No discovered opportunities yet. Run:\n  jobhunt find --refresh")]
+    #[error("No discovered opportunities yet. Run:\n  narrow find --refresh")]
     NoJobs,
     #[error("{0}")]
     InvalidPreference(String),
@@ -138,10 +138,10 @@ impl AppError {
     /// described without their cause, which can name local paths.
     pub fn public_message(&self) -> String {
         match self {
-            Self::Storage { .. } => "The local JobHunt database failed. Run `jobhunt doctor` \
+            Self::Storage { .. } => "The local JobHunt database failed. Run `narrow doctor` \
                                      on this machine for details."
                 .to_owned(),
-            Self::Config(_) => "The JobHunt configuration is invalid. Run `jobhunt doctor` \
+            Self::Config(_) => "The JobHunt configuration is invalid. Run `narrow doctor` \
                                 on this machine for details."
                 .to_owned(),
             other => other.to_string(),
@@ -152,23 +152,23 @@ impl AppError {
     pub fn hint(&self) -> Option<&'static str> {
         match self {
             Self::UnknownOpportunity { .. } => Some(
-                "Use an id from search results (opp_…); `jobhunt find` or the search_jobs tool lists them.",
+                "Use an id from search results (opp_…); `narrow find` or the search_jobs tool lists them.",
             ),
             Self::AmbiguousId { .. } => Some("Use the full id (opp_ followed by 32 characters)."),
             Self::NoProfile => Some(
-                "Import a resume with `jobhunt init <resume>`, or state where you live with \
-                 `jobhunt preferences set location <place>`.",
+                "Import a resume with `narrow init <resume>`, or state where you live with \
+                 `narrow preferences set location <place>`.",
             ),
             Self::NoJobs => Some(
-                "Refresh discovery: `jobhunt find --refresh`, or search_jobs with refresh \"always\".",
+                "Refresh discovery: `narrow find --refresh`, or search_jobs with refresh \"always\".",
             ),
             Self::SourceUnavailable { .. } => Some(
                 "Check the network connection and try again; stored jobs are still available offline.",
             ),
             Self::Conflict(_) => Some("Run the same request again."),
-            Self::Unauthenticated(_) => Some("Sign in with `jobhunt login`."),
+            Self::Unauthenticated(_) => Some("Sign in with `narrow login`."),
             Self::CloudUnavailable(_) => Some(
-                "Everything still works offline on this machine; run `jobhunt sync` again later.",
+                "Everything still works offline on this machine; run `narrow sync` again later.",
             ),
             _ => None,
         }

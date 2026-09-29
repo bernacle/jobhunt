@@ -951,7 +951,7 @@ export interface UnresolvedClaim {
    */
   document?: string | null;
   /**
-   * `clm_…` (confirm with `jobhunt claims confirm <id>`).
+   * `clm_…` (confirm with `narrow claims confirm <id>`).
    */
   id: string;
   kind: string;
@@ -2244,7 +2244,7 @@ export interface SearchJobsParams {
   verify?: boolean | null;
 }
 /**
- * The answer of `search_jobs` (and `jobhunt find --json`).
+ * The answer of `search_jobs` (and `narrow find --json`).
  *
  * This interface was referenced by `JobHuntApi`'s JSON-Schema
  * via the `definition` "SearchResults".
@@ -2853,7 +2853,7 @@ export interface UpdatePreferencesParams {
   statement?: string | null;
 }
 /**
- * The answer of `verify_job` (and `jobhunt verify --json`).
+ * The answer of `verify_job` (and `narrow verify --json`).
  *
  * This interface was referenced by `JobHuntApi`'s JSON-Schema
  * via the `definition` "VerificationReport".

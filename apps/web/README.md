@@ -108,8 +108,8 @@ reduced motion respected, and AA contrast in both themes. Automated checks
 (axe) run in the component tests and in the browser tests, in both themes;
 they don't replace a manual review.
 
-Internal names stay `jobhunt` (the crates, the `jobhunt` command, the API,
-environment variables, the `jh_session` cookie, `jh_pat_` tokens): the
+Internal names stay `jobhunt` (the crates, the API, environment
+variables, the `jh_session` cookie, `jh_pat_` tokens): the
 rename is of the product people see, not of protocols.
 
 ## Configuration
@@ -129,7 +129,7 @@ rename is of the product people see, not of protocols.
 
 ## Running it locally
 
-Needs Node 24, a Postgres server (and `psql`), and the `jobhunt` binary
+Needs Node 24, a Postgres server (and `psql`), and the `narrow` binary
 (`cargo build -p jobhunt-cli` at the repository root).
 
 ```bash
@@ -140,8 +140,8 @@ JOBHUNT_E2E_DATABASE_URL=postgres://user:pass@127.0.0.1:5432/postgres npm run st
 `npm run stack` ([`e2e/stack.mjs`](e2e/stack.mjs)) creates a fresh
 `jobhunt_e2e` database, serves the fixture job boards
 ([`e2e/fixtures/boards.mjs`](e2e/fixtures/boards.mjs) and one recorded real
-board) in Greenhouse's API format, runs `jobhunt migrate` and the real
-discovery worker over them, starts `jobhunt server` (development auth,
+board) in Greenhouse's API format, runs `narrow migrate` and the real
+discovery worker over them, starts `narrow server` (development auth,
 email written to `.e2e/mail.jsonl`, verification against the fixtures),
 and `next dev` on <http://127.0.0.1:3100>. Sign in with any name; import
 `crates/jobhunt-resume/tests/fixtures/ana_lima.md` as the resume. Nothing

@@ -1,4 +1,4 @@
-//! `jobhunt find`: the few opportunities worth your time.
+//! `narrow find`: the few opportunities worth your time.
 //!
 //! With a profile, `find` is the personalized shortlist
 //! ([`jobhunt_app::LocalApp::find`]): it refreshes job boards only when the
@@ -8,7 +8,7 @@
 //! inventory `find` printed before it was personalized. Without a profile
 //! the inventory is shown, with how to start one.
 //!
-//! `jobhunt rank` is the shortlist from stored jobs only (`find --offline`).
+//! `narrow rank` is the shortlist from stored jobs only (`find --offline`).
 
 use std::collections::HashMap;
 use std::io::{self, Write};
@@ -112,7 +112,7 @@ impl FindArgs {
     }
 }
 
-/// `jobhunt rank`: the shortlist from stored jobs.
+/// `narrow rank`: the shortlist from stored jobs.
 #[derive(Debug, clap::Args)]
 pub struct RankArgs {
     #[arg(value_name = "WORDS")]
@@ -415,7 +415,7 @@ fn write_shortlist(
     writeln!(
         out,
         "{DIM}Ranked against your profile{}. Tiers are coarse on purpose; \
-         `jobhunt why <id>` shows every reason.{DIM:#}",
+         `narrow why <id>` shows every reason.{DIM:#}",
         if l.feedback > 0 {
             format!(
                 ", {} and {} learned from it",
@@ -429,8 +429,8 @@ fn write_shortlist(
     if !l.has_preferences {
         writeln!(
             out,
-            "{DIM}Ranking improves with preferences and feedback: jobhunt preferences add \"…\", \
-             then jobhunt save|reject <id> --reason \"…\".{DIM:#}"
+            "{DIM}Ranking improves with preferences and feedback: narrow preferences add \"…\", \
+             then narrow save|reject <id> --reason \"…\".{DIM:#}"
         )?;
     }
     out.flush()
@@ -492,8 +492,8 @@ async fn raw(
     let (records, total, verdicts) = match (args.min_status(), &user) {
         (Some(_), None) => {
             bail!(
-                "--eligible and --possible need a career profile: run `jobhunt init <resume>` \
-                 or `jobhunt preferences set location <place>`"
+                "--eligible and --possible need a career profile: run `narrow init <resume>` \
+                 or `narrow preferences set location <place>`"
             );
         }
         (Some(min), Some(user)) => {
@@ -622,7 +622,7 @@ fn print_results(
     if !has_profile {
         writeln!(
             out,
-            "No profile found, so these are not personalized. Start with:\n  jobhunt init resume.pdf\n"
+            "No profile found, so these are not personalized. Start with:\n  narrow init resume.pdf\n"
         )?;
     }
     if records.is_empty() && total > 0 {
@@ -639,7 +639,7 @@ fn print_results(
             }
             _ if args.possible => "Your profile rules out every matching job.",
             (None, true) if args.offline => {
-                "No discovered opportunities yet. Run:\n  jobhunt find --refresh"
+                "No discovered opportunities yet. Run:\n  narrow find --refresh"
             }
             (None, _) => "No stored jobs match. Run with --refresh to read the job boards now.",
             (Some(_), false) => "No jobs match those words. Try fewer or different words.",

@@ -518,7 +518,7 @@ impl PgStore {
         Ok(())
     }
 
-    /// The schedule, for operations (`jobhunt admin status`).
+    /// The schedule, for operations (`narrow admin status`).
     pub async fn schedule_overview(&self) -> Result<Vec<ScheduleRow>, StorageError> {
         sqlx::query(
             "SELECT source_kind, source_instance, tier, enabled, next_due_at, \

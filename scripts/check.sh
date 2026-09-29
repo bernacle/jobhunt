@@ -115,7 +115,7 @@ if $web; then
 fi
 
 if $e2e; then
-    step "e2e: jobhunt binary" cargo build --locked -p jobhunt-cli
+    step "e2e: narrow binary" cargo build --locked -p jobhunt-cli
     step "e2e: browser tests" npm --prefix apps/web run e2e
 fi
 

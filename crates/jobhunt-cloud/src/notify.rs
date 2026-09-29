@@ -421,7 +421,7 @@ async fn compose(
     Ok(candidates.len())
 }
 
-/// `jobhunt worker notify`: sends due retries, then composes and sends at
+/// `narrow worker notify`: sends due retries, then composes and sends at
 /// most one email per account with notifications on.
 pub async fn notify(
     store: &PgStore,

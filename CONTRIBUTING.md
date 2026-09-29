@@ -82,7 +82,7 @@ The CLI and the MCP server are interfaces to one local application:
   `MemorySender` (or the file provider in the browser tests). No test may
   send real email.
 
-`jobhunt-app` and everything below it must never print: `jobhunt mcp`'s
+`jobhunt-app` and everything below it must never print: `narrow mcp`'s
 stdout belongs to the protocol. Report progress through `Progress`, logs
 through `tracing` (stderr). `mcp_protocol` runs the server at `-vvv` and
 fails on any stdout line that isn't a JSON-RPC message.
@@ -91,7 +91,7 @@ Transactions that read and then write must start with
 `SqliteJobStore::begin_write` (`BEGIN IMMEDIATE`), so a concurrent writer
 is waited for instead of failing with `SQLITE_BUSY_SNAPSHOT`.
 
-To try the MCP server by hand, `jobhunt doctor` prints the command, and
+To try the MCP server by hand, `narrow doctor` prints the command, and
 any MCP client (or the test harness in
 `crates/jobhunt-cli/tests/common/mod.rs`) can drive it. For offline manual
 runs, `JOBHUNT_DISCOVERY_ENDPOINT` and `JOBHUNT_VERIFY_ENDPOINT` send every
@@ -168,7 +168,7 @@ restriction and compensation facts read from each. Override the boards with
 cargo test -p jobhunt-eligibility --test verification_live -- --ignored --nocapture --test-threads 1
 ```
 
-Offline, the `jobhunt` binary can be pointed at a local server for every
+Offline, the `narrow` binary can be pointed at a local server for every
 verification request with `JOBHUNT_VERIFY_ENDPOINT=http://127.0.0.1:<port>`
 (the CLI end-to-end tests do). It is a test hook, not a user setting.
 
@@ -187,7 +187,7 @@ requests that are ready for review (not on drafts) and on every push to
 | `docs` | any rustdoc warning (broken intra-doc links, …) |
 | `msrv` | code or a dependency that needs a newer Rust than `rust-version` |
 | `web` | the web app: TypeScript types out of date with the API schema, a type error, a lint error, a failing component test (including axe checks), or a failed production build |
-| `e2e` | the product loop failing in a real browser against the real stack (Postgres, `jobhunt server` and workers, fixture job boards, file email): sign in, onboarding, Today, feedback, Applications, Preferences, Profile, notifications, sign out/in, accessibility, a phone viewport |
+| `e2e` | the product loop failing in a real browser against the real stack (Postgres, `narrow server` and workers, fixture job boards, file email): sign in, onboarding, Today, feedback, Applications, Preferences, Profile, notifications, sign out/in, accessibility, a phone viewport |
 | `ci-passed` | any of the above not succeeding |
 
 Notes:

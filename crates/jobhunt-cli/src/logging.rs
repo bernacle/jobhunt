@@ -1,5 +1,5 @@
 //! Structured logging setup. Logs go to stderr so they never mix with the
-//! command's output on stdout. For `jobhunt mcp` that is a protocol
+//! command's output on stdout. For `narrow mcp` that is a protocol
 //! requirement: stdout carries only MCP messages.
 
 use std::io::IsTerminal;

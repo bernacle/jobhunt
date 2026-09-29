@@ -44,7 +44,7 @@ pub enum ProfileError {
     Invalid(String),
     #[error("could not import the profile file")]
     Export(#[from] ExportError),
-    #[error("there is no profile yet; import a resume with `jobhunt init <resume>` first")]
+    #[error("there is no profile yet; import a resume with `narrow init <resume>` first")]
     NoProfile,
 }
 

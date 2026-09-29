@@ -1,5 +1,5 @@
 //! Key rotation: re-seals every private value that is not under the
-//! active key (`jobhunt admin reencrypt`). Safe to run while the service
+//! active key (`narrow admin reencrypt`). Safe to run while the service
 //! is up and to run again: each row is rewritten in its own statement,
 //! only when it still holds the ciphertext that was read.
 

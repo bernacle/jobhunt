@@ -1,4 +1,4 @@
-//! The whole pipeline wired the way `jobhunt find` wires it: Ashby adapter →
+//! The whole pipeline wired the way `narrow find` wires it: Ashby adapter →
 //! discovery → SQLite file, against a local mock server serving saved real
 //! responses.
 

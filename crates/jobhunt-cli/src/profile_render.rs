@@ -95,7 +95,7 @@ fn marker(standing: Standing) -> &'static str {
     }
 }
 
-/// The overview printed by `jobhunt profile`.
+/// The overview printed by `narrow profile`.
 pub fn profile(out: &mut impl Write, data: &ProfileData, all: bool) -> io::Result<()> {
     let p = &data.profile;
     let name = p.name.as_deref().unwrap_or("Your profile");
@@ -289,7 +289,7 @@ pub fn profile(out: &mut impl Write, data: &ProfileData, all: bool) -> io::Resul
             writeln!(out, "  - {}", gap.message)?;
         }
         if !all && gaps.len() > 12 {
-            writeln!(out, "  … {} more (jobhunt profile --all)", gaps.len() - 12)?;
+            writeln!(out, "  … {} more (narrow profile --all)", gaps.len() - 12)?;
         }
     }
     Ok(())
@@ -377,7 +377,7 @@ fn preference_short(p: &Preference) -> String {
     }
 }
 
-/// The summary printed by `jobhunt init`.
+/// The summary printed by `narrow init`.
 pub fn import_summary(
     out: &mut impl Write,
     data: &ProfileData,
@@ -537,7 +537,7 @@ pub fn import_summary(
         if report.stale_confirmed > 0 {
             writeln!(
                 out,
-                "  {} you confirmed left the resume; review them (jobhunt claims review)",
+                "  {} you confirmed left the resume; review them (narrow claims review)",
                 plural(report.stale_confirmed as u64, "claim", "claims")
             )?;
         }
@@ -563,11 +563,11 @@ pub fn import_summary(
         }
     }
     section(out, "Next")?;
-    writeln!(out, "  jobhunt profile")?;
-    writeln!(out, "  jobhunt claims review")?;
+    writeln!(out, "  narrow profile")?;
+    writeln!(out, "  narrow claims review")?;
     writeln!(
         out,
-        "  jobhunt preferences add \"I want … and at least …; avoid …\""
+        "  narrow preferences add \"I want … and at least …; avoid …\""
     )?;
     Ok(())
 }
@@ -622,7 +622,7 @@ pub fn claim_list(out: &mut impl Write, data: &ProfileData, claims: &[&Claim]) -
     writeln!(out)?;
     writeln!(
         out,
-        "{DIM}✓ usable · ? needs review · ✗ rejected — jobhunt claims show <id> for the evidence{DIM:#}"
+        "{DIM}✓ usable · ? needs review · ✗ rejected — narrow claims show <id> for the evidence{DIM:#}"
     )
 }
 
@@ -671,14 +671,14 @@ pub fn review(
         writeln!(out)?;
         writeln!(
             out,
-            "… {} more (jobhunt claims review --all)",
+            "… {} more (narrow claims review --all)",
             total - claims.len()
         )?;
     }
     writeln!(out)?;
     writeln!(
         out,
-        "{DIM}jobhunt claims confirm <id>… · jobhunt claims reject <id>… [--reason …]{DIM:#}"
+        "{DIM}narrow claims confirm <id>… · narrow claims reject <id>… [--reason …]{DIM:#}"
     )
 }
 
@@ -758,7 +758,7 @@ pub fn claim_detail(out: &mut impl Write, data: &ProfileData, claim: &Claim) -> 
     Ok(())
 }
 
-/// `jobhunt preferences`.
+/// `narrow preferences`.
 pub fn preferences(out: &mut impl Write, data: &ProfileData) -> io::Result<()> {
     let view = data.preferences();
     if view.active().next().is_none() {
@@ -768,12 +768,9 @@ pub fn preferences(out: &mut impl Write, data: &ProfileData) -> io::Result<()> {
         )?;
         writeln!(
             out,
-            "  jobhunt preferences add \"I want small product teams and at least $120k. Avoid pure SRE roles.\""
+            "  narrow preferences add \"I want small product teams and at least $120k. Avoid pure SRE roles.\""
         )?;
-        writeln!(
-            out,
-            "or set them one by one: jobhunt preferences set --help"
-        )?;
+        writeln!(out, "or set them one by one: narrow preferences set --help")?;
     }
     for category in CATEGORIES {
         let items = view.in_category(category);
@@ -833,7 +830,7 @@ fn statement_line(out: &mut impl Write, s: &PreferenceStatement) -> io::Result<(
     Ok(())
 }
 
-/// What `jobhunt preferences add` understood.
+/// What `narrow preferences add` understood.
 pub fn statement_outcome(out: &mut impl Write, outcome: &StatementOutcome) -> io::Result<()> {
     if outcome.repeated {
         writeln!(

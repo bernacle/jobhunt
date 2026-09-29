@@ -4,7 +4,7 @@ import { WEB_URL } from "./e2e/env.mjs";
 
 /**
  * The product loop in a real browser, against the real stack (Postgres,
- * `jobhunt server`, the discovery, verification and notification workers)
+ * `narrow server`, the discovery, verification and notification workers)
  * with local fixture job boards and a file instead of an email provider.
  * `e2e/stack.mjs` starts everything; the web app must be built first
  * (`npm run build`).

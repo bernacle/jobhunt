@@ -1,4 +1,4 @@
-//! `jobhunt doctor`: where JobHunt keeps things, what is stored, and
+//! `narrow doctor`: where JobHunt keeps things, what is stored, and
 //! whether an MCP client can use it.
 
 use std::path::PathBuf;
@@ -10,7 +10,7 @@ use crate::LocalApp;
 use crate::discover::RefreshReason;
 use crate::error::AppError;
 
-/// What `jobhunt doctor` reports.
+/// What `narrow doctor` reports.
 #[derive(Debug, Clone)]
 pub struct Diagnostics {
     pub config_file: Option<PathBuf>,

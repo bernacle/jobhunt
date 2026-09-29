@@ -57,7 +57,7 @@ pub struct Signal {
 /// confirmed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct UnresolvedClaim {
-    /// `clm_…` (confirm with `jobhunt claims confirm <id>`).
+    /// `clm_…` (confirm with `narrow claims confirm <id>`).
     pub id: String,
     pub kind: String,
     pub text: String,

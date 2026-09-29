@@ -1,4 +1,4 @@
-//! `jobhunt preferences`: what the user wants next.
+//! `narrow preferences`: what the user wants next.
 
 use std::io::Write;
 use std::process::ExitCode;
@@ -27,7 +27,7 @@ pub enum PreferencesCommand {
     /// Show your preferences and statements (the default).
     Show,
     /// Say what you want in your own words. The statement is kept as
-    /// written; what JobHunt understands from it is saved as preferences.
+    /// written; what Narrow understands from it is saved as preferences.
     Add {
         #[arg(required = true, value_name = "STATEMENT")]
         words: Vec<String>,

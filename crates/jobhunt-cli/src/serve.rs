@@ -1,6 +1,6 @@
-//! The cloud process modes of the same binary: `jobhunt server`,
-//! `jobhunt worker discovery|verification|notify`, `jobhunt migrate`, and
-//! `jobhunt admin …` for operators. Their configuration comes from the
+//! The cloud process modes of the same binary: `narrow server`,
+//! `narrow worker discovery|verification|notify`, `narrow migrate`, and
+//! `narrow admin …` for operators. Their configuration comes from the
 //! environment (see `jobhunt_cloud::config`), not from the local config
 //! file.
 

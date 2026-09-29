@@ -281,7 +281,7 @@ impl ApplicationContext {
         let mut withheld = Withheld {
             needs_review: 0,
             rejected: 0,
-            how_to_review: "jobhunt claims --state review, then jobhunt claims confirm <id>".into(),
+            how_to_review: "narrow claims --state review, then narrow claims confirm <id>".into(),
         };
         for c in &data.claims {
             match data.standing(c) {

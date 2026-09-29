@@ -1,4 +1,4 @@
-//! `jobhunt init <resume>`: import (or re-import) a resume into the profile.
+//! `narrow init <resume>`: import (or re-import) a resume into the profile.
 
 use std::path::PathBuf;
 use std::process::ExitCode;

@@ -25,7 +25,7 @@
 //!   cloud), or a record edited on one side and deleted on the other, is
 //!   a **conflict**: nothing is overwritten, the local version is kept and
 //!   not pushed, and the conflict is listed until the person decides
-//!   (`jobhunt sync --keep local|cloud`, or per record).
+//!   (`narrow sync --keep local|cloud`, or per record).
 //!
 //! Feedback events are never changed after they are made and have stable
 //! ids, so they merge by union: nothing can conflict and nothing is lost.
@@ -113,7 +113,7 @@ pub struct SyncReport {
     pub cursor: u64,
 }
 
-/// Sync state, for `jobhunt account` / `jobhunt sync --status`.
+/// Sync state, for `narrow account` / `narrow sync --status`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SyncStatus {
     pub account: Option<SyncAccount>,
@@ -375,7 +375,7 @@ impl LocalApp {
     }
 
     /// Forgets which cloud account this database synced with (after
-    /// `jobhunt logout`); local data is untouched.
+    /// `narrow logout`); local data is untouched.
     pub async fn forget_sync(&self) -> Result<(), AppError> {
         Ok(self.ledger()?.reset_ledger().await?)
     }
@@ -469,7 +469,7 @@ impl LocalApp {
         let mut data = compose(profiles.profile_id(), revision + 1, &list, true).map_err(|e| {
             AppError::Conflict(format!(
                 "the cloud's changes cannot be applied to this profile ({e}); \
-                 run `jobhunt sync --keep local` or `--keep cloud` to choose"
+                 run `narrow sync --keep local` or `--keep cloud` to choose"
             ))
         })?;
         data.profile.revision = revision + 1;
@@ -534,7 +534,7 @@ impl LocalApp {
             tracing::info!(round, "the cloud changed during sync; merging again");
         }
         Err(AppError::Conflict(
-            "the cloud kept changing while syncing; run `jobhunt sync` again".into(),
+            "the cloud kept changing while syncing; run `narrow sync` again".into(),
         ))
     }
 

@@ -4,8 +4,7 @@ import { expectAccessible, onboardViaApi, signIn } from "./helpers";
 
 /**
  * Narrow, not JobHunt, on every page a person sees; tiers in words, never
- * scores; and both themes accessible. (The CLI command is still called
- * `jobhunt`, so only the old product name is checked for.)
+ * scores; and both themes accessible.
  */
 test("every page is Narrow, in words, not scores", async ({ page }) => {
   await onboardViaApi("e2e-brand");

@@ -1,4 +1,4 @@
-//! `jobhunt profile`: inspect, correct, export and import the profile.
+//! `narrow profile`: inspect, correct, export and import the profile.
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -336,7 +336,7 @@ async fn execute(args: ProfileArgs, app: &jobhunt_app::LocalApp) -> anyhow::Resu
         }
         ProfileCommand::Export { output } => {
             let export = service
-                .export(now, Some(format!("jobhunt {}", env!("CARGO_PKG_VERSION"))))
+                .export(now, Some(format!("narrow {}", env!("CARGO_PKG_VERSION"))))
                 .await?;
             let json = export.to_json().context("could not encode the profile")?;
             match output {
@@ -370,7 +370,7 @@ async fn execute(args: ProfileArgs, app: &jobhunt_app::LocalApp) -> anyhow::Resu
             {
                 bail!(
                     "a profile already exists; pass --replace to overwrite it \
-                     (jobhunt profile export -o backup.json keeps a copy)"
+                     (narrow profile export -o backup.json keeps a copy)"
                 );
             }
             let data = service.import_export(export, now).await?;

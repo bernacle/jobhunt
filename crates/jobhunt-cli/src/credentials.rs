@@ -1,11 +1,11 @@
-//! Where `jobhunt login` keeps the session.
+//! Where `narrow login` keeps the session.
 //!
 //! One session at a time: the server, the account, and the tokens to reach
 //! it. On macOS and Windows it lives in the system keychain (Keychain,
 //! Credential Manager). Elsewhere, and when `JOBHUNT_CREDENTIALS_FILE`
 //! names a file, it is a JSON file readable only by its owner (mode 0600
 //! in a 0700 directory), as `gh` and cloud CLIs do; its path is shown by
-//! `jobhunt doctor`, its contents never are. `jobhunt logout` deletes it.
+//! `narrow doctor`, its contents never are. `narrow logout` deletes it.
 
 use std::path::{Path, PathBuf};
 
@@ -101,7 +101,7 @@ impl Vault {
         }
     }
 
-    /// Where, for `jobhunt doctor`.
+    /// Where, for `narrow doctor`.
     pub fn describe(&self) -> String {
         match self {
             Self::File(path) => format!("{} (owner-only file)", path.display()),
@@ -128,7 +128,7 @@ impl Vault {
         };
         serde_json::from_str(&text)
             .map(Some)
-            .context("the stored session is unreadable; run `jobhunt login` again")
+            .context("the stored session is unreadable; run `narrow login` again")
     }
 
     pub fn save(&self, session: &Session) -> anyhow::Result<()> {

@@ -3732,7 +3732,7 @@
       "type": "object"
     },
     "SearchResults": {
-      "description": "The answer of `search_jobs` (and `jobhunt find --json`).",
+      "description": "The answer of `search_jobs` (and `narrow find --json`).",
       "properties": {
         "funnel": {
           "$ref": "#/$defs/Funnel"
@@ -4441,7 +4441,7 @@
           ]
         },
         "id": {
-          "description": "`clm_…` (confirm with `jobhunt claims confirm <id>`).",
+          "description": "`clm_…` (confirm with `narrow claims confirm <id>`).",
           "type": "string"
         },
         "kind": {
@@ -4624,7 +4624,7 @@
       "type": "object"
     },
     "VerificationReport": {
-      "description": "The answer of `verify_job` (and `jobhunt verify --json`).",
+      "description": "The answer of `verify_job` (and `narrow verify --json`).",
       "properties": {
         "application": {
           "$ref": "#/$defs/ApplicationState"
