@@ -11,6 +11,10 @@
 //! * [`resume`] and [`import`]: the contract resume parsers fill in, and
 //!   the re-import rules that fold a resume into a profile without
 //!   duplicating records or losing the user's edits and decisions.
+//! * [`sources`], [`github`] and [`support`]: other sources (a LinkedIn
+//!   data export, a public GitHub account) folded into the same graph by
+//!   the same rules, one record and claim with several sources when they
+//!   agree, and taking a source out again.
 //! * [`infer`]: the deterministic vocabularies behind technology, domain,
 //!   role and ownership evidence.
 //! * [`export`]: the versioned, portable profile format.
@@ -21,10 +25,13 @@
 //! * [`service`]: the use cases front-ends call.
 
 pub mod aggregate;
+mod basic_support;
 pub mod date;
 pub mod entities;
 pub mod evidence;
 pub mod export;
+mod field_support;
+pub mod github;
 pub mod ids;
 pub mod import;
 pub mod infer;
@@ -36,8 +43,12 @@ pub mod repository;
 pub mod resume;
 #[cfg(test)]
 mod scenarios;
+#[cfg(test)]
+mod scenarios_sources;
 pub mod service;
+pub mod sources;
 pub mod statement;
+pub mod support;
 pub mod words;
 
 pub use aggregate::{DomainEvidence, Gap, LastSeen, ProfileData, SkillEvidence};
@@ -47,11 +58,12 @@ pub use evidence::{
     UsableBecause,
 };
 pub use export::{EXPORT_FORMAT, EXPORT_VERSION, ExportError, ProfileExport};
+pub use github::{GithubAccount, GithubImport, GithubRepo, GithubSnapshot, RepoSelection};
 pub use ids::{
     ClaimId, DocumentId, EducationId, ExperienceId, PreferenceId, ProfileId, ProjectId, RecordId,
     SkillId, StatementId,
 };
-pub use import::{ImportReport, Tally, document_id, merge_resume};
+pub use import::{ImportReport, Tally, document_id, merge_resume, source_document_id};
 pub use model::{
     Contact, ContactKind, DocumentKind, Education, EmploymentKind, EvidenceStrength, Experience,
     Origin, Profile, Project, RecordMeta, Skill, SourceDocument, SourceRef, SpokenLanguage,
@@ -71,4 +83,6 @@ pub use service::{
     BasicsEdit, EducationEdit, ExperienceEdit, ProfileError, ProfileService, ProjectEdit, Removal,
     StatementOutcome,
 };
+pub use sources::{SourceRemoval, merge_linkedin, remove_source};
 pub use statement::{ReadPreference, RuleParser, StatementParser, StatementReadout};
+pub use support::{ref_origin, supporting_origins};

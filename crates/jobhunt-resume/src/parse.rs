@@ -966,6 +966,7 @@ impl Parser {
             }
             self.out.projects.push(ParsedProject {
                 name,
+                key: None,
                 description,
                 role,
                 url,

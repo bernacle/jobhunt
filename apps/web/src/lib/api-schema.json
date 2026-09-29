@@ -935,10 +935,10 @@
       "type": "object"
     },
     "DocumentSummary": {
-      "description": "A resume imported into the profile (never its text).",
+      "description": "A source imported into the profile (never its text): a resume, a\nLinkedIn export, a GitHub account.",
       "properties": {
         "current": {
-          "description": "The most recently imported one: the resume the profile follows.",
+          "description": "The most recently imported of its source: the resume (or export,\nor account) the profile follows.",
           "type": "boolean"
         },
         "file_name": {
@@ -955,7 +955,7 @@
           "type": "string"
         },
         "kind": {
-          "description": "`pdf`, `text` or `markdown`.",
+          "description": "`pdf`, `text` or `markdown` (a resume), `linkedin` or `github`.",
           "type": "string"
         },
         "last_imported_at": {
@@ -968,6 +968,11 @@
             "integer",
             "null"
           ]
+        },
+        "source": {
+          "default": "",
+          "description": "`resume`, `linkedin` or `github`.",
+          "type": "string"
         }
       },
       "required": [
@@ -1006,6 +1011,14 @@
             "string",
             "null"
           ]
+        },
+        "sources": {
+          "default": [],
+          "description": "`resume`, `linkedin`, `github`: the sources that contain it now.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "stale": {
           "type": "boolean"
@@ -1210,6 +1223,38 @@
       ],
       "type": "object"
     },
+    "EvidenceView": {
+      "description": "One source's words behind a claim.",
+      "properties": {
+        "document": {
+          "description": "The file or account (`resume.pdf`, `github.com/octocat`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "section": {
+          "description": "Where in the source (\"Experience\", \"Positions\", \"Repositories\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "snippet": {
+          "description": "The source's own words, verbatim (empty when the source gave none).",
+          "type": "string"
+        },
+        "source": {
+          "description": "`resume`, `linkedin` or `github`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "snippet"
+      ],
+      "type": "object"
+    },
     "ExperienceSummary": {
       "description": "One experience.",
       "properties": {
@@ -1240,8 +1285,16 @@
             "null"
           ]
         },
+        "sources": {
+          "default": [],
+          "description": "The sources that contain it now: `resume`, `linkedin`, `github`\n(empty for what the person entered themselves, or when stale).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "stale": {
-          "description": "No longer in the latest resume.",
+          "description": "No source contains it any more.",
           "type": "boolean"
         },
         "technologies": {
@@ -1839,6 +1892,21 @@
         "worth_reviewing",
         "shown"
       ],
+      "type": "object"
+    },
+    "GithubImportRequest": {
+      "additionalProperties": false,
+      "description": "`POST /api/v1/profile/github`: import a public GitHub account.",
+      "properties": {
+        "username": {
+          "default": null,
+          "description": "A GitHub username or profile URL. Defaults to the account imported\nbefore, or the GitHub link on the profile.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "IdentityView": {
@@ -3249,7 +3317,7 @@
         },
         "documents": {
           "default": [],
-          "description": "Imported resumes, the current one first.",
+          "description": "Imported sources (resumes, a LinkedIn export, a GitHub account),\nthe current ones first.",
           "items": {
             "$ref": "#/$defs/DocumentSummary"
           },
@@ -3398,6 +3466,14 @@
             "null"
           ]
         },
+        "sources": {
+          "default": [],
+          "description": "`resume`, `linkedin`, `github`: the sources that contain it now.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "stale": {
           "type": "boolean"
         },
@@ -3406,6 +3482,13 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "url": {
+          "description": "Its address (a repository), when a source gave one.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -3936,6 +4019,140 @@
       ],
       "type": "object"
     },
+    "SourceImportResult": {
+      "description": "What importing a LinkedIn export or a GitHub account changed.",
+      "properties": {
+        "claims": {
+          "$ref": "#/$defs/TallyView"
+        },
+        "conflicts": {
+          "description": "Statements that disagree with another source (different dates for\none position); each waits for review.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "education": {
+          "$ref": "#/$defs/TallyView"
+        },
+        "experiences": {
+          "$ref": "#/$defs/TallyView"
+        },
+        "first_import": {
+          "description": "The profile had no such source before.",
+          "type": "boolean"
+        },
+        "kept_confirmed": {
+          "description": "Confirmed claims found again (still confirmed).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kept_rejected": {
+          "description": "Rejected claims found again (still rejected, never used).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "label": {
+          "description": "What was imported: the export's file name, or `github.com/<login>`.",
+          "type": "string"
+        },
+        "needs_review": {
+          "description": "Claims now waiting for the person's review.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "notes": {
+          "description": "Doubts about particular rows or records.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "preserved_edits": {
+          "description": "Records where the person's own edits were kept.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "problems": {
+          "description": "Parts that could not be read (the rest was imported).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileView",
+          "description": "The profile after the import."
+        },
+        "projects": {
+          "$ref": "#/$defs/TallyView"
+        },
+        "read": {
+          "description": "What Narrow read (\"3 positions\", \"12 repositories\").",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reconfirm": {
+          "description": "Confirmed claims whose wording changed: they need confirming again.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skills": {
+          "$ref": "#/$defs/TallyView"
+        },
+        "skipped": {
+          "description": "What it deliberately did not use (\"2 forks\", \"38 other files in\nthe export, never opened\").",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "source": {
+          "description": "`linkedin` or `github`.",
+          "type": "string"
+        },
+        "stale_confirmed": {
+          "description": "Confirmed claims no source supports any more.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unchanged": {
+          "description": "The same content as the last import: nothing new to read.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "source",
+        "label",
+        "first_import",
+        "unchanged",
+        "read",
+        "skipped",
+        "experiences",
+        "projects",
+        "education",
+        "skills",
+        "claims",
+        "kept_confirmed",
+        "kept_rejected",
+        "reconfirm",
+        "stale_confirmed",
+        "preserved_edits",
+        "conflicts",
+        "notes",
+        "problems",
+        "needs_review",
+        "profile"
+      ],
+      "type": "object"
+    },
     "SourceRecordView": {
       "description": "One source record of an opportunity (provenance).",
       "properties": {
@@ -4007,6 +4224,64 @@
       ],
       "type": "object"
     },
+    "SourceRemovalResult": {
+      "description": "What taking a source out did.",
+      "properties": {
+        "claims_deleted": {
+          "description": "Claims only this source supported, deleted.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "claims_kept": {
+          "description": "Claims other sources still support (their provenance moved there).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "decisions_kept": {
+          "description": "Claims only this source supported that the person had confirmed,\nrejected or rewritten: kept without a source (confirmations need\nrenewing before use).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "needs_review": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "profile": {
+          "$ref": "#/$defs/ProfileView"
+        },
+        "records_deleted": {
+          "description": "Records only this source supported, deleted.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "records_kept": {
+          "description": "Records other sources (or the person) still support.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source": {
+          "description": "`linkedin` or `github`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "records_deleted",
+        "records_kept",
+        "claims_deleted",
+        "claims_kept",
+        "decisions_kept",
+        "needs_review",
+        "profile"
+      ],
+      "type": "object"
+    },
     "StanceInput": {
       "description": "How strongly a preference holds.",
       "oneOf": [
@@ -4071,6 +4346,13 @@
       "description": "Counts of one kind of record in an import.",
       "properties": {
         "added": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "corroborated": {
+          "default": 0,
+          "description": "Already in the profile from another source (or entered by the\nperson): this source was added as evidence, not as a duplicate.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -4434,11 +4716,19 @@
           "type": "string"
         },
         "document": {
-          "description": "The file the words are from.",
+          "description": "The file (or account) the words are from.",
           "type": [
             "string",
             "null"
           ]
+        },
+        "evidence": {
+          "default": [],
+          "description": "Every source that says it, its main one first (a resume and a\nLinkedIn export both listing a position): the detail behind\n`snippet`.",
+          "items": {
+            "$ref": "#/$defs/EvidenceView"
+          },
+          "type": "array"
         },
         "id": {
           "description": "`clm_…` (confirm with `narrow claims confirm <id>`).",
@@ -4449,18 +4739,18 @@
         },
         "provenance": {
           "default": "",
-          "description": "`extracted` (read from the resume), `inferred` (concluded by\nJobHunt) or `user_entered`.",
+          "description": "`extracted` (read from a source), `inferred` (concluded by JobHunt)\nor `user_entered`.",
           "type": "string"
         },
         "section": {
-          "description": "The resume section the words are from.",
+          "description": "The section the words are from.",
           "type": [
             "string",
             "null"
           ]
         },
         "snippet": {
-          "description": "The resume's own words behind it, verbatim.",
+          "description": "The source's own words behind it, verbatim (its main source).",
           "type": [
             "string",
             "null"
@@ -4885,6 +5175,9 @@
     "FeedbackResult": {
       "$ref": "#/$defs/FeedbackResult"
     },
+    "GithubImportRequest": {
+      "$ref": "#/$defs/GithubImportRequest"
+    },
     "JobDetail": {
       "$ref": "#/$defs/JobDetail"
     },
@@ -4908,6 +5201,12 @@
     },
     "SearchResults": {
       "$ref": "#/$defs/SearchResults"
+    },
+    "SourceImportResult": {
+      "$ref": "#/$defs/SourceImportResult"
+    },
+    "SourceRemovalResult": {
+      "$ref": "#/$defs/SourceRemovalResult"
     },
     "TasteView": {
       "$ref": "#/$defs/TasteView"

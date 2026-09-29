@@ -10,7 +10,8 @@ use crate::evidence::{Claim, ClaimKind, ClaimQuery, Provenance, Standing, Subjec
 use crate::ids::{ClaimId, ExperienceId, ProfileId};
 use crate::infer::topic_key;
 use crate::model::{
-    Education, EvidenceStrength, Experience, Profile, Project, Skill, SourceDocument, Verification,
+    Education, EvidenceStrength, Experience, Origin, Profile, Project, Skill, SourceDocument,
+    Verification,
 };
 use crate::preferences::{Preference, PreferenceCategory, PreferenceStatement, PreferencesView};
 
@@ -112,6 +113,96 @@ impl ProfileData {
     /// The most recently imported document.
     pub fn latest_document(&self) -> Option<&SourceDocument> {
         self.documents.iter().max_by_key(|d| d.last_imported_at)
+    }
+
+    /// The most recently imported document of one source (the current
+    /// resume, the LinkedIn export, the GitHub account).
+    pub fn latest_document_of(&self, origin: Origin) -> Option<&SourceDocument> {
+        self.documents
+            .iter()
+            .filter(|d| d.kind.origin() == origin)
+            .max_by_key(|d| d.last_imported_at)
+    }
+
+    /// The sources supporting a claim now, its main one first (empty for
+    /// the user's own claims without imported evidence, and for stale
+    /// ones).
+    pub fn claim_sources(&self, claim: &Claim) -> Vec<Origin> {
+        let fallback = if claim.provenance == Provenance::UserEntered {
+            Origin::User
+        } else {
+            Origin::Resume
+        };
+        crate::support::supporting_origins(
+            &self.documents,
+            claim.source.as_ref(),
+            &claim.corroborations,
+            fallback,
+            claim.stale_since.is_some(),
+        )
+    }
+
+    /// The sources supporting a record now (see [`ProfileData::claim_sources`]).
+    pub fn record_sources(&self, meta: &crate::model::RecordMeta) -> Vec<Origin> {
+        if let Some(key) = meta
+            .import_key
+            .as_deref()
+            .and_then(|k| k.strip_prefix("skill|"))
+        {
+            let mut sources = Vec::new();
+            for claim in self.claims.iter().filter(|c| {
+                c.topic.as_deref() == Some(key)
+                    && matches!(c.kind, ClaimKind::Technology | ClaimKind::Skill)
+                    && c.stale_since.is_none()
+                    && c.verification != Verification::Rejected
+            }) {
+                for origin in self.claim_sources(claim) {
+                    if !sources.contains(&origin) {
+                        sources.push(origin);
+                    }
+                }
+            }
+            return sources;
+        }
+        crate::support::supporting_origins(
+            &self.documents,
+            meta.source.as_ref(),
+            &meta.corroborations,
+            meta.origin,
+            meta.is_stale(),
+        )
+    }
+
+    /// The evidence policy's verdict on a claim, in words that name its
+    /// source ("quoted from your LinkedIn export").
+    pub fn describe(&self, claim: &Claim) -> String {
+        let origin = claim.source.as_ref().map_or(Origin::Resume, |s| {
+            crate::support::ref_origin(&self.documents, s)
+        });
+        let yours = match origin {
+            Origin::Github => "GitHub".to_owned(),
+            other => format!("your {}", other.label()),
+        };
+        match self.standing(claim) {
+            Standing::Usable(crate::UsableBecause::Grounded) => match origin {
+                Origin::Github => "read from GitHub's public API".to_owned(),
+                _ => format!("quoted from {yours}"),
+            },
+            Standing::NeedsReview(crate::ReviewReason::Uncertain) if claim.basis.is_some() => {
+                format!("read from {yours}, which disagrees with another source; check it")
+            }
+            Standing::NeedsReview(crate::ReviewReason::Uncertain) => {
+                format!("read from {yours}, but the reading is uncertain")
+            }
+            Standing::NeedsReview(crate::ReviewReason::SourceRemoved) if claim.source.is_none() => {
+                "its source was removed; confirm to keep using it".to_owned()
+            }
+            Standing::NeedsReview(crate::ReviewReason::SourceRemoved) => match origin {
+                Origin::Github => "no longer on GitHub; confirm to keep using it".to_owned(),
+                _ => format!("no longer in {yours}; confirm to keep using it"),
+            },
+            other => other.describe().to_owned(),
+        }
     }
 
     /// Experiences not rejected, most recent first: current positions,
@@ -355,17 +446,20 @@ impl ProfileData {
                 Standing::NeedsReview(crate::ReviewReason::SourceRemoved)
             )
         };
-        let demonstrated = claims
-            .iter()
-            .filter(live)
-            .any(|c| c.kind == ClaimKind::Technology && c.subject != Subject::Profile);
+        let demonstrated = claims.iter().filter(live).any(|c| {
+            c.kind == ClaimKind::Technology
+                    && c.subject != Subject::Profile
+                    // Public repository language statistics prove code is
+                    // present, not that this person used it in their work.
+                    && self.claim_sources(c).iter().any(|source| *source != Origin::Github)
+        });
         let user = skill.meta.origin == crate::Origin::User
             || claims
                 .iter()
                 .any(|c| c.provenance == Provenance::UserEntered);
         let listed = claims
             .iter()
-            .filter(live)
+            .filter(|c| self.standing(c).is_usable())
             .any(|c| c.kind == ClaimKind::Skill);
         let strength = if skill.meta.is_rejected() {
             EvidenceStrength::Unsupported
@@ -487,7 +581,11 @@ impl ProfileData {
                 add("experience", format!("{label}: no end date"));
             }
             if e.meta.is_stale() {
-                add("experience", format!("{label}: not in your latest resume"));
+                let gone = match e.meta.origin {
+                    Origin::Github => "no longer on GitHub".to_owned(),
+                    origin => format!("not in your latest {}", origin.label()),
+                };
+                add("experience", format!("{label}: {gone}"));
             }
         }
         let review = self.review_queue().len();

@@ -13,7 +13,9 @@
 //! | `yc`         | company slug    | `www.ycombinator.com/companies/<slug>/jobs`        |
 //!
 //! [`careers`] maps company careers pages onto these boards, and
-//! [`verify`] checks single jobs against the same sources.
+//! [`verify`] checks single jobs against the same sources. [`github`] is
+//! not a job source: it reads a public GitHub account as evidence for the
+//! profile, over the same HTTP client.
 //!
 //! Adding a source family means:
 //! 1. a module with the adapter, its raw payload types and conversion;
@@ -28,6 +30,7 @@
 pub mod ashby;
 pub mod careers;
 mod common;
+pub mod github;
 pub mod greenhouse;
 pub mod http;
 pub mod lever;
@@ -42,6 +45,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 pub use ashby::{AshbyBoard, AshbySource};
 pub use careers::{BoardRef, CareersPage};
+pub use github::{GithubError, GithubReader};
 pub use greenhouse::{GreenhouseBoard, GreenhouseSource};
 pub use http::{HttpClient, HttpClientError, HttpSettings, Probe};
 pub use lever::{LeverRegion, LeverSite, LeverSource};

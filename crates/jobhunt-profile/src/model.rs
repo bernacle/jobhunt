@@ -1,11 +1,12 @@
 //! The career profile: basics, source documents, experiences, projects,
 //! education and skills.
 //!
-//! Records carry a [`RecordMeta`] saying where they came from (a resume or
-//! the user), which document and snippet supports them, whether the user
-//! confirmed or rejected them, which fields the user edited (and a resume
-//! re-import must therefore leave alone), and whether the latest resume
-//! still contains them. Unknown values stay `None`: nothing is guessed.
+//! Records carry a [`RecordMeta`] saying where they came from (a resume, a
+//! LinkedIn export, GitHub, or the user), which document and snippet
+//! supports them (and which other sources corroborate them), whether the
+//! user confirmed or rejected them, which fields the user edited (and a
+//! re-import must therefore leave alone), and whether the sources still
+//! contain them. Unknown values stay `None`: nothing is guessed.
 //!
 //! Responsibilities, accomplishments, technologies, domains and role
 //! signals are not columns of an experience: they are [`crate::Claim`]s
@@ -14,11 +15,13 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
 
 use crate::date::{PartialDate, Period};
 use crate::ids::{DocumentId, EducationId, ExperienceId, ProfileId, ProjectId, SkillId};
 
-/// Where a record came from.
+/// Where a record came from: an imported source, or the user.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Origin {
@@ -26,13 +29,22 @@ pub enum Origin {
     Resume,
     /// Entered by the user.
     User,
+    /// Read from a LinkedIn data export the user downloaded and provided.
+    Linkedin,
+    /// Read from a public GitHub account through GitHub's API.
+    Github,
 }
 
 impl Origin {
+    /// The sources a record can be imported from.
+    pub const IMPORTED: [Origin; 3] = [Self::Resume, Self::Linkedin, Self::Github];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Resume => "resume",
             Self::User => "user",
+            Self::Linkedin => "linkedin",
+            Self::Github => "github",
         }
     }
 
@@ -40,7 +52,24 @@ impl Origin {
         match value {
             "resume" => Some(Self::Resume),
             "user" => Some(Self::User),
+            "linkedin" => Some(Self::Linkedin),
+            "github" => Some(Self::Github),
             _ => None,
+        }
+    }
+
+    /// Whether it came from an imported source (not typed by the user).
+    pub fn is_imported(self) -> bool {
+        self != Self::User
+    }
+
+    /// How people call it: "resume", "LinkedIn export", "GitHub", "you".
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Resume => "resume",
+            Self::User => "you",
+            Self::Linkedin => "LinkedIn export",
+            Self::Github => "GitHub",
         }
     }
 }
@@ -90,6 +119,17 @@ pub struct SourceRef {
     pub section: Option<String>,
 }
 
+/// Field values one imported source actually stated for a logical record.
+/// These are kept separately from the displayed values so removing a source
+/// can reconcile fields without attributing its words to another source.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecordSourceSnapshot {
+    pub origin: Origin,
+    pub import_key: String,
+    pub fields: BTreeMap<String, Value>,
+}
+
 /// Bookkeeping shared by experiences, projects, education and skills.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -111,6 +151,15 @@ pub struct RecordMeta {
     /// What the parser was unsure about ("no dates found", ...).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
+    /// Other sources that contain the same record (a LinkedIn export
+    /// listing the position a resume also lists), at most one per source.
+    /// See [`crate::support`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub corroborations: Vec<SourceRef>,
+    /// Source-specific field values and stable source identities for a
+    /// shared record. Empty on legacy single-resume records.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_snapshots: Vec<RecordSourceSnapshot>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -125,6 +174,8 @@ impl RecordMeta {
             stale_since: None,
             edited_fields: Vec::new(),
             notes: Vec::new(),
+            corroborations: Vec::new(),
+            source_snapshots: Vec::new(),
             created_at: now,
             updated_at: now,
         }
@@ -190,6 +241,21 @@ pub struct SpokenLanguage {
     pub level: Option<String>,
 }
 
+/// Basic profile values actually supplied by one imported source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BasicSourceSnapshot {
+    pub origin: Origin,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub headline: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub languages: Vec<SpokenLanguage>,
+}
+
 /// Who the user is, briefly. Contact details are kept only because resumes
 /// contain them; JobHunt does not need them for anything yet.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -211,6 +277,9 @@ pub struct Profile {
     /// Basics the user set by hand (`name`, `headline`, ...).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub edited_fields: Vec<String>,
+    /// Present only once a non-resume source has contributed basics.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub basic_sources: Vec<BasicSourceSnapshot>,
     /// Incremented by every change; guards against concurrent writers.
     pub revision: u64,
     pub created_at: DateTime<Utc>,
@@ -228,6 +297,7 @@ impl Profile {
             contacts: Vec::new(),
             languages: Vec::new(),
             edited_fields: Vec::new(),
+            basic_sources: Vec::new(),
             revision: 0,
             created_at: now,
             updated_at: now,
@@ -239,13 +309,18 @@ impl Profile {
     }
 }
 
-/// What kind of file a document was read from.
+/// What a document was read from: a resume file (PDF, text, Markdown), a
+/// LinkedIn data export, or a GitHub account.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DocumentKind {
     Pdf,
     Text,
     Markdown,
+    /// The career files of a LinkedIn data export.
+    Linkedin,
+    /// A snapshot of a public GitHub account.
+    Github,
 }
 
 impl DocumentKind {
@@ -254,6 +329,8 @@ impl DocumentKind {
             Self::Pdf => "pdf",
             Self::Text => "text",
             Self::Markdown => "markdown",
+            Self::Linkedin => "linkedin",
+            Self::Github => "github",
         }
     }
 
@@ -262,13 +339,25 @@ impl DocumentKind {
             "pdf" => Some(Self::Pdf),
             "text" => Some(Self::Text),
             "markdown" => Some(Self::Markdown),
+            "linkedin" => Some(Self::Linkedin),
+            "github" => Some(Self::Github),
             _ => None,
+        }
+    }
+
+    /// The source a document of this kind is.
+    pub fn origin(self) -> Origin {
+        match self {
+            Self::Pdf | Self::Text | Self::Markdown => Origin::Resume,
+            Self::Linkedin => Origin::Linkedin,
+            Self::Github => Origin::Github,
         }
     }
 }
 
-/// An imported resume. Its extracted text is kept, so every snippet can be
-/// traced back to the document it came from.
+/// An imported source: a resume, a LinkedIn export or a GitHub account. Its
+/// text (what was read, rendered as text for exports and APIs) is kept, so
+/// every snippet can be traced back to the document it came from.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SourceDocument {
@@ -282,7 +371,7 @@ pub struct SourceDocument {
     pub pages: Option<u32>,
     /// The extracted text the parser read.
     pub text: String,
-    /// Which parser read it (`deterministic/1`, ...).
+    /// Which parser read it (`deterministic/1`, `linkedin-export/1`, ...).
     pub parser: String,
     pub first_imported_at: DateTime<Utc>,
     pub last_imported_at: DateTime<Utc>,
@@ -490,7 +579,8 @@ pub enum EvidenceStrength {
     Listed,
     /// The user said so.
     UserStated,
-    /// Used in at least one experience or project, with the resume's words.
+    /// Personal use in an experience or project, backed by a resume,
+    /// LinkedIn export or user evidence; repository code alone is weaker.
     Demonstrated,
 }
 

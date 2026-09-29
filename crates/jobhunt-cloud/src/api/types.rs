@@ -236,6 +236,27 @@ pub struct ResumeQuery {
     pub file_name: Option<String>,
 }
 
+/// `PUT /api/v1/profile/linkedin?file_name=…` (the body is the export:
+/// the `.zip` LinkedIn sends, or one of its CSV files).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LinkedinQuery {
+    /// The file's name (`Basic_LinkedInDataExport_09-01-2026.zip`,
+    /// `Positions.csv`); a CSV is recognized by it.
+    #[serde(default)]
+    pub file_name: Option<String>,
+}
+
+/// `POST /api/v1/profile/github`: import a public GitHub account.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GithubImportRequest {
+    /// A GitHub username or profile URL. Defaults to the account imported
+    /// before, or the GitHub link on the profile.
+    #[serde(default)]
+    pub username: Option<String>,
+}
+
 /// One notification email, for the settings page (never its content).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct DeliveryView {

@@ -715,6 +715,7 @@ startup with every problem listed.
 | `JOBHUNT_VERIFY_BATCH` | verification | no | 100 jobs per run |
 | `JOBHUNT_VERIFICATION_FRESH_HOURS` / `_STALE_HOURS` | all | no | from the config file (24 / 72) |
 | `JOBHUNT_USAGE_EVENTS` | server | no | `true` |
+| `JOBHUNT_GITHUB_TOKEN` | server | no | a GitHub token without scopes: GitHub evidence imports at the authenticated rate limit, with language statistics (secret; without it, imports share GitHub's 60 requests/hour and use each repository's primary language) |
 | `JOBHUNT_WEB_URL` | server, notify | for email | the web app's https URL (links in emails) |
 | `JOBHUNT_EMAIL_PROVIDER` | server, notify | for email | `resend`, `file` (development; refused in production) or `none` (default) |
 | `JOBHUNT_RESEND_API_KEY` | server, notify | with `resend` | Secret |

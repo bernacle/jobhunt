@@ -1,16 +1,20 @@
-//! Reading resumes into JobHunt's profile model, locally.
+//! Reading resumes (and LinkedIn data exports) into JobHunt's profile
+//! model, locally.
 //!
 //! * [`extract`](mod@extract): PDF, plain-text and Markdown files into lines of text
 //!   (no browser, no network, no LLM).
 //! * [`parse`]: the [`ResumeParser`] extension point and the built-in
 //!   [`DeterministicParser`], which fills in a
 //!   [`jobhunt_profile::ParsedResume`].
+//! * [`linkedin`]: a LinkedIn data export the person downloaded (its
+//!   career files only) into the same contract.
 //!
 //! The profile domain decides what the parsed resume *claims*; this crate
 //! only structures the document and keeps its words.
 
 pub mod dates;
 pub mod extract;
+pub mod linkedin;
 pub mod parse;
 
 use std::path::{Path, PathBuf};
@@ -20,6 +24,7 @@ use jobhunt_profile::{DocumentId, SourceDocument};
 use sha2::{Digest, Sha256};
 
 pub use extract::{ExtractError, ExtractedText, Line, extract};
+pub use linkedin::{LinkedinError, LinkedinExport};
 pub use parse::{DeterministicParser, ResumeParser};
 
 /// A resume file, read and extracted.

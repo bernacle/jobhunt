@@ -143,8 +143,16 @@ impl<'r> Cols<'r> {
     fn meta(&self) -> Result<RecordMeta, StorageError> {
         let document = self.opt_parse("document_id")?;
         let snippet = self.opt("source_snippet")?;
+        // `origin` says 'resume' for every imported record; `import_origin`
+        // names LinkedIn or GitHub (see the evidence_sources migration).
+        let origin = match self.opt("import_origin")? {
+            Some(value) => Origin::from_canonical(&value).ok_or_else(|| {
+                corrupt(&self.id, format!("import_origin: unknown value {value:?}"))
+            })?,
+            None => self.canonical("origin", Origin::from_canonical)?,
+        };
         Ok(RecordMeta {
-            origin: self.canonical("origin", Origin::from_canonical)?,
+            origin,
             source: match (document, snippet) {
                 (Some(document), Some(snippet)) => Some(SourceRef {
                     document,
@@ -158,9 +166,31 @@ impl<'r> Cols<'r> {
             stale_since: self.opt_time("stale_since")?,
             edited_fields: self.json("edited_fields")?,
             notes: self.json("notes")?,
+            corroborations: self.json("corroborations")?,
+            source_snapshots: self.json("source_snapshots")?,
             created_at: self.time("created_at")?,
             updated_at: self.time("updated_at")?,
         })
+    }
+}
+
+/// The `origin` column's value and the `import_origin` column's (see the
+/// evidence_sources migration: the legacy column only accepts 'resume' and
+/// 'user').
+fn origin_columns(origin: Origin) -> (&'static str, Option<&'static str>) {
+    match origin {
+        Origin::Resume | Origin::User => (origin.as_str(), None),
+        Origin::Linkedin | Origin::Github => (Origin::Resume.as_str(), Some(origin.as_str())),
+    }
+}
+
+/// The `kind` and `source_kind` columns of a document.
+fn kind_columns(kind: DocumentKind) -> (&'static str, Option<&'static str>) {
+    match kind {
+        DocumentKind::Pdf | DocumentKind::Text | DocumentKind::Markdown => (kind.as_str(), None),
+        DocumentKind::Linkedin | DocumentKind::Github => {
+            (DocumentKind::Text.as_str(), Some(kind.as_str()))
+        }
     }
 }
 
@@ -176,7 +206,12 @@ fn bind_meta<'q>(
     let edited =
         serde_json::to_string(&meta.edited_fields).map_err(encode_error("encoding a record"))?;
     let notes = serde_json::to_string(&meta.notes).map_err(encode_error("encoding a record"))?;
-    Ok(q.bind(meta.origin.as_str())
+    let corroborations =
+        serde_json::to_string(&meta.corroborations).map_err(encode_error("encoding a record"))?;
+    let source_snapshots =
+        serde_json::to_string(&meta.source_snapshots).map_err(encode_error("encoding a record"))?;
+    let (origin, import_origin) = origin_columns(meta.origin);
+    Ok(q.bind(origin)
         .bind(meta.source.as_ref().map(|s| s.document.to_string()))
         .bind(meta.source.as_ref().map(|s| s.snippet.clone()))
         .bind(meta.source.as_ref().and_then(|s| s.section.clone()))
@@ -186,10 +221,13 @@ fn bind_meta<'q>(
         .bind(edited)
         .bind(notes)
         .bind(encode_timestamp(meta.created_at))
-        .bind(encode_timestamp(meta.updated_at)))
+        .bind(encode_timestamp(meta.updated_at))
+        .bind(import_origin)
+        .bind(corroborations)
+        .bind(source_snapshots))
 }
 
-const META_COLUMNS: [&str; 11] = [
+const META_COLUMNS: [&str; 14] = [
     "origin",
     "document_id",
     "source_snippet",
@@ -201,6 +239,9 @@ const META_COLUMNS: [&str; 11] = [
     "notes",
     "created_at",
     "updated_at",
+    "import_origin",
+    "corroborations",
+    "source_snapshots",
 ];
 
 /// `INSERT … ON CONFLICT (id) DO UPDATE` over `columns` (the first is `id`).
@@ -248,6 +289,7 @@ impl SqliteJobStore {
             contacts: c.json::<Vec<Contact>>("contacts")?,
             languages: c.json::<Vec<SpokenLanguage>>("languages")?,
             edited_fields: c.json("edited_fields")?,
+            basic_sources: c.json("basic_sources")?,
             revision: u64::try_from(c.int("revision")?)
                 .map_err(|e| corrupt(&pid, e.to_string()))?,
             created_at: c.time("created_at")?,
@@ -264,9 +306,15 @@ impl SqliteJobStore {
         .iter()
         .map(|row| {
             let c = Cols::new(row, "id");
+            let kind = match c.opt("source_kind")? {
+                Some(value) => DocumentKind::from_canonical(&value).ok_or_else(|| {
+                    corrupt(&c.id, format!("source_kind: unknown value {value:?}"))
+                })?,
+                None => c.canonical("kind", DocumentKind::from_canonical)?,
+            };
             Ok(SourceDocument {
                 id: c.parse("id")?,
-                kind: c.canonical("kind", DocumentKind::from_canonical)?,
+                kind,
                 file_name: c.opt("file_name")?,
                 sha256: c.text("sha256")?,
                 pages: c
@@ -455,6 +503,7 @@ fn decode_claim(row: &SqliteRow) -> Result<Claim, StorageError> {
             }),
             _ => None,
         },
+        corroborations: c.json("corroborations")?,
         basis: c.opt("basis")?,
         import_key: c.opt("import_key")?,
         supersedes: c.opt_parse("supersedes")?,
@@ -521,6 +570,7 @@ async fn write_profile(
             "contacts",
             "languages",
             "edited_fields",
+            "basic_sources",
             "revision",
             "created_at",
             "updated_at",
@@ -534,6 +584,7 @@ async fn write_profile(
     .bind(serde_json::to_string(&p.contacts).map_err(enc)?)
     .bind(serde_json::to_string(&p.languages).map_err(encode_error("encoding a profile"))?)
     .bind(serde_json::to_string(&p.edited_fields).map_err(encode_error("encoding a profile"))?)
+    .bind(serde_json::to_string(&p.basic_sources).map_err(encode_error("encoding a profile"))?)
     .bind(i64::try_from(p.revision).unwrap_or(i64::MAX))
     .bind(encode_timestamp(p.created_at))
     .bind(encode_timestamp(p.updated_at))
@@ -612,13 +663,15 @@ async fn write_profile(
             "parser",
             "first_imported_at",
             "last_imported_at",
+            "source_kind",
         ],
     );
     for d in &data.documents {
+        let (kind, source_kind) = kind_columns(d.kind);
         sqlx::query(&sql)
             .bind(d.id.to_string())
             .bind(&pid)
-            .bind(d.kind.as_str())
+            .bind(kind)
             .bind(&d.file_name)
             .bind(&d.sha256)
             .bind(d.pages.map(i64::from))
@@ -626,6 +679,7 @@ async fn write_profile(
             .bind(&d.parser)
             .bind(encode_timestamp(d.first_imported_at))
             .bind(encode_timestamp(d.last_imported_at))
+            .bind(source_kind)
             .execute(&mut *conn)
             .await
             .map_err(query_error("storing a profile document"))?;
@@ -818,9 +872,12 @@ async fn write_profile(
             "edited",
             "created_at",
             "updated_at",
+            "corroborations",
         ],
     );
     for c in &data.claims {
+        let corroborations =
+            serde_json::to_string(&c.corroborations).map_err(encode_error("encoding a claim"))?;
         sqlx::query(&sql)
             .bind(c.id.to_string())
             .bind(&pid)
@@ -845,6 +902,7 @@ async fn write_profile(
             .bind(c.edited)
             .bind(encode_timestamp(c.created_at))
             .bind(encode_timestamp(c.updated_at))
+            .bind(corroborations)
             .execute(&mut *conn)
             .await
             .map_err(query_error("storing a claim"))?;

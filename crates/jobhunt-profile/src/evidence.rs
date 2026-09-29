@@ -8,16 +8,18 @@
 //!   domain and role claims, a normalized [`Claim::topic`];
 //! * what it is about: [`Claim::subject`] (an experience, project,
 //!   education entry, or the profile as a whole);
-//! * where it came from: [`Claim::provenance`] (read from the resume,
-//!   inferred by JobHunt, or entered by the user) and [`Claim::source`]
-//!   (the document and its verbatim snippet);
+//! * where it came from: [`Claim::provenance`] (read from a source,
+//!   inferred by JobHunt, or entered by the user), [`Claim::source`] (the
+//!   document and its verbatim snippet) and [`Claim::corroborations`]
+//!   (other sources saying the same thing: a resume and a LinkedIn export
+//!   listing one position make one claim with two sources);
 //! * how sure JobHunt is: [`Claim::confidence`], plus [`Claim::basis`] for
 //!   inferences;
 //! * what the user decided: [`Claim::verification`].
 //!
 //! [`Claim::standing`] turns that into the evidence policy: only claims
-//! the user confirmed or entered, and claims quoted directly from the
-//! resume with high confidence, are [`Standing::Usable`] for anything that
+//! the user confirmed or entered, and claims quoted directly from a source
+//! with high confidence, are [`Standing::Usable`] for anything that
 //! speaks for the user (application answers, later). Inferences are never
 //! usable until confirmed, and rejected claims never are.
 
@@ -136,7 +138,8 @@ impl ClaimKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Provenance {
-    /// Read directly from the resume; the snippet is the resume's words.
+    /// Read directly from a source (a resume, a LinkedIn export, GitHub's
+    /// API); the snippet is the source's words.
     Extracted,
     /// Concluded by JobHunt from other evidence (see [`Claim::basis`]).
     Inferred,
@@ -212,10 +215,15 @@ pub struct Claim {
     /// The document and verbatim snippet supporting the claim.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<SourceRef>,
+    /// Other sources that say the same thing, at most one per source (see
+    /// [`crate::support`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub corroborations: Vec<SourceRef>,
     /// For inferred claims: what the inference rests on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub basis: Option<String>,
-    /// For resume claims: identity across re-imports.
+    /// For imported claims: identity across re-imports (and across
+    /// sources: the key names the subject and the statement, not the file).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub import_key: Option<String>,
     /// An earlier claim this one replaced because the resume's wording
@@ -224,7 +232,8 @@ pub struct Claim {
     pub supersedes: Option<ClaimId>,
     /// Order within its subject.
     pub position: u32,
-    /// Set when the latest resume import no longer supports the claim.
+    /// Set when no source supports the claim any more (the latest resume,
+    /// export or account no longer contains it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stale_since: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -420,6 +429,7 @@ mod tests {
                 snippet: "Designed a rules engine".into(),
                 section: None,
             }),
+            corroborations: Vec::new(),
             basis: None,
             import_key: None,
             supersedes: None,

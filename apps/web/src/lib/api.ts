@@ -18,6 +18,8 @@ import type {
   PreferenceUpdateResult,
   ProfileView,
   ResumeImportResult,
+  SourceImportResult,
+  SourceRemovalResult,
   TasteView,
   TokenList,
   UpdateNotificationsRequest,
@@ -110,6 +112,13 @@ export const api = {
       bytes,
       contentType: contentType || "application/octet-stream",
     }),
+  uploadLinkedin: (bytes: ArrayBuffer, fileName: string) =>
+    call<SourceImportResult>("PUT", `/api/v1/profile/linkedin?file_name=${q(fileName)}`, {
+      bytes,
+      contentType: "application/octet-stream",
+    }),
+  importGithub: (username?: string) => call<SourceImportResult>("POST", "/api/v1/profile/github", { json: { username } }),
+  removeSource: (source: "linkedin" | "github") => call<SourceRemovalResult>("DELETE", `/api/v1/profile/sources/${q(source)}`),
   preferences: (update: UpdatePreferencesParams) =>
     call<PreferenceUpdateResult>("POST", "/api/v1/preferences", { json: update }),
   taste: () => call<TasteView>("GET", "/api/v1/taste"),

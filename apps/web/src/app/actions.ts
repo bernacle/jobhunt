@@ -12,6 +12,8 @@ import type {
   PreferenceInput,
   PreferenceUpdateResult,
   ResumeImportResult,
+  SourceImportResult,
+  SourceRemovalResult,
 } from "@/lib/api-types";
 import { describeError } from "@/lib/errors";
 import { clearSession } from "@/lib/session";
@@ -144,6 +146,71 @@ export async function uploadResume(_: ResumeState, form: FormData): Promise<Resu
   }
   refresh();
   return { result: result.data };
+}
+
+export interface SourceState {
+  result?: SourceImportResult;
+  error?: { title: string; message: string };
+}
+
+const MAX_LINKEDIN = 16 * 1024 * 1024;
+
+/** A LinkedIn data export (the .zip, or one of its CSV files). */
+export async function uploadLinkedin(_: SourceState, form: FormData): Promise<SourceState> {
+  const file = form.get("export");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: { title: "Choose a file", message: "The .zip LinkedIn sends, or one of its CSV files." } };
+  }
+  if (file.size > MAX_LINKEDIN) {
+    return {
+      error: {
+        title: "That file is too large",
+        message: "Exports up to 16 MB. Ask LinkedIn for just the files you need (profile, positions, skills…).",
+      },
+    };
+  }
+  const result = await attempt(async () => api.uploadLinkedin(await file.arrayBuffer(), file.name));
+  if (!result.ok) {
+    return {
+      error:
+        result.code === "invalid_arguments"
+          ? {
+              title: "That file couldn't be read",
+              message: "Use the .zip from LinkedIn (Settings → Data privacy → Get a copy of your data), or one of its CSV files like Positions.csv. Nothing was imported.",
+            }
+          : result,
+    };
+  }
+  refresh();
+  return { result: result.data };
+}
+
+/** A public GitHub account. */
+export async function importGithub(_: SourceState, form: FormData): Promise<SourceState> {
+  const username = String(form.get("username") ?? "").trim();
+  const result = await attempt(() => api.importGithub(username || undefined));
+  if (!result.ok) {
+    return {
+      error:
+        result.code === "invalid_arguments"
+          ? {
+              title: "That account couldn't be imported",
+              message: "Check the username: a person's public GitHub account. If another account is already imported, remove it first.",
+            }
+          : result.code === "source_unavailable"
+            ? { title: "GitHub couldn't be reached", message: "GitHub didn't answer, or its rate limit is used up. Try again in a while." }
+            : result,
+    };
+  }
+  refresh();
+  return { result: result.data };
+}
+
+/** Takes a LinkedIn export or a GitHub account out of the profile. */
+export async function removeSource(source: "linkedin" | "github"): Promise<ActionResult<SourceRemovalResult>> {
+  const result = await attempt(() => api.removeSource(source));
+  if (result.ok) refresh();
+  return result;
 }
 
 export async function saveNotifications(

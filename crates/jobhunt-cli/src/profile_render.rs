@@ -14,6 +14,9 @@ use jobhunt_profile::{
     StatementReading, Subject, Tally, Verification,
 };
 
+use jobhunt_app::profile_edit::TallyView;
+use jobhunt_app::profile_sources::{SourceImportResult, SourceRemovalResult};
+
 use crate::render::{DIM, TITLE, plural};
 
 /// `exp_1a2b3c4d` for `exp_1a2b3c4d…` (prefix + 8 hex).
@@ -66,19 +69,46 @@ pub fn subject_label(data: &ProfileData, subject: Subject) -> String {
     }
 }
 
-fn record_flags(meta: &RecordMeta) -> String {
+/// "not in your latest resume", "no longer on GitHub", …
+fn gone_from(origin: Origin) -> String {
+    match origin {
+        Origin::Github => "no longer on GitHub".to_owned(),
+        other => format!("not in your latest {}", other.label()),
+    }
+}
+
+/// "your resume", "your resume and LinkedIn export", … : the imported
+/// sources the profile has.
+fn your_sources(data: &ProfileData) -> String {
+    let labels: Vec<&str> = Origin::IMPORTED
+        .into_iter()
+        .filter(|o| data.latest_document_of(*o).is_some())
+        .map(Origin::label)
+        .collect();
+    match labels.as_slice() {
+        [] | [_] => format!("your {}", labels.first().copied().unwrap_or("resume")),
+        [rest @ .., last] => format!("your {} and {last}", rest.join(", ")),
+    }
+}
+
+fn record_flags(data: &ProfileData, meta: &RecordMeta) -> String {
     let mut flags = Vec::new();
     if meta.origin == Origin::User {
         flags.push("added by you".to_owned());
     }
-    if meta.verification == Verification::Confirmed && meta.origin == Origin::Resume {
+    if meta.verification == Verification::Confirmed && meta.origin.is_imported() {
         flags.push("confirmed".to_owned());
     }
     if !meta.edited_fields.is_empty() {
         flags.push(format!("edited: {}", meta.edited_fields.join(", ")));
     }
     if meta.is_stale() {
-        flags.push("not in your latest resume".to_owned());
+        flags.push(gone_from(meta.origin));
+    }
+    let sources = data.record_sources(meta);
+    if sources.len() > 1 || (meta.origin == Origin::User && !sources.is_empty()) {
+        let labels: Vec<&str> = sources.iter().map(|o| o.label()).collect();
+        flags.push(format!("in: {}", labels.join(", ")));
     }
     if flags.is_empty() {
         String::new()
@@ -107,12 +137,14 @@ pub fn profile(out: &mut impl Write, data: &ProfileData, all: bool) -> io::Resul
     if let Some(location) = &p.location {
         about.push(location.clone());
     }
-    if let Some(doc) = data.latest_document() {
-        about.push(format!(
-            "from {} (imported {})",
-            doc.file_name.as_deref().unwrap_or("resume"),
-            doc.last_imported_at.format("%Y-%m-%d")
-        ));
+    for origin in Origin::IMPORTED {
+        if let Some(doc) = data.latest_document_of(origin) {
+            about.push(format!(
+                "from {} (imported {})",
+                doc.file_name.as_deref().unwrap_or(origin.label()),
+                doc.last_imported_at.format("%Y-%m-%d")
+            ));
+        }
     }
     if !about.is_empty() {
         writeln!(out, "{DIM}{}{DIM:#}", about.join(" · "))?;
@@ -124,7 +156,12 @@ pub fn profile(out: &mut impl Write, data: &ProfileData, all: bool) -> io::Resul
         writeln!(out, "  none yet")?;
     }
     for e in experiences {
-        writeln!(out, "  {}{}", experience_line(e), record_flags(&e.meta))?;
+        writeln!(
+            out,
+            "  {}{}",
+            experience_line(e),
+            record_flags(data, &e.meta)
+        )?;
         let subject = Subject::Experience(e.id);
         let bullets = data.claims_about(
             subject,
@@ -155,7 +192,7 @@ pub fn profile(out: &mut impl Write, data: &ProfileData, all: bool) -> io::Resul
                 line.push_str(&format!(" — {description}"));
             }
             line.push_str(&format!(" · {}", period(x.period())));
-            writeln!(out, "  {line}{}", record_flags(&x.meta))?;
+            writeln!(out, "  {line}{}", record_flags(data, &x.meta))?;
             let techs = data.technologies_of(Subject::Project(x.id));
             let mut details = vec![short(x.id)];
             if !techs.is_empty() {
@@ -179,7 +216,7 @@ pub fn profile(out: &mut impl Write, data: &ProfileData, all: bool) -> io::Resul
                 out,
                 "  {what} · {}{}  {DIM}{}{DIM:#}",
                 period(x.period()),
-                record_flags(&x.meta),
+                record_flags(data, &x.meta),
                 short(x.id)
             )?;
         }
@@ -230,7 +267,8 @@ pub fn profile(out: &mut impl Write, data: &ProfileData, all: bool) -> io::Resul
         writeln!(out, "  {}", items.join(", "))?;
         writeln!(
             out,
-            "  {DIM}inferred from your resume; ✓ = confirmed by you{DIM:#}"
+            "  {DIM}inferred from {}; ✓ = confirmed by you{DIM:#}",
+            your_sources(data)
         )?;
     }
     let roles = data.signals(ClaimKind::Role);
@@ -318,13 +356,17 @@ fn evidence_counts(out: &mut impl Write, data: &ProfileData) -> io::Result<()> {
         }
     }
     writeln!(out, "  {}", plural(total as u64, "claim", "claims"))?;
-    writeln!(out, "  {grounded} directly supported by your resume")?;
+    writeln!(
+        out,
+        "  {grounded} directly supported by {}",
+        your_sources(data)
+    )?;
     if confirmed + user > 0 {
         writeln!(out, "  {} confirmed or entered by you", confirmed + user)?;
     }
     writeln!(out, "  {review} need review")?;
     if stale > 0 {
-        writeln!(out, "  {stale} no longer in your latest resume")?;
+        writeln!(out, "  {stale} no longer in {}", your_sources(data))?;
     }
     if rejected > 0 {
         writeln!(out, "  {rejected} rejected")?;
@@ -590,6 +632,135 @@ fn tally(out: &mut impl Write, what: &str, t: Tally) -> io::Result<()> {
     writeln!(out, "  {what}: {}", parts.join(", "))
 }
 
+fn tally_view(out: &mut impl Write, what: &str, t: &TallyView) -> io::Result<()> {
+    let mut parts = Vec::new();
+    let mut add = |n: usize, text: &str| {
+        if n > 0 {
+            parts.push(format!("{n} {text}"));
+        }
+    };
+    add(t.added, "new");
+    add(
+        t.corroborated,
+        "already in your profile, now also backed by this source",
+    );
+    add(t.updated, "updated");
+    add(t.restored, "back");
+    add(t.stale, "no longer in this source");
+    if parts.is_empty() {
+        return Ok(());
+    }
+    writeln!(out, "  {what}: {}", parts.join(", "))
+}
+
+/// What `narrow profile import-linkedin` / `import-github` did: the decision
+/// first (what was read, what needs review), the counts after.
+pub fn source_import(out: &mut impl Write, r: &SourceImportResult) -> io::Result<()> {
+    let what = if r.source == "github" {
+        "GitHub"
+    } else {
+        "LinkedIn export"
+    };
+    let verb = if r.first_import {
+        "Imported"
+    } else if r.unchanged {
+        "Re-imported (nothing changed)"
+    } else {
+        "Re-imported"
+    };
+    writeln!(out, "{TITLE}{verb} {what} {}{TITLE:#}", r.label)?;
+    if !r.read.is_empty() {
+        writeln!(out, "Read: {}", r.read.join(", "))?;
+    }
+    if !r.skipped.is_empty() {
+        writeln!(out, "{DIM}Not used: {}{DIM:#}", r.skipped.join(", "))?;
+    }
+    section(out, "Your profile")?;
+    tally_view(out, "experiences", &r.experiences)?;
+    tally_view(out, "projects", &r.projects)?;
+    tally_view(out, "education", &r.education)?;
+    tally_view(out, "skills", &r.skills)?;
+    tally_view(out, "claims", &r.claims)?;
+    if r.kept_confirmed + r.kept_rejected > 0 {
+        writeln!(
+            out,
+            "  kept your decisions: {} confirmed, {} rejected",
+            r.kept_confirmed, r.kept_rejected
+        )?;
+    }
+    if r.conflicts > 0 {
+        writeln!(
+            out,
+            "  {} dated differently than in another source: kept apart for you to settle",
+            plural(r.conflicts as u64, "position", "positions")
+        )?;
+    }
+    if r.stale_confirmed > 0 {
+        writeln!(
+            out,
+            "  {} you confirmed no source supports any more",
+            plural(r.stale_confirmed as u64, "claim", "claims")
+        )?;
+    }
+    if !r.problems.is_empty() {
+        section(out, "Could not read")?;
+        for p in &r.problems {
+            writeln!(out, "  - {p}")?;
+        }
+    }
+    if !r.notes.is_empty() {
+        section(out, "Uncertain")?;
+        for n in r.notes.iter().take(10) {
+            writeln!(out, "  - {n}")?;
+        }
+        if r.notes.len() > 10 {
+            writeln!(out, "  … {} more", r.notes.len() - 10)?;
+        }
+    }
+    writeln!(out)?;
+    if r.needs_review > 0 {
+        writeln!(
+            out,
+            "{} your review (not used until you confirm): narrow claims review",
+            plural(r.needs_review as u64, "claim needs", "claims need")
+        )
+    } else {
+        writeln!(out, "Nothing needs your review.")
+    }
+}
+
+/// What `narrow profile remove-source` did.
+pub fn source_removal(out: &mut impl Write, r: &SourceRemovalResult) -> io::Result<()> {
+    let what = if r.source == "github" {
+        "GitHub"
+    } else {
+        "your LinkedIn export"
+    };
+    writeln!(out, "{TITLE}Removed {what} from your profile{TITLE:#}")?;
+    writeln!(
+        out,
+        "  deleted: {} and {} only it supported",
+        plural(r.records_deleted as u64, "record", "records"),
+        plural(r.claims_deleted as u64, "claim", "claims")
+    )?;
+    if r.claims_kept + r.records_kept > 0 {
+        writeln!(
+            out,
+            "  kept: {} and {} other sources also support",
+            plural(r.records_kept as u64, "record", "records"),
+            plural(r.claims_kept as u64, "claim", "claims")
+        )?;
+    }
+    if r.decisions_kept > 0 {
+        writeln!(
+            out,
+            "  kept your decision on {}; confirmed ones need confirming again (narrow claims review)",
+            plural(r.decisions_kept as u64, "claim", "claims")
+        )?;
+    }
+    Ok(())
+}
+
 /// One line per claim, grouped by what it is about.
 pub fn claim_list(out: &mut impl Write, data: &ProfileData, claims: &[&Claim]) -> io::Result<()> {
     if claims.is_empty() {
@@ -660,8 +831,17 @@ pub fn review(
         if let Some(basis) = &claim.basis {
             writeln!(out, "    why: {basis}")?;
         }
-        if let Some(source) = &claim.source {
-            writeln!(out, "    resume: “{}”", one_line(&source.snippet))?;
+        for source in claim.source.iter().chain(&claim.corroborations) {
+            if source.snippet.is_empty() {
+                continue;
+            }
+            let origin = jobhunt_profile::ref_origin(&data.documents, source);
+            writeln!(
+                out,
+                "    {}: “{}”",
+                origin.label(),
+                one_line(&source.snippet)
+            )?;
         }
         if let Some(note) = &claim.note {
             writeln!(out, "    note: {note}")?;
@@ -697,10 +877,15 @@ pub fn claim_detail(out: &mut impl Write, data: &ProfileData, claim: &Claim) -> 
         field("Topic", topic.clone())?;
     }
     field("About", subject_label(data, claim.subject))?;
+    let origin = claim.source.as_ref().map_or(Origin::Resume, |s| {
+        jobhunt_profile::ref_origin(&data.documents, s)
+    });
     field(
         "Provenance",
         match claim.provenance {
-            jobhunt_profile::Provenance::Extracted => "extracted from your resume".to_owned(),
+            jobhunt_profile::Provenance::Extracted => {
+                format!("extracted from your {}", origin.label())
+            }
             jobhunt_profile::Provenance::Inferred => "inferred by JobHunt".to_owned(),
             jobhunt_profile::Provenance::UserEntered => "entered by you".to_owned(),
         },
@@ -712,7 +897,7 @@ pub fn claim_detail(out: &mut impl Write, data: &ProfileData, claim: &Claim) -> 
         (v, None) => v.as_str().to_owned(),
     };
     field("Verification", verification)?;
-    field("Status", data.standing(claim).describe().to_owned())?;
+    field("Status", data.describe(claim))?;
     if let Some(basis) = &claim.basis {
         field("Why", basis.clone())?;
     }
@@ -730,9 +915,22 @@ pub fn claim_detail(out: &mut impl Write, data: &ProfileData, claim: &Claim) -> 
             .unwrap_or_default();
         field("Source", format!("{doc}{section}"))?;
         for (i, line) in source.snippet.lines().enumerate() {
-            let label = if i == 0 { "Resume text" } else { "" };
+            let label = match (i, origin) {
+                (0, Origin::Resume) => "Resume text",
+                (0, _) => "Source text",
+                _ => "",
+            };
             field(label, format!("“{}”", line.trim()))?;
         }
+    }
+    for other in &claim.corroborations {
+        let origin = jobhunt_profile::ref_origin(&data.documents, other);
+        let words = if other.snippet.is_empty() {
+            String::new()
+        } else {
+            format!(": “{}”", one_line(&other.snippet))
+        };
+        field("Also in", format!("your {}{words}", origin.label()))?;
     }
     if let Some(stale) = claim.stale_since {
         field("Stale since", stale.format("%Y-%m-%d").to_string())?;

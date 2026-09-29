@@ -118,7 +118,8 @@ enum Command {
     /// What Narrow learned from your feedback, with the evidence behind
     /// every pattern, next to what you told it.
     Taste(rank::TasteArgs),
-    /// Show, correct, export or import your career profile.
+    /// Show, correct, export or import your career profile; add evidence
+    /// from your LinkedIn export or public GitHub repositories.
     Profile(profile::ProfileArgs),
     /// Review the evidence behind your profile: list, confirm or reject claims.
     #[command(alias = "claim")]
@@ -385,6 +386,21 @@ mod tests {
         ])
         .unwrap();
         assert!(matches!(cli.command, Command::Profile(_)));
+        for command in [
+            vec![
+                "narrow",
+                "profile",
+                "import-linkedin",
+                "Basic_LinkedInDataExport.zip",
+            ],
+            vec!["narrow", "profile", "import-github", "octocat"],
+            vec!["narrow", "profile", "import-github"],
+            vec!["narrow", "profile", "remove-source", "github"],
+        ] {
+            assert!(Cli::try_parse_from(&command).is_ok(), "{command:?}");
+        }
+        assert!(Cli::try_parse_from(["narrow", "profile", "import-linkedin"]).is_err());
+        assert!(Cli::try_parse_from(["narrow", "profile", "remove-source", "resume"]).is_err());
         let cli = Cli::try_parse_from(["narrow", "claim", "confirm", "clm_1", "clm_2"]).unwrap();
         assert!(matches!(cli.command, Command::Claims(_)));
         let cli = Cli::try_parse_from(["narrow", "claims", "--state", "review"]).unwrap();

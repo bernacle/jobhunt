@@ -458,6 +458,7 @@ export interface JobHuntApi {
   FeedView?: FeedView;
   FeedbackRequest?: FeedbackRequest;
   FeedbackResult?: FeedbackResult;
+  GithubImportRequest?: GithubImportRequest;
   JobDetail?: JobDetail;
   NotificationSettingsView?: NotificationSettingsView;
   PipelineView?: PipelineView;
@@ -466,6 +467,8 @@ export interface JobHuntApi {
   ResumeImportResult?: ResumeImportResult;
   SearchJobsParams?: SearchJobsParams;
   SearchResults?: SearchResults;
+  SourceImportResult?: SourceImportResult;
+  SourceRemovalResult?: SourceRemovalResult;
   TasteView?: TasteView;
   TokenList?: TokenList;
   UpdateNotificationsRequest?: UpdateNotificationsRequest;
@@ -947,25 +950,31 @@ export interface UnresolvedClaim {
    */
   confidence?: string;
   /**
-   * The file the words are from.
+   * The file (or account) the words are from.
    */
   document?: string | null;
+  /**
+   * Every source that says it, its main one first (a resume and a
+   * LinkedIn export both listing a position): the detail behind
+   * `snippet`.
+   */
+  evidence?: EvidenceView[];
   /**
    * `clm_…` (confirm with `narrow claims confirm <id>`).
    */
   id: string;
   kind: string;
   /**
-   * `extracted` (read from the resume), `inferred` (concluded by
-   * JobHunt) or `user_entered`.
+   * `extracted` (read from a source), `inferred` (concluded by JobHunt)
+   * or `user_entered`.
    */
   provenance?: string;
   /**
-   * The resume section the words are from.
+   * The section the words are from.
    */
   section?: string | null;
   /**
-   * The resume's own words behind it, verbatim.
+   * The source's own words behind it, verbatim (its main source).
    */
   snippet?: string | null;
   text: string;
@@ -973,6 +982,30 @@ export interface UnresolvedClaim {
    * Why it needs review.
    */
   why: string;
+}
+/**
+ * One source's words behind a claim.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "EvidenceView".
+ */
+export interface EvidenceView {
+  /**
+   * The file or account (`resume.pdf`, `github.com/octocat`).
+   */
+  document?: string | null;
+  /**
+   * Where in the source ("Experience", "Positions", "Repositories").
+   */
+  section?: string | null;
+  /**
+   * The source's own words, verbatim (empty when the source gave none).
+   */
+  snippet: string;
+  /**
+   * `resume`, `linkedin` or `github`.
+   */
+  source: string;
 }
 /**
  * `POST /api/v1/notifications/confirm`.
@@ -1494,6 +1527,19 @@ export interface PipelineStateView1 {
   stage: PipelineStage;
 }
 /**
+ * `POST /api/v1/profile/github`: import a public GitHub account.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "GithubImportRequest".
+ */
+export interface GithubImportRequest {
+  /**
+   * A GitHub username or profile URL. Defaults to the account imported
+   * before, or the GitHub link on the profile.
+   */
+  username?: string | null;
+}
+/**
  * The answer of `get_job`.
  *
  * This interface was referenced by `JobHuntApi`'s JSON-Schema
@@ -1914,7 +1960,8 @@ export interface ProfileView {
    */
   contact_details_omitted: boolean;
   /**
-   * Imported resumes, the current one first.
+   * Imported sources (resumes, a LinkedIn export, a GitHub account),
+   * the current ones first.
    */
   documents?: DocumentSummary[];
   domains: Signal[];
@@ -1958,14 +2005,16 @@ export interface ProfileView {
   technologies: TechnologyEvidence[];
 }
 /**
- * A resume imported into the profile (never its text).
+ * A source imported into the profile (never its text): a resume, a
+ * LinkedIn export, a GitHub account.
  *
  * This interface was referenced by `JobHuntApi`'s JSON-Schema
  * via the `definition` "DocumentSummary".
  */
 export interface DocumentSummary {
   /**
-   * The most recently imported one: the resume the profile follows.
+   * The most recently imported of its source: the resume (or export,
+   * or account) the profile follows.
    */
   current: boolean;
   file_name?: string | null;
@@ -1975,11 +2024,15 @@ export interface DocumentSummary {
    */
   id: string;
   /**
-   * `pdf`, `text` or `markdown`.
+   * `pdf`, `text` or `markdown` (a resume), `linkedin` or `github`.
    */
   kind: string;
   last_imported_at: string;
   pages?: number | null;
+  /**
+   * `resume`, `linkedin` or `github`.
+   */
+  source?: string;
 }
 /**
  * A domain or role kind and how much evidence backs it.
@@ -2006,6 +2059,10 @@ export interface EducationSummary {
   id: string;
   institution: string;
   period?: string | null;
+  /**
+   * `resume`, `linkedin`, `github`: the sources that contain it now.
+   */
+  sources?: string[];
   stale: boolean;
 }
 /**
@@ -2030,7 +2087,12 @@ export interface ExperienceSummary {
    */
   period?: string | null;
   /**
-   * No longer in the latest resume.
+   * The sources that contain it now: `resume`, `linkedin`, `github`
+   * (empty for what the person entered themselves, or when stale).
+   */
+  sources?: string[];
+  /**
+   * No source contains it any more.
    */
   stale: boolean;
   /**
@@ -2054,8 +2116,16 @@ export interface ProjectSummary {
   name: string;
   period?: string | null;
   role?: string | null;
+  /**
+   * `resume`, `linkedin`, `github`: the sources that contain it now.
+   */
+  sources?: string[];
   stale: boolean;
   technologies: string[];
+  /**
+   * Its address (a repository), when a source gave one.
+   */
+  url?: string | null;
 }
 /**
  * A technology or skill and what backs it.
@@ -2148,6 +2218,11 @@ export interface ResumeImportResult {
 export interface TallyView {
   added: number;
   /**
+   * Already in the profile from another source (or entered by the
+   * person): this source was added as evidence, not as a duplicate.
+   */
+  corroborated?: number;
+  /**
    * Back in the resume after being stale.
    */
   restored: number;
@@ -2167,7 +2242,8 @@ export interface ProfileView1 {
    */
   contact_details_omitted: boolean;
   /**
-   * Imported resumes, the current one first.
+   * Imported sources (resumes, a LinkedIn export, a GitHub account),
+   * the current ones first.
    */
   documents?: DocumentSummary[];
   domains: Signal[];
@@ -2421,6 +2497,171 @@ export interface CompensationView2 {
    */
   verified: boolean;
   verified_at?: string | null;
+}
+/**
+ * What importing a LinkedIn export or a GitHub account changed.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "SourceImportResult".
+ */
+export interface SourceImportResult {
+  claims: TallyView;
+  /**
+   * Statements that disagree with another source (different dates for
+   * one position); each waits for review.
+   */
+  conflicts: number;
+  education: TallyView;
+  experiences: TallyView;
+  /**
+   * The profile had no such source before.
+   */
+  first_import: boolean;
+  /**
+   * Confirmed claims found again (still confirmed).
+   */
+  kept_confirmed: number;
+  /**
+   * Rejected claims found again (still rejected, never used).
+   */
+  kept_rejected: number;
+  /**
+   * What was imported: the export's file name, or `github.com/<login>`.
+   */
+  label: string;
+  /**
+   * Claims now waiting for the person's review.
+   */
+  needs_review: number;
+  /**
+   * Doubts about particular rows or records.
+   */
+  notes: string[];
+  /**
+   * Records where the person's own edits were kept.
+   */
+  preserved_edits: number;
+  /**
+   * Parts that could not be read (the rest was imported).
+   */
+  problems: string[];
+  profile: ProfileView2;
+  projects: TallyView;
+  /**
+   * What Narrow read ("3 positions", "12 repositories").
+   */
+  read: string[];
+  /**
+   * Confirmed claims whose wording changed: they need confirming again.
+   */
+  reconfirm: number;
+  skills: TallyView;
+  /**
+   * What it deliberately did not use ("2 forks", "38 other files in
+   * the export, never opened").
+   */
+  skipped: string[];
+  /**
+   * `linkedin` or `github`.
+   */
+  source: string;
+  /**
+   * Confirmed claims no source supports any more.
+   */
+  stale_confirmed: number;
+  /**
+   * The same content as the last import: nothing new to read.
+   */
+  unchanged: boolean;
+}
+/**
+ * The profile after the import.
+ */
+export interface ProfileView2 {
+  /**
+   * Always true: names and contact details are not part of this view.
+   */
+  contact_details_omitted: boolean;
+  /**
+   * Imported sources (resumes, a LinkedIn export, a GitHub account),
+   * the current ones first.
+   */
+  documents?: DocumentSummary[];
+  domains: Signal[];
+  education?: EducationSummary[];
+  experiences: ExperienceSummary[];
+  /**
+   * What is missing or uncertain.
+   */
+  gaps: string[];
+  headline?: string | null;
+  /**
+   * Where the person lives, as they wrote it (eligibility depends on it).
+   */
+  location?: string | null;
+  /**
+   * Claims needing the person's review (the first few).
+   */
+  needs_review: UnresolvedClaim[];
+  needs_review_total: number;
+  /**
+   * Seniority and ownership signals (led, mentored, founding).
+   */
+  ownership_signals: Signal[];
+  /**
+   * Preferences in effect.
+   */
+  preferences: PreferenceView[];
+  projects?: ProjectSummary[];
+  /**
+   * Kinds of engineering role the experience shows (backend, platform).
+   */
+  role_signals: Signal[];
+  /**
+   * What the person said, verbatim.
+   */
+  statements: StatementView[];
+  summary?: string | null;
+  /**
+   * Strongest evidence first.
+   */
+  technologies: TechnologyEvidence[];
+}
+/**
+ * What taking a source out did.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "SourceRemovalResult".
+ */
+export interface SourceRemovalResult {
+  /**
+   * Claims only this source supported, deleted.
+   */
+  claims_deleted: number;
+  /**
+   * Claims other sources still support (their provenance moved there).
+   */
+  claims_kept: number;
+  /**
+   * Claims only this source supported that the person had confirmed,
+   * rejected or rewritten: kept without a source (confirmations need
+   * renewing before use).
+   */
+  decisions_kept: number;
+  needs_review: number;
+  profile: ProfileView;
+  /**
+   * Records only this source supported, deleted.
+   */
+  records_deleted: number;
+  /**
+   * Records other sources (or the person) still support.
+   */
+  records_kept: number;
+  /**
+   * `linkedin` or `github`.
+   */
+  source: string;
 }
 /**
  * The answer of `get_taste`.

@@ -1,0 +1,3 @@
+﻿First Name,Last Name,Maiden Name,Address,Birth Date,Headline,Summary,Industry,Zip Code,Geo Location,Twitter Handles,Websites,Instant Messengers
+Riley,Example,,"1 SENTINEL-ADDRESS Street",1990-01-01,Backend engineer building payment systems,"I build reliable payment systems.
+Mostly Rust and Go.",Software Development,SENTINEL-ZIP,"Lisbon, Portugal",@sentinel_handle,"[PERSONAL:https://riley.example.dev],[BLOG:https://blog.example.org]",SENTINEL-IM

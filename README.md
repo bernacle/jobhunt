@@ -98,6 +98,12 @@ narrow find
    profile, verifies the best candidates at their sources, and shows the
    few worth reviewing.
 
+Optionally, add evidence the resume may not carry: your LinkedIn data
+export (`narrow profile import-linkedin export.zip`) and your public GitHub
+repositories (`narrow profile import-github <user>`). Both feed the same
+profile; what Narrow concludes from them waits for your review (see
+[LinkedIn and GitHub evidence](#linkedin-and-github-evidence)).
+
 Without a profile, `find` lists what it found and says how to start;
 without preferences it still works (on eligibility, experience and
 freshness) and says that preferences and feedback sharpen it.
@@ -505,6 +511,9 @@ network.
 | `narrow profile remove <id>` | Delete what you added; reject (hide) what was imported |
 | `narrow profile export [-o file]` / `import <file> [--replace]` | Versioned JSON, all or nothing |
 | `narrow profile history` | Every import, decision and edit |
+| `narrow profile import-linkedin <export.zip\|folder\|file.csv>` | Add evidence from your LinkedIn data export (career files only) |
+| `narrow profile import-github [user]` | Add evidence from your public GitHub repositories (default: the GitHub link on your profile) |
+| `narrow profile remove-source linkedin\|github` | Take that source out: what only it supported goes, your decisions stay |
 | `narrow claims [--kind K] [--state S] [--for <id>] [--all]` | List claims, marked ✓ usable, ? needs review, ✗ rejected |
 | `narrow claims review [--all]` | Claims needing review, each with why JobHunt believes it and the resume text |
 | `narrow claims show\|confirm\|reject\|reset <id>…` | Inspect or decide (`reject --reason …`) |
@@ -535,6 +544,11 @@ jobhunt-cli ──► jobhunt-resume ──► jobhunt-profile ──► jobhunt
   words claim, and how far to trust them, is the domain's job.
 - **`jobhunt-storage`** implements `ProfileRepository` on the same SQLite
   file as the jobs, in its own tables.
+- A LinkedIn data export is read by `jobhunt_resume::linkedin` into the
+  same `ParsedResume` contract; a public GitHub account by
+  `jobhunt_sources::github` into `jobhunt_profile::GithubSnapshot`. The
+  domain folds both in with the resume's rules
+  ([docs/evidence-imports.md](docs/evidence-imports.md)).
 
 ### Reading resumes
 
@@ -690,6 +704,53 @@ re-inserts:
 
 `init` prints what changed: new, updated, unchanged and stale counts, the
 decisions and edits it kept, and anything you need to confirm again.
+
+### LinkedIn and GitHub evidence
+
+Two optional sources feed the **same** profile and evidence graph as the
+resume. Imported data is evidence, not truth: facts keep their source's
+words, conclusions wait for your review, and your decisions win.
+
+```text
+$ narrow profile import-linkedin ~/Downloads/Basic_LinkedInDataExport_09-01-2026.zip
+Imported LinkedIn export Basic_LinkedInDataExport_09-01-2026.zip
+Read: profile (1 row), positions (4 rows), education (1 row), skills (18 rows)
+Not used: 38 other files in the export, never opened (messages, connections, contacts, …)
+
+Your profile
+  experiences: 1 new, 3 already in your profile, now also backed by this source
+  skills: 6 new
+  claims: 21 new, 14 already in your profile, now also backed by this source
+
+5 claims need your review (not used until you confirm): narrow claims review
+```
+
+- **LinkedIn** is read from the file you download yourself (*Settings →
+  Data privacy → Get a copy of your data*): the `.zip`, its folder, or one
+  of its CSVs. No scraping, no login, no LinkedIn API. Only the career
+  files are opened (profile headline/summary/location/websites, positions,
+  education, skills, certifications, projects, languages); messages,
+  connections, contact details, ads and searches never are. A file Narrow
+  cannot read truthfully fails the import and changes nothing.
+- **GitHub** is read through GitHub's official REST API, public data only.
+  The repositories you own become projects (forks, empty repositories and
+  others' repositories are skipped); their main languages are facts about
+  that code; "recent hands-on Rust work" is an inference for you to
+  confirm. Stars are not quality, organizations are not employers, and a
+  language share is not a skill level. `GITHUB_TOKEN` (no scopes) is
+  optional: it raises the rate limit and adds per-repository language
+  statistics, and is never stored.
+- **One graph.** A position both your resume and LinkedIn list is one
+  experience and one claim with two sources (`narrow claims show <id>`
+  prints both). Matching is conservative (same company and title,
+  overlapping dates); ambiguous matches stay separate, and a source that
+  dates a shared position differently gets its own claim to review.
+- **Re-import** any time: nothing is duplicated, decisions and edits are
+  kept, and what a source dropped becomes stale only when no other source
+  still supports it.
+
+The rules, the storage and the limits are in
+[docs/evidence-imports.md](docs/evidence-imports.md).
 
 ### Export format
 

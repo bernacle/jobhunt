@@ -46,6 +46,8 @@ fn schema() -> Value {
         jobhunt_app::profile_edit::ClaimReview,
         jobhunt_app::profile_edit::ClaimDecisionResult,
         jobhunt_app::profile_edit::ResumeImportResult,
+        jobhunt_app::profile_sources::SourceImportResult,
+        jobhunt_app::profile_sources::SourceRemovalResult,
         jobhunt_app::context::ApplicationContext,
         jobhunt_cloud::api::types::AccountView,
         jobhunt_cloud::api::types::AuthConfigView,
@@ -57,6 +59,7 @@ fn schema() -> Value {
         // Requests.
         jobhunt_cloud::api::types::FeedbackRequest,
         jobhunt_cloud::api::types::DecideClaimsRequest,
+        jobhunt_cloud::api::types::GithubImportRequest,
         jobhunt_cloud::api::types::UpdateNotificationsRequest,
         jobhunt_cloud::api::types::ConfirmEmailRequest,
         jobhunt_cloud::api::types::CreateTokenRequest,
