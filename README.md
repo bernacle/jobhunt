@@ -2096,6 +2096,20 @@ Jobs:
   verified against a live EU site. Only public, unauthenticated endpoints
   are used.
 
+## Feedback
+
+Trying Narrow against a real job search and telling us where it fails is
+more useful than praise. Open a [feedback
+issue](https://github.com/bernacle/jobhunt/issues/new?template=experiment-feedback.yml)
+once you've run `init`, `preferences add` and `find` at least once: what
+got in the way, whether the shortlist felt better than browsing job boards
+yourself, what you did with the results, what you wished it did. Issues
+are public, so keep it to the product experience — no resume contents,
+recruiter names, salary tied to your identity, or application details.
+See [docs/oss-adoption-experiment.md](docs/oss-adoption-experiment.md) for
+what this feedback is used for. Security vulnerabilities go through
+[SECURITY.md](SECURITY.md) instead, never a public issue.
+
 ## License
 
 Narrow is licensed under the [Apache License, Version 2.0](LICENSE).
