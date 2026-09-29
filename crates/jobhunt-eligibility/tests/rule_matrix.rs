@@ -293,7 +293,7 @@ fn onsite_and_hybrid() {
         "",
     );
     assert_eq!(status(&london, &at("London")), Eligible);
-    let d = decide(&london, &at("Manchester"));
+    let d = decide(&london, &at("Manchester, UK"));
     assert_eq!(d.status, Uncertain, "commuting distance unknown");
     let d = decide(&london, &at("United Kingdom"));
     assert!(d.headline.contains("only your country"));
@@ -670,7 +670,7 @@ fn missing_profile_information_is_uncertainty() {
     // An unrecognized location is not a guess.
     let d = decide(
         &remote("Remote - Brazil", ""),
-        &ProfileFacts::living_in("Atlantis"),
+        &ProfileFacts::living_in("Narnia"),
     );
     assert_eq!(d.status, Uncertain);
     assert!(d.headline.contains("doesn't recognize"));
@@ -892,7 +892,7 @@ fn relocation_only_to_selected_places() {
     let d = decide(&ny, &mixed);
     assert_eq!(d.status, Uncertain);
     assert!(!d.reasons.iter().any(|r| r.verdict == Verdict::Fail));
-    let d = decide(&lisbon, &only(&["Portugal", "Atlantis"]));
+    let d = decide(&lisbon, &only(&["Portugal", "Narnia"]));
     assert!(has_reason(
         &d,
         RuleId::Presence,

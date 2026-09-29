@@ -21,7 +21,7 @@
 //!   [`crate::taste_view`]), never shown here as a setting.
 
 use jobhunt_eligibility::geo::{Area, Membership, Region};
-use jobhunt_eligibility::profile::place_area;
+use jobhunt_eligibility::profile::{FactBasis, ProfileLocation, place_area};
 use jobhunt_eligibility::rules::{area_name, country_name};
 use jobhunt_profile::{CompanyTrait, Preference, PreferenceValue, ProfileData, Stance, WorkMode};
 use jobhunt_ranking::person::region_area;
@@ -270,10 +270,12 @@ impl PreferenceControls {
                 data.profile.location.as_ref().map(|_| "resume"),
             ),
         };
+        // Read as eligibility reads it: a home that could be several places
+        // ("Portland") still has the country they share.
         let home_country = home
             .as_deref()
-            .and_then(place_area)
-            .and_then(|a| a.country());
+            .map(|h| ProfileLocation::read(h, FactBasis::Preference))
+            .and_then(|l| l.country());
         let remote_open_to_you = match home_country {
             None => Vec::new(),
             Some(c) => {

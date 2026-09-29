@@ -4,6 +4,7 @@
 #![allow(clippy::unwrap_used)]
 
 use jobhunt_eligibility::geo::{Area, Membership, Region, country, lookup_name, parse_places};
+use jobhunt_eligibility::zones::{Clock, reference_date};
 
 fn m(region: Region, code: &str) -> Membership {
     region.contains(country(code).unwrap())
@@ -91,13 +92,28 @@ fn emea_and_apac() {
 }
 
 #[test]
-fn regions_have_codes_and_offsets() {
+fn regions_have_codes_and_zones() {
     for r in Region::ALL {
         assert!(!r.code().is_empty());
-        let (lo, hi) = r.utc_offsets();
+        let zone = r.zone().unwrap_or_else(|| panic!("{r:?} has zones"));
+        let (lo, hi) = zone.year_range();
         assert!(lo <= hi, "{r:?}");
     }
-    assert_eq!(Region::Europe.utc_offsets(), (-60, 120));
+    // Europe from the Azores to Ukraine, on IANA rules: the Azores are
+    // UTC-1 in winter and UTC+0 in summer.
+    let europe = Region::Europe.zone().unwrap();
+    assert_eq!(europe.at(reference_date(1, 15).unwrap()).0, -60);
+    assert_eq!(europe.at(reference_date(7, 15).unwrap()).0, 0);
+    assert!(
+        europe
+            .clocks()
+            .contains(&Clock::iana("Europe/Lisbon").unwrap())
+    );
+    assert!(
+        !europe
+            .clocks()
+            .contains(&Clock::iana("Europe/Moscow").unwrap())
+    );
     let places = parse_places("Remote - EMEA");
     assert_eq!(places[0].area, Some(Area::Region(Region::Emea)));
     assert!(places[0].remote);

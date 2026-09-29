@@ -171,7 +171,10 @@ fn hybrid_job_with_a_remote_flag() {
     assert!(r.remote_option().is_none());
     assert!(r.conflicts[0].summary.contains("remote flag"));
     assert_eq!(evaluate_record(&job, &at("London")).status, Eligible);
-    assert_eq!(evaluate_record(&job, &at("Manchester")).status, Uncertain);
+    assert_eq!(
+        evaluate_record(&job, &at("Manchester, UK")).status,
+        Uncertain
+    );
 }
 
 #[test]

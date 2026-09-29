@@ -7,7 +7,7 @@ use crate::job::{
     JobMode, JobRequirements, Mechanism, Relocation, RemoteScope, Sponsorship, Strength,
     WorkOption, ZoneKind,
 };
-use crate::rules::{area_name, offsets_label};
+use crate::rules::area_name;
 
 /// One labelled fact.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -181,7 +181,7 @@ pub fn timezone(job: &JobRequirements) -> Vec<Fact> {
                 "Time zone",
                 match z.kind {
                     ZoneKind::Within => {
-                        format!("within {} ({})", z.label, offsets_label(z.offsets))
+                        format!("within {} ({})", z.label, z.zone.label())
                     }
                     ZoneKind::Hours { tolerance: Some(t) } => {
                         format!("{} hours ±{t}h", z.label)

@@ -901,12 +901,49 @@ source's structured country), sentences of its description, and your
 which is then named in every reason that uses it). A place is never
 guessed from the machine's locale or IP.
 
-A normalized place is an area of the table in
-[`geo`](crates/jobhunt-eligibility/src/geo.rs): anywhere, a region, a
-country (ISO 3166-1 alpha-2 codes internally), a first-level subdivision,
-or a city, with standard-time UTC offsets (per city in countries that span
-several zones). The raw text is kept next to it, and text the table
-doesn't know stays unrecognized (`JobHunt doesn't recognize your location
+A normalized place is an area of
+[`geo`](crates/jobhunt-eligibility/src/geo.rs): anywhere (a scope, not a
+place), a business region, a country (ISO 3166-1 alpha-2 codes
+internally), a first-level subdivision (state, province, region) or a
+city, each with its IANA time zones. Two sources:
+
+- **Narrow's own tables**: the regions and their membership (below), the
+  countries postings name with their aliases and demonyms ("USA",
+  "British"), state and province codes ("CA", "ON", "NSW", "RS", "MS"
+  after a Brazilian city) and the nicknames of tech hubs ("NYC", "Bay
+  Area"). Sentences of a description are only ever read against these, so
+  an ordinary word that happens to be a town somewhere is not taken for a
+  place.
+- **A GeoNames subset** compiled into the binary
+  ([`gazetteer`](crates/jobhunt-eligibility/src/gazetteer.rs), data under
+  [`crates/jobhunt-eligibility/data/geonames`](crates/jobhunt-eligibility/data/geonames/README.md)):
+  every country, every first-level region and every place of more than
+  15,000 people (or a capital), with names in English and in the country's
+  own languages, and each place's IANA zone ("Dourados" is
+  `America/Campo_Grande`, UTC-4, not Brasília time). Location fields and
+  the places you state are resolved against it too; diacritics don't
+  matter ("Sao Paulo", "São Paulo", "SÃO PAULO"). Nothing is looked up
+  over the network: the subset is read once per process, into hash
+  indexes.
+
+**Ambiguous names stay ambiguous.** A name resolves to one place only when
+every other place it could mean has less than a tenth of that one's
+population, or lies inside it (the city of New York, not the state; the
+country of Singapore, not the city). So "London" is London, England, but
+"Cambridge" (England, Ontario, Massachusetts, New Zealand), "Santiago"
+(Chile or the Dominican Republic), "San José" and "Georgia" (the country
+or the US state) are unresolved until something around them chooses: a
+qualifier ("Cambridge, MA", "London, Ontario", "Atlanta, Georgia"), or the
+source's structured country field. An unresolved job location is kept as
+written (an office there is uncertain); an unresolved home location is
+reported with what it could be ("Your location “Cambridge” could be …; say
+which"), and counts only for what the readings share (both Portlands are
+in the United States). A stated relocation destination, authorization or
+remote-geography preference that is ambiguous is not recognized at all:
+one reading never stands for another.
+
+The raw text is always kept next to the normalized place, and text neither
+source knows stays unrecognized (`Narrow doesn't recognize your location
 “…”`), never approximated. ISO codes are used as identifiers, not as
 political statements.
 
@@ -914,7 +951,11 @@ political statements.
 
 Membership lives in one tested table (`Region::members`). "Maybe" means
 usage disagrees; a decision built on it is uncertain, never eligible or
-ineligible.
+ineligible. A country the table doesn't list (Andorra, Kazakhstan) is
+placed by its GeoNames continent: certainly in the continent's own region
+(Europe, Africa, Asia, Oceania, the Americas, South America), maybe in a
+business region on it (the EU, North or Latin America, EMEA, APAC, the
+Middle East), and never in a formal list (the EEA, DACH).
 
 | Region | Includes | Maybe |
 | --- | --- | --- |
@@ -924,14 +965,14 @@ ineligible.
 | South America | Argentina, Bolivia, Brazil, Chile, Colombia, Ecuador, Guyana, Paraguay, Peru, Suriname, Uruguay, Venezuela | |
 | Latin America (LATAM) | Mexico, Central and South America, the Spanish-speaking Caribbean | Belize, Guyana, Suriname, Jamaica, Trinidad and Tobago |
 | Americas | all of the above | |
-| Europe | the EU, the EEA, the UK, Switzerland, the Western Balkans, Ukraine, Moldova | Turkey, Russia, Belarus |
+| Europe | the EU, the EEA, the UK, Switzerland, the Western Balkans, Ukraine, Moldova | Turkey, Russia, Belarus, Georgia, Armenia, Azerbaijan |
 | EU | the 27 member states | other European countries (postings often write "EU" for Europe) |
 | EEA | the EU plus Iceland, Liechtenstein, Norway | (formal: nothing else) |
-| Nordics / DACH | Sweden, Norway, Denmark, Finland, Iceland / Germany, Austria, Switzerland | — / Liechtenstein |
-| Middle East | UAE, Saudi Arabia, Israel, Qatar, Kuwait, Bahrain, Oman, Jordan, Lebanon, Syria, Iran | Turkey, Egypt |
+| Nordics / DACH | Sweden, Norway, Denmark, Finland, Iceland / Germany, Austria, Switzerland | Faroe Islands, Åland, Greenland, Svalbard / Liechtenstein |
+| Middle East | UAE, Saudi Arabia, Israel, Qatar, Kuwait, Bahrain, Oman, Jordan, Lebanon, Syria, Iran, Iraq, Yemen, Palestine | Turkey, Egypt |
 | Africa | the African countries in the table | |
 | EMEA | Europe (including its maybes), the Middle East (including its maybes), Africa | |
-| Asia | East, Southeast and South Asia | the Middle East, Turkey |
+| Asia | East, Southeast and South Asia | the Middle East, Turkey, Georgia, Armenia, Azerbaijan |
 | APAC | East and Southeast Asia, Oceania, India | Pakistan, Bangladesh, Sri Lanka, Nepal |
 | Oceania | Australia, New Zealand | |
 | Global / anywhere | every country | |
@@ -989,10 +1030,35 @@ A time-zone requirement is kept separate from geography, with its kind:
 in a European time zone"), **hours** of a zone with an optional tolerance
 ("EST ±3 hours", "Pacific time"), or **overlap** of so many hours
 ("4 hours overlap with EST", counted against an 8-hour day). Your zones
-are the ones you stated, else your city's, else your country's range.
+are the ones you stated ("UTC-3", "US hours", "America/Sao_Paulo"), else
+your city's IANA zone, else your state's or country's zones. Where you
+live gives your time zone only: it is never read as work authorization,
+and a time zone that fits never makes a remote scope that doesn't include
+you eligible (or the other way round); each is its own reason.
 
-- Within: inside passes; outside fails for a requirement; partly inside
-  (a country spanning zones) is uncertain.
+**Daylight saving time is applied, not averaged away.** Zones are IANA
+zones (from the IANA database compiled into `chrono-tz`; the version is
+`chrono_tz::IANA_TZDB_VERSION`), and named zones mean what postings mean
+by them: "EST" and "Pacific time" are US Eastern and Pacific time,
+daylight saving included; "UTC-3" is exactly UTC-3. Every requirement is
+judged on each day of a **reference year** (currently 2026,
+`zones::REFERENCE_YEAR`, each day at 12:00 UTC):
+
+- if the answer is the same every day, that is the answer;
+- if daylight saving time changes it (São Paulo is 2 hours from New York
+  from November to March and 1 hour the rest of the year; London and New
+  York are 4 hours apart for the weeks only one has moved its clocks),
+  the requirement is **uncertain**, and the reason says when it fits and
+  when it doesn't ("1h away Mar 8–Oct 31 and 2h away Nov 1–Mar 7").
+
+A fixed reference year keeps decisions deterministic and cacheable; the
+IANA database version and the reference year are part of every stored
+decision's cache key, so updating either re-evaluates. `Zone::at` and
+`Clock::offset_at` answer for a specific instant, for anything that needs
+one date.
+
+- Within: inside (every day of the year) passes; outside fails for a
+  requirement; partly inside (a country spanning zones) is uncertain.
 - Hours: within the tolerance (the stated one, else 3 hours) passes;
   outside a stated tolerance, or with no working-day overlap at all,
   fails; otherwise uncertain ("5h from your time zone; the posting doesn't
@@ -2047,6 +2113,14 @@ what this feedback is used for. Security vulnerabilities go through
 ## License
 
 Narrow is licensed under the [Apache License, Version 2.0](LICENSE).
+
+It ships geographic data derived from [GeoNames](https://www.geonames.org),
+licensed under [Creative Commons Attribution
+4.0](https://creativecommons.org/licenses/by/4.0/): see
+[`crates/jobhunt-eligibility/data/geonames`](crates/jobhunt-eligibility/data/geonames/README.md)
+for what is included, how it was made and how to refresh it. Time-zone
+rules come from the IANA time zone database (public domain) through the
+`chrono-tz` crate (MIT or Apache-2.0).
 
 Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Please
 report security vulnerabilities privately, as described in
