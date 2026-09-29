@@ -1,6 +1,6 @@
 "use client";
 
-import { type KeyboardEvent, type ReactNode, createContext, useContext, useId, useOptimistic, useState, useTransition } from "react";
+import { type Dispatch, type ReactNode, type SetStateAction, createContext, useContext, useId, useState, useTransition } from "react";
 
 import type { ActionResult } from "@/app/actions";
 import type {
@@ -13,6 +13,7 @@ import type {
   PreferenceView,
 } from "@/lib/api-types";
 
+import { Sheet, SheetBody, SheetFooter } from "./sheet";
 import { SummaryRow } from "./summary";
 import { Button, inlineActionClass, inputClass, labelClass, selectClass } from "./ui";
 
@@ -24,9 +25,12 @@ import { Button, inlineActionClass, inputClass, labelClass, selectClass } from "
  * what a value means: the API does, and says which layer each setting is
  * in.
  *
- * By default a row says the current value and offers one action. Editing
- * opens that row's editor in place, one row at a time; the consequence of
- * a choice is said for the selected option only.
+ * By default a row says the current value, which layer it is in, and one
+ * action. Editing opens one decision in a focused sheet, as a draft: Save
+ * sends it in one change, Cancel leaves everything as it was. The
+ * consequence of a choice is said for the selected option only, and what
+ * happens when a posting doesn't say only where a setting behaves
+ * differently then.
  */
 
 export type UpdatePreferences = (set: PreferenceInput[], remove?: string[]) => Promise<ActionResult<PreferenceUpdateResult>>;
@@ -106,11 +110,11 @@ export function LayerTerms() {
 }
 
 // ---------------------------------------------------------------------------
-// One row edited at a time
+// One decision edited at a time
 
-const Editing = createContext<{ open: string | null; setOpen: (key: string | null) => void } | null>(null);
+const Editing = createContext<{ open: string | null; setOpen: Dispatch<SetStateAction<string | null>> } | null>(null);
 
-/** Keeps one preference row open at a time across the page. */
+/** Keeps one preference open for editing at a time across the page. */
 export function PreferenceEditing({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState<string | null>(null);
   return <Editing.Provider value={{ open, setOpen }}>{children}</Editing.Provider>;
@@ -123,7 +127,9 @@ function useEditing(key: string) {
   return {
     editing,
     open: () => (shared ? shared.setOpen(key) : setLocal(true)),
-    close: () => (shared ? shared.setOpen(null) : setLocal(false)),
+    // Only its own: a save that finishes after the person moved on to
+    // another decision doesn't close that one.
+    close: () => (shared ? shared.setOpen((current) => (current === key ? null : current)) : setLocal(false)),
   };
 }
 
@@ -131,9 +137,8 @@ function useEditing(key: string) {
 function useCommit(update: UpdatePreferences) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const commit = (set: PreferenceInput[], remove: string[] = [], onSaved?: (message: string) => void, before?: () => void) =>
+  const commit = (set: PreferenceInput[], remove: string[] = [], onSaved?: (message: string) => void) =>
     startTransition(async () => {
-      before?.();
       setError(null);
       const r = await update(set, remove);
       if (r.ok) onSaved?.(r.data.unchanged ? "Already in effect." : "Saved.");
@@ -144,13 +149,24 @@ function useCommit(update: UpdatePreferences) {
 
 type Done = (message?: string) => void;
 
+/** Into the editor: the current choice, else its first field. */
+function focusChoice(panel: HTMLElement) {
+  return panel.querySelector<HTMLElement>("form input:checked") ?? panel.querySelector<HTMLElement>("form input, form select, form textarea");
+}
+
 /**
- * A preference as a summary row, with its editor behind Edit. Escape
- * cancels; closing returns focus to the row's action.
+ * A preference as a summary row that never changes shape. Its action (the
+ * whole row is the target) opens one focused editor: a panel at the side
+ * on wide screens, a sheet on phones, titled with the decision it is
+ * about and the value it has now. Nothing else on the page can be changed
+ * meanwhile. Save or Cancel (or Escape) returns to the row, with focus on
+ * its action and the outcome beside its value.
  */
 function PreferenceRow({
   rowKey,
   label,
+  question,
+  now,
   value,
   unset = false,
   importance,
@@ -159,6 +175,10 @@ function PreferenceRow({
 }: {
   rowKey: string;
   label: string;
+  /** The decision, as the person would ask it ("How do you want to work?"). */
+  question: string;
+  /** The current value in plain words, under the editor's title. */
+  now: string;
   value: ReactNode;
   unset?: boolean;
   importance?: ReactNode;
@@ -169,95 +189,134 @@ function PreferenceRow({
   const { editing, open, close } = useEditing(rowKey);
   const [status, setStatus] = useState("");
   const triggerId = `${id}-action`;
-  const editorId = `${id}-editor`;
   const done: Done = (message) => {
     setStatus(message ?? "");
     close();
-    // Back to the row's action once it is on screen again.
+    // Back to the row's action.
     requestAnimationFrame(() => document.getElementById(triggerId)?.focus());
   };
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Escape") {
-      e.stopPropagation();
-      done();
-    }
-  };
-  return (
-    <SummaryRow
-      id={id}
-      label={label}
-      value={value}
-      unset={unset}
-      importance={importance}
-      status={
-        <span role="status" className="text-caption text-fg-muted empty:hidden">
-          {status}
-        </span>
-      }
-      action={
-        <button
-          id={triggerId}
-          type="button"
-          onClick={() => {
-            setStatus("");
-            open();
-            // Into the editor: the current choice, else its first field.
-            requestAnimationFrame(() => {
-              const editor = document.getElementById(editorId);
-              const target = editor?.querySelector<HTMLElement>("input:checked") ?? editor?.querySelector<HTMLElement>("input, select, textarea, button");
-              target?.focus();
-            });
-          }}
-          className={`${inlineActionClass} max-sm:min-h-11 max-sm:pl-3`}
-        >
-          {actionLabel ?? (unset ? "Add" : "Edit")} <span className="sr-only">{label.toLowerCase()}</span>
-        </button>
-      }
-      editor={
-        editing ? (
-          <div id={editorId} onKeyDown={onKeyDown} className="pt-0.5 pb-2 max-sm:pt-1.5">
-            {editor(done)}
-          </div>
-        ) : undefined
-      }
-    />
-  );
-}
-
-function EditorActions({ pending, onCancel, error, saveLabel = "Save", extra }: { pending: boolean; onCancel: () => void; error?: string | null; saveLabel?: string; extra?: ReactNode }) {
   return (
     <>
-      {error && (
-        <p role="alert" className="mt-3 text-[13px] text-danger">
-          {error}
-        </p>
-      )}
-      <div className="mt-3.5 flex flex-wrap items-center gap-2">
-        <Button type="submit" variant="primary" size="sm" disabled={pending} loading={pending} className="max-sm:h-11 max-sm:px-5">
-          {saveLabel}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onCancel} disabled={pending} className="max-sm:h-11">
-          Cancel
-        </Button>
-        {extra}
-      </div>
+      <SummaryRow
+        id={id}
+        label={label}
+        value={value}
+        unset={unset}
+        importance={importance}
+        status={
+          <span role="status" className="text-caption text-fg-muted empty:hidden">
+            {status}
+          </span>
+        }
+        action={
+          <button
+            id={triggerId}
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={editing}
+            onClick={() => {
+              setStatus("");
+              open();
+            }}
+            // The whole row opens it; the word is where the eye goes.
+            className={`${inlineActionClass} after:absolute after:inset-0 after:content-[''] max-sm:min-h-11 max-sm:pl-3`}
+          >
+            {actionLabel ?? (unset ? "Add" : "Edit")} <span className="sr-only">{label.toLowerCase()}</span>
+          </button>
+        }
+      />
+      <Sheet
+        open={editing}
+        onClose={() => done()}
+        title={question}
+        subtitle={
+          <>
+            {label} · {unset ? "Not set" : `Now: ${now}`}
+          </>
+        }
+        fit
+        closeWord={false}
+        initialFocus={focusChoice}
+      >
+        {editing && editor(done)}
+      </Sheet>
     </>
   );
 }
 
-function DoneButton({ onDone }: { onDone: () => void }) {
+/**
+ * An editor's form: its fields in the sheet's body, then Cancel and Save
+ * at the foot, always in view. An error stays next to them, with what the
+ * person entered still in place.
+ */
+export { focusChoice };
+
+export function EditorForm({
+  onSubmit,
+  onCancel,
+  pending,
+  error,
+  saveLabel = "Save",
+  extra,
+  children,
+}: {
+  onSubmit: () => void;
+  onCancel?: () => void;
+  pending: boolean;
+  error?: string | null;
+  saveLabel?: string;
+  /** A secondary action on the left ("Remove minimum"). */
+  extra?: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <Button size="sm" onClick={onDone} className="mt-3.5 max-sm:h-11 max-sm:px-5">
-      Done
-    </Button>
+    <form
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit();
+      }}
+      className="flex min-h-0 flex-1 flex-col"
+    >
+      <SheetBody className="gap-5 pb-6">{children}</SheetBody>
+      <SheetFooter>
+        {error && (
+          <p role="alert" className="w-full text-[13px] leading-[1.45] text-danger">
+            {error}
+          </p>
+        )}
+        {extra && <div className="mr-auto max-sm:w-full">{extra}</div>}
+        <div className={`ml-auto flex gap-2 max-sm:grid max-sm:w-full ${onCancel ? "max-sm:grid-cols-[1fr_1.4fr]" : "max-sm:grid-cols-1"}`}>
+          {onCancel && (
+            <Button variant="ghost" onClick={onCancel} disabled={pending} className="max-sm:h-11">
+              Cancel
+            </Button>
+          )}
+          <Button type="submit" variant="primary" disabled={pending} loading={pending} className="max-sm:h-11">
+            {saveLabel}
+          </Button>
+        </div>
+      </SheetFooter>
+    </form>
   );
 }
 
-function Outcome({ message }: { message: { ok: boolean; text: string } | null }) {
+/** What a choice does, in one line. */
+export function Note({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <p className={`text-[12.5px] leading-[1.5] text-pretty text-fg-muted ${className}`}>{children}</p>;
+}
+
+/**
+ * What happens when a posting doesn't say, marked with the hollow square
+ * Narrow uses for an unknown. Only where a setting behaves differently
+ * then; the full rules are in "How preferences work".
+ */
+function IfUnknown({ children }: { children: ReactNode }) {
   return (
-    <span role="status" aria-live="polite" className={`text-caption ${message?.ok === false ? "text-danger" : "text-fg-muted"}`}>
-      {message?.text}
-    </span>
+    <p className="flex gap-2.5 text-[12.5px] leading-[1.5] text-fg-muted">
+      <span aria-hidden="true" className="mt-[0.5em] size-[5px] shrink-0 rounded-[1px] border border-fg-muted" />
+      <span className="min-w-0 text-pretty">{children}</span>
+    </p>
   );
 }
 
@@ -275,14 +334,14 @@ interface Option {
 function ChoiceList({ name, legend, options, value, onChange }: { name: string; legend: string; options: Option[]; value: string | null; onChange: (value: string) => void }) {
   return (
     <fieldset role="radiogroup" aria-label={legend} className="min-w-0">
-      <div className="-mx-2.5 flex max-w-[420px] flex-col gap-0.5">
+      <div className="-mx-2.5 flex flex-col gap-0.5">
         {options.map((o) => {
           const on = value === o.value;
           return (
             <div key={o.value}>
               <label
                 className={
-                  "flex min-h-[34px] cursor-pointer items-center gap-3 rounded-md px-2.5 text-[14px] transition-colors duration-[120ms] max-sm:min-h-12 max-sm:text-[15px] " +
+                  "flex min-h-[36px] cursor-pointer items-center gap-3 rounded-md px-2.5 text-[14px] transition-colors duration-[120ms] max-sm:min-h-12 max-sm:text-[15px] " +
                   "has-focus-visible:outline-[1.5px] has-focus-visible:outline-(--nr-focus) " +
                   (on ? "bg-selected font-medium text-fg" : "text-fg-secondary hover:text-fg")
                 }
@@ -325,7 +384,7 @@ function Importance({
     ...(withAvoid ? [{ value: "avoid", label: "Avoid" }] : []),
   ];
   return (
-    <fieldset role="radiogroup" aria-label={legend} disabled={disabled} className="min-w-0">
+    <fieldset role="radiogroup" aria-label={legend} disabled={disabled} className="min-w-0 max-sm:w-full">
       <div className="inline-flex max-w-full flex-wrap rounded-md border border-line p-0.5 max-sm:flex max-sm:flex-nowrap">
         {options.map((o) => (
           <label
@@ -358,6 +417,95 @@ function listText(items: string[]): string {
 }
 
 // ---------------------------------------------------------------------------
+// Places, changed as a draft and saved together
+
+interface Chip {
+  key: string;
+  text: string;
+  note?: string;
+}
+
+/** Places in the draft, each removable. Wrapping, never wider than the sheet. */
+function PlaceChips({ label, items, onRemove, disabled }: { label: string; items: Chip[]; onRemove: (key: string) => void; disabled?: boolean }) {
+  if (items.length === 0) return null;
+  return (
+    <ul aria-label={label} className="flex flex-wrap gap-2">
+      {items.map((c) => (
+        <li key={c.key} className="inline-flex max-w-full items-center gap-2 rounded-md border border-line py-1 pr-1.5 pl-2.5 text-[13px] text-fg-body max-sm:min-h-11">
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            {c.text}
+            {c.note && <span className="text-fg-muted"> · {c.note}</span>}
+          </span>
+          <button type="button" disabled={disabled} onClick={() => onRemove(c.key)} className={`${inlineActionClass} shrink-0 px-1 max-sm:min-h-11`}>
+            Remove <span className="sr-only">{c.text}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * A place to add to the draft. Enter adds it; a place typed but not yet
+ * added is saved with the rest.
+ */
+function AddPlace({
+  label,
+  placeholder,
+  value,
+  onChange,
+  onAdd,
+  disabled,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+  onAdd: () => void;
+  disabled?: boolean;
+}) {
+  const id = useId();
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <div className="min-w-0 flex-1 basis-52">
+        <label htmlFor={id} className={labelClass}>
+          {label}
+        </label>
+        <input
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onAdd();
+            }
+          }}
+          placeholder={placeholder}
+          autoComplete="off"
+          className={inputClass}
+        />
+      </div>
+      <Button onClick={onAdd} disabled={disabled || !value.trim()} className="h-9 max-sm:h-11">
+        Add
+      </Button>
+    </div>
+  );
+}
+
+/** The draft's new places: those added, and the one still typed. */
+function withTyped(added: string[], typed: string): string[] {
+  const t = typed.trim();
+  const all = t ? [...added, t] : added;
+  return all.filter((p, i) => all.findIndex((q) => q.toLowerCase() === p.toLowerCase()) === i);
+}
+
+function readAs(p: PlaceControl): string | undefined {
+  if (!p.read_as) return "not recognized";
+  return p.read_as.toLowerCase() !== p.place.toLowerCase() ? p.read_as : undefined;
+}
+
+// ---------------------------------------------------------------------------
 // Work
 
 const SETUPS: Option[] = [
@@ -374,39 +522,48 @@ const RELOCATION: Option[] = [
   { value: "only_selected", label: "Only to some places", note: "Roles elsewhere are left out." },
 ];
 
+function setupText(work: PreferenceControls["work"]): string {
+  if (work.setup === "custom") return `From your words: ${work.custom}`;
+  return SETUPS.find((s) => s.value === work.setup)?.label ?? "Not set";
+}
+
 function WorkSetup({ work, update }: { work: PreferenceControls["work"]; update: UpdatePreferences }) {
-  const current = SETUPS.find((s) => s.value === work.setup);
   const unset = work.setup === "no_preference" && work.setup_records.length === 0;
   return (
     <PreferenceRow
       rowKey="work-setup"
       label="Work setup"
+      question="How do you want to work?"
+      now={setupText(work)}
       unset={unset}
       value={
         <>
-          {work.setup === "custom" ? `From your words: ${work.custom}` : (current?.label ?? "Not set")} <NeedsAnswer records={work.setup_records} />
+          {setupText(work)} <NeedsAnswer records={work.setup_records} />
         </>
       }
+      importance={unset ? undefined : <LayerTag layer={work.setup_layer} />}
       editor={(done) => <WorkSetupEditor work={work} update={update} done={done} />}
     />
   );
 }
 
 function WorkSetupEditor({ work, update, done }: { work: PreferenceControls["work"]; update: UpdatePreferences; done: Done }) {
-  const { pending, error, commit } = useCommit(update);
+  const { pending, error, setError, commit } = useCommit(update);
   const id = useId();
   const [choice, setChoice] = useState<string | null>(SETUPS.some((s) => s.value === work.setup) ? work.setup : null);
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (choice) commit([{ kind: "work_setup", setup: choice as "remote_only" }], [], done);
+    <EditorForm
+      pending={pending}
+      error={error}
+      onCancel={() => done()}
+      onSubmit={() => {
+        if (!choice) return setError("Choose one of the answers.");
+        commit([{ kind: "work_setup", setup: choice as "remote_only" }], [], done);
       }}
     >
-      {work.setup === "custom" && <p className="mb-2 text-[13px] text-fg-secondary">From your words: {work.custom}. Choose one to replace it.</p>}
+      {work.setup === "custom" && <Note className="text-fg-secondary">From your words: {work.custom}. Choose one to replace it.</Note>}
       <ChoiceList name={`${id}-setup`} legend="Work setup" options={SETUPS} value={choice} onChange={setChoice} />
-      <EditorActions pending={pending} error={error} onCancel={() => done()} />
-    </form>
+    </EditorForm>
   );
 }
 
@@ -424,16 +581,20 @@ function relocationText(work: PreferenceControls["work"]): string {
 }
 
 function Relocation({ work, update }: { work: PreferenceControls["work"]; update: UpdatePreferences }) {
+  const unset = work.relocation === "unset";
   return (
     <PreferenceRow
       rowKey="relocation"
       label="Relocation"
-      unset={work.relocation === "unset"}
+      question="Would you move for a role?"
+      now={relocationText(work)}
+      unset={unset}
       value={
         <>
           {relocationText(work)} <NeedsAnswer records={[work.relocation_record]} />
         </>
       }
+      importance={unset ? undefined : <LayerTag layer={work.relocation_record?.layer} />}
       editor={(done) => <RelocationEditor work={work} update={update} done={done} />}
     />
   );
@@ -445,32 +606,34 @@ function RelocationEditor({ work, update, done }: { work: PreferenceControls["wo
   const [choice, setChoice] = useState<string | null>(work.relocation === "unset" ? null : work.relocation);
   const [places, setPlaces] = useState(work.relocation_only_to.join(", "));
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (choice === "not_willing") commit([{ kind: "relocation", willing: false, only_to: [] }], [], done);
-        if (choice === "open") commit([{ kind: "relocation", willing: true, only_to: [] }], [], done);
+    <EditorForm
+      pending={pending}
+      error={error}
+      onCancel={() => done()}
+      onSubmit={() => {
+        if (choice === "not_willing") return commit([{ kind: "relocation", willing: false, only_to: [] }], [], done);
+        if (choice === "open") return commit([{ kind: "relocation", willing: true, only_to: [] }], [], done);
         if (choice === "only_selected") {
           const list = places
             .split(",")
             .map((p) => p.trim())
             .filter(Boolean);
           if (list.length === 0) return setError("Name at least one country or region.");
-          commit([{ kind: "relocation", willing: true, only_to: list }], [], done);
+          return commit([{ kind: "relocation", willing: true, only_to: list }], [], done);
         }
+        setError("Choose one of the answers.");
       }}
     >
       <ChoiceList name={`${id}-relocation`} legend="Relocation" options={RELOCATION} value={choice} onChange={setChoice} />
       {choice === "only_selected" && (
-        <div className="mt-3 max-w-[420px]">
+        <div>
           <label htmlFor={`${id}-places`} className={labelClass}>
             Countries or regions
           </label>
           <input id={`${id}-places`} value={places} onChange={(e) => setPlaces(e.target.value)} placeholder="Portugal, Spain" className={inputClass} />
         </div>
       )}
-      <EditorActions pending={pending} error={error} onCancel={() => done()} />
-    </form>
+    </EditorForm>
   );
 }
 
@@ -482,6 +645,8 @@ function Home({ location, update }: { location: PreferenceControls["location"]; 
     <PreferenceRow
       rowKey="home"
       label="Where you live"
+      question="Where do you live?"
+      now={location.home ?? ""}
       unset={!location.home}
       value={
         location.home ? (
@@ -500,75 +665,34 @@ function Home({ location, update }: { location: PreferenceControls["location"]; 
 }
 
 function HomeEditor({ location, update, done }: { location: PreferenceControls["location"]; update: UpdatePreferences; done: Done }) {
-  const { pending, error, commit } = useCommit(update);
+  const { pending, error, setError, commit } = useCommit(update);
   const id = useId();
   const [place, setPlace] = useState(location.home ?? "");
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (place.trim()) commit([{ kind: "location", place: place.trim() }], [], done);
+    <EditorForm
+      pending={pending}
+      error={error}
+      onCancel={() => done()}
+      onSubmit={() => {
+        if (!place.trim()) return setError("Enter where you live, like a city and a country.");
+        commit([{ kind: "location", place: place.trim() }], [], done);
       }}
     >
-      <label htmlFor={`${id}-home`} className={labelClass}>
-        Where you live
-      </label>
-      <input id={`${id}-home`} value={place} onChange={(e) => setPlace(e.target.value)} placeholder="São Paulo, Brazil" required className={`${inputClass} max-w-[420px]`} />
-      <div className="mt-2 max-w-[420px] space-y-1 text-[12.5px] leading-[1.45] text-fg-muted">
-        {location.home && location.home_basis === "resume" && <p>From your resume. Save it to make it yours.</p>}
-        {location.home && !location.home_country && <p className="text-fg-secondary">Narrow doesn&apos;t recognize this place, so remote scopes can&apos;t be matched to it.</p>}
-        {location.remote_open_to_you.length > 0 && (
-          <p>
-            Remote roles open to {listText(location.remote_open_to_you)} include you. A listing that only says “Remote” doesn&apos;t say where, so it stays
-            unresolved.
-          </p>
-        )}
-      </div>
-      <EditorActions pending={pending} error={error} onCancel={() => done()} />
-    </form>
-  );
-}
-
-function PlaceChip({ place, onRemove, pending, extra }: { place: PlaceControl; onRemove: () => void; pending: boolean; extra?: ReactNode }) {
-  return (
-    <li className="inline-flex max-w-full items-center gap-2 rounded-md border border-line px-2.5 py-1 text-[13px] text-fg-body max-sm:min-h-11">
-      <span className="min-w-0 truncate">
-        {place.place}
-        {place.read_as && place.read_as.toLowerCase() !== place.place.toLowerCase() && <span className="text-fg-muted"> · {place.read_as}</span>}
-        {!place.read_as && <span className="text-fg-muted"> · not recognized</span>}
-        {extra}
-      </span>
-      <button type="button" disabled={pending} onClick={onRemove} className={`${inlineActionClass} max-sm:min-h-11`}>
-        Remove <span className="sr-only">{place.place}</span>
-      </button>
-    </li>
-  );
-}
-
-function AddPlace({ label, placeholder, onAdd, pending }: { label: string; placeholder: string; onAdd: (place: string) => void; pending: boolean }) {
-  const id = useId();
-  const [value, setValue] = useState("");
-  return (
-    <form
-      className="mt-3 flex max-w-[420px] flex-wrap items-end gap-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (value.trim()) {
-          onAdd(value.trim());
-          setValue("");
-        }
-      }}
-    >
-      <div className="min-w-0 flex-1 basis-52">
-        <label htmlFor={id} className={labelClass}>
-          {label}
+      <div>
+        <label htmlFor={`${id}-home`} className={labelClass}>
+          Where you live
         </label>
-        <input id={id} value={value} onChange={(e) => setValue(e.target.value)} placeholder={placeholder} className={inputClass} />
+        <input id={`${id}-home`} value={place} onChange={(e) => setPlace(e.target.value)} placeholder="São Paulo, Brazil" autoComplete="off" className={inputClass} />
       </div>
-      <Button type="submit" disabled={pending} className="max-sm:h-11">
-        Add
-      </Button>
-    </form>
+      <div className="flex flex-col gap-1.5">
+        {location.home && location.home_basis === "resume" && <Note>From your resume. Save it to make it yours.</Note>}
+        {location.home && !location.home_country && (
+          <Note className="text-fg-secondary">Narrow doesn&apos;t recognize this place, so remote scopes can&apos;t be matched to it.</Note>
+        )}
+        {location.remote_open_to_you.length > 0 && <Note>Remote roles open to {listText(location.remote_open_to_you)} include you.</Note>}
+        <IfUnknown>A listing that only says “Remote” doesn&apos;t say where, so it stays unresolved.</IfUnknown>
+      </div>
+    </EditorForm>
   );
 }
 
@@ -578,12 +702,15 @@ function placeName(p: PlaceControl): string {
 
 function Authorization({ location, update }: { location: PreferenceControls["location"]; update: UpdatePreferences }) {
   const places = location.authorized_in;
+  const text = places.map(placeName).join(", ");
   return (
     <PreferenceRow
       rowKey="authorized"
       label="Authorized to work in"
+      question="Where are you authorized to work?"
+      now={text}
       unset={places.length === 0}
-      value={places.length > 0 ? places.map(placeName).join(", ") : "Not set"}
+      value={places.length > 0 ? text : "Not set"}
       editor={(done) => <AuthorizationEditor location={location} update={update} done={done} />}
     />
   );
@@ -591,23 +718,48 @@ function Authorization({ location, update }: { location: PreferenceControls["loc
 
 function AuthorizationEditor({ location, update, done }: { location: PreferenceControls["location"]; update: UpdatePreferences; done: Done }) {
   const { pending, error, commit } = useCommit(update);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const save = (set: PreferenceInput[], remove: string[] = []) => commit(set, remove, (text) => setMessage({ ok: true, text }));
+  const [kept, setKept] = useState(location.authorized_in);
+  const [added, setAdded] = useState<string[]>([]);
+  const [typed, setTyped] = useState("");
+  const chips: Chip[] = [
+    ...kept.map((a) => ({ key: a.record.id, text: a.place, note: readAs(a) })),
+    ...added.map((p) => ({ key: `new:${p}`, text: p })),
+  ];
   return (
-    <div>
-      {location.authorized_in.length > 0 ? (
-        <ul className="flex flex-wrap gap-2">
-          {location.authorized_in.map((a) => (
-            <PlaceChip key={a.record.id} place={a} pending={pending} onRemove={() => save([], [a.record.id])} />
-          ))}
-        </ul>
-      ) : (
-        <p className="text-[12.5px] text-fg-muted">Where a posting requires authorization you haven&apos;t stated, it stays unresolved.</p>
-      )}
-      <AddPlace label="Add a country or region" placeholder="Brazil, the EU" pending={pending} onAdd={(place) => save([{ kind: "authorized_in", place }])} />
-      <p className="mt-2">{error ? <Outcome message={{ ok: false, text: error }} /> : <Outcome message={message} />}</p>
-      <DoneButton onDone={() => done()} />
-    </div>
+    <EditorForm
+      pending={pending}
+      error={error}
+      onCancel={() => done()}
+      onSubmit={() => {
+        const places = withTyped(added, typed);
+        const remove = location.authorized_in.filter((a) => !kept.includes(a)).map((a) => a.record.id);
+        if (places.length === 0 && remove.length === 0) return done();
+        commit(
+          places.map((place) => ({ kind: "authorized_in" as const, place })),
+          remove,
+          done,
+        );
+      }}
+    >
+      <PlaceChips
+        label="Authorized to work in"
+        items={chips}
+        disabled={pending}
+        onRemove={(key) => (key.startsWith("new:") ? setAdded(added.filter((p) => `new:${p}` !== key)) : setKept(kept.filter((a) => a.record.id !== key)))}
+      />
+      <AddPlace
+        label="Add a country or region"
+        placeholder="Brazil, the EU"
+        value={typed}
+        onChange={setTyped}
+        disabled={pending}
+        onAdd={() => {
+          setAdded(withTyped(added, typed));
+          setTyped("");
+        }}
+      />
+      <IfUnknown>Where a posting requires authorization you haven&apos;t stated, it stays unresolved.</IfUnknown>
+    </EditorForm>
   );
 }
 
@@ -616,6 +768,8 @@ const SCOPES = [
   { code: "americas", value: "Americas", label: "The Americas" },
   { code: "latam", value: "Latin America", label: "Latin America (LATAM)" },
 ];
+
+const isPreset = (g: PlaceControl) => SCOPES.some((s) => s.code === g.code);
 
 function scopeState(location: PreferenceControls["location"]) {
   const wanted = location.remote_geography.filter((g) => g.record.stance !== "unwanted");
@@ -628,17 +782,24 @@ function scopeState(location: PreferenceControls["location"]) {
   return { wanted, avoided, importance, anywhere, restricting };
 }
 
-function RemoteGeography({ location, update }: { location: PreferenceControls["location"]; update: UpdatePreferences }) {
-  const { wanted, avoided, importance, restricting } = scopeState(location);
+function scopeText(location: PreferenceControls["location"]): string {
+  const { wanted, avoided } = scopeState(location);
   const names = wanted.map((g) => (g.code === "worldwide" ? "Anywhere (no restriction)" : placeName(g)));
-  const value = [names.join(", "), avoided.length > 0 && `avoid ${avoided.map(placeName).join(", ")}`].filter(Boolean).join("; ");
+  return [names.join(", "), avoided.length > 0 && `avoid ${avoided.map(placeName).join(", ")}`].filter(Boolean).join("; ");
+}
+
+function RemoteGeography({ location, update }: { location: PreferenceControls["location"]; update: UpdatePreferences }) {
+  const { importance, restricting } = scopeState(location);
+  const text = scopeText(location);
   return (
     <PreferenceRow
       rowKey="remote-scope"
       label="Remote roles open to"
+      question="Which remote regions work for you?"
+      now={text}
       unset={location.remote_geography.length === 0}
-      value={value || "Not set"}
-      importance={restricting.length > 0 ? IMPORTANCE_TEXT[importance] : undefined}
+      value={text || "Not set"}
+      importance={restricting.length > 0 ? <LayerTag layer={importance === "must_have" ? "requirement" : "preference"} /> : undefined}
       editor={(done) => <RemoteGeographyEditor location={location} update={update} done={done} />}
     />
   );
@@ -646,74 +807,102 @@ function RemoteGeography({ location, update }: { location: PreferenceControls["l
 
 function RemoteGeographyEditor({ location, update, done }: { location: PreferenceControls["location"]; update: UpdatePreferences; done: Done }) {
   const { pending, error, commit } = useCommit(update);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const id = useId();
-  const save = (set: PreferenceInput[], remove: string[] = []) => commit(set, remove, (text) => setMessage({ ok: true, text }));
-  const { wanted, avoided, importance, anywhere } = scopeState(location);
-  const stance = importance === "must_have" ? "require" : "want";
-  const presetOf = (code: string) => wanted.find((g) => g.code === code);
-  const others = wanted.filter((g) => !SCOPES.some((s) => s.code === g.code));
+  const initial = scopeState(location);
+  const presets = initial.wanted.filter(isPreset);
+  const [checked, setChecked] = useState(() => new Set(presets.map((g) => g.code!)));
+  const [others, setOthers] = useState(initial.wanted.filter((g) => !isPreset(g)));
+  const [avoided, setAvoided] = useState(initial.avoided);
+  const [added, setAdded] = useState<string[]>([]);
+  const [typed, setTyped] = useState("");
+  const [importance, setImportance] = useState(initial.importance);
+  const anyWanted = checked.size > 0 || others.length > 0 || withTyped(added, typed).length > 0;
+  const anywhere = checked.has("worldwide") || others.some((g) => g.code === "worldwide");
+  const chips: Chip[] = [
+    ...others.map((g) => ({ key: g.record.id, text: g.place, note: readAs(g) })),
+    ...added.map((p) => ({ key: `new:${p}`, text: p })),
+  ];
   return (
-    <div>
-      <fieldset disabled={pending}>
+    <EditorForm
+      pending={pending}
+      error={error}
+      onCancel={() => done()}
+      onSubmit={() => {
+        const stance = importance === "must_have" ? ("require" as const) : ("want" as const);
+        const remove = [
+          ...presets.filter((g) => !checked.has(g.code!)),
+          ...initial.wanted.filter((g) => !isPreset(g) && !others.includes(g)),
+          ...initial.avoided.filter((g) => !avoided.includes(g)),
+        ].map((g) => g.record.id);
+        // A new importance applies to every place kept; new places get it too.
+        const kept = importance !== initial.importance ? [...presets.filter((g) => checked.has(g.code!)), ...others].map((g) => g.place) : [];
+        const newPresets = SCOPES.filter((s) => checked.has(s.code) && !presets.some((g) => g.code === s.code)).map((s) => s.value);
+        const set = [...kept, ...newPresets, ...withTyped(added, typed)].map((region) => ({ kind: "region" as const, region, stance }));
+        if (set.length === 0 && remove.length === 0) return done();
+        commit(set, remove, done);
+      }}
+    >
+      <fieldset disabled={pending} className="min-w-0">
         <legend className="sr-only">Remote scopes</legend>
         <div className="flex flex-wrap gap-2">
-          {SCOPES.map((s) => {
-            const record = presetOf(s.code);
-            return (
-              <label
-                key={s.code}
-                className={
-                  "flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-line px-3 text-[13px] text-fg-body transition-colors duration-[120ms] " +
-                  "hover:border-line-strong has-checked:border-fg has-focus-visible:outline-[1.5px] has-focus-visible:outline-(--nr-focus) max-sm:min-h-11"
-                }
-              >
-                <input
-                  type="checkbox"
-                  checked={Boolean(record)}
-                  onChange={() => (record ? save([], [record.record.id]) : save([{ kind: "region", region: s.value, stance }]))}
-                  className="size-3.5 accent-fg"
-                />
-                {s.label}
-              </label>
-            );
-          })}
+          {SCOPES.map((s) => (
+            <label
+              key={s.code}
+              className={
+                "flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-line px-3 text-[13px] text-fg-body transition-colors duration-[120ms] " +
+                "hover:border-line-strong has-checked:border-fg has-focus-visible:outline-[1.5px] has-focus-visible:outline-(--nr-focus) max-sm:min-h-11"
+              }
+            >
+              <input
+                type="checkbox"
+                checked={checked.has(s.code)}
+                onChange={() => {
+                  const next = new Set(checked);
+                  if (next.has(s.code)) next.delete(s.code);
+                  else next.add(s.code);
+                  setChecked(next);
+                }}
+                className="size-3.5 accent-fg"
+              />
+              {s.label}
+            </label>
+          ))}
         </div>
       </fieldset>
-      {anywhere && <p className="mt-2 text-[12.5px] text-fg-muted">Anywhere means no geographic restriction: it doesn&apos;t rank remote roles up or down.</p>}
-      {others.length > 0 && (
-        <ul aria-label="Other places" className="mt-3 flex flex-wrap gap-2">
-          {others.map((g) => (
-            <PlaceChip key={g.record.id} place={g} pending={pending} onRemove={() => save([], [g.record.id])} />
-          ))}
-        </ul>
-      )}
-      <AddPlace label="Add a country or region" placeholder="Brazil, Europe" pending={pending} onAdd={(region) => save([{ kind: "region", region, stance }])} />
-      {wanted.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+      <PlaceChips
+        label="Other places"
+        items={chips}
+        disabled={pending}
+        onRemove={(key) => (key.startsWith("new:") ? setAdded(added.filter((p) => `new:${p}` !== key)) : setOthers(others.filter((g) => g.record.id !== key)))}
+      />
+      <AddPlace
+        label="Add a country or region"
+        placeholder="Brazil, Europe"
+        value={typed}
+        onChange={setTyped}
+        disabled={pending}
+        onAdd={() => {
+          setAdded(withTyped(added, typed));
+          setTyped("");
+        }}
+      />
+      {anyWanted && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="text-caption text-fg-muted">How much it matters</span>
-          <Importance
-            name={`${id}-importance`}
-            legend="How much remote scope matters"
-            value={importance}
-            withOff={false}
-            disabled={pending}
-            onChange={(value) =>
-              save(wanted.map((g) => ({ kind: "region" as const, region: g.place, stance: value === "must_have" ? ("require" as const) : ("want" as const) })))
-            }
-          />
+          <Importance name={`${id}-importance`} legend="How much remote scope matters" value={importance} withOff={false} disabled={pending} onChange={setImportance} />
         </div>
       )}
-      {avoided.length > 0 && (
-        <ul aria-label="Places you'd rather avoid" className="mt-3 flex flex-wrap gap-2">
-          {avoided.map((g) => (
-            <PlaceChip key={g.record.id} place={g} pending={pending} onRemove={() => save([], [g.record.id])} extra={<span className="text-fg-muted"> · avoid</span>} />
-          ))}
-        </ul>
-      )}
-      <p className="mt-2">{error ? <Outcome message={{ ok: false, text: error }} /> : <Outcome message={message} />}</p>
-      <DoneButton onDone={() => done()} />
-    </div>
+      <PlaceChips
+        label="Places you'd rather avoid"
+        items={avoided.map((g) => ({ key: g.record.id, text: g.place, note: "avoid" }))}
+        disabled={pending}
+        onRemove={(key) => setAvoided(avoided.filter((g) => g.record.id !== key))}
+      />
+      <div className="flex flex-col gap-1.5">
+        {anywhere && <Note>Anywhere means no geographic restriction: it doesn&apos;t rank remote roles up or down.</Note>}
+        <IfUnknown>A listing that only says “Remote” doesn&apos;t say where, so it stays unresolved.</IfUnknown>
+      </div>
+    </EditorForm>
   );
 }
 
@@ -726,6 +915,11 @@ const POLICY: Record<"eligibility" | "pay", Option[]> = {
     { value: "show", label: "Show them, marked unresolved", note: "Unknown pay never counts as meeting your minimum." },
     { value: "hide", label: "Hide them", note: "Only roles that publish comparable pay." },
   ],
+};
+
+const POLICY_QUESTION = {
+  eligibility: "Show roles when your eligibility is unclear?",
+  pay: "Show roles that don't publish pay?",
 };
 
 /** What to do when something can't be settled: show it unresolved, or leave it out. */
@@ -742,13 +936,15 @@ function Policy({
   value: string;
   update: UpdatePreferences;
 }) {
-  const options = POLICY[kind];
+  const text = POLICY[kind].find((o) => o.value === value)?.label ?? value;
   return (
     <PreferenceRow
       rowKey={rowKey}
       label={label}
+      question={POLICY_QUESTION[kind]}
+      now={text}
       actionLabel="Change"
-      value={options.find((o) => o.value === value)?.label ?? value}
+      value={text}
       editor={(done) => <PolicyEditor label={label} kind={kind} value={value} update={update} done={done} />}
     />
   );
@@ -759,16 +955,17 @@ function PolicyEditor({ label, kind, value, update, done }: { label: string; kin
   const id = useId();
   const [choice, setChoice] = useState(value);
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
+    <EditorForm
+      pending={pending}
+      error={error}
+      onCancel={() => done()}
+      onSubmit={() => {
         const show = choice === "show";
         commit([kind === "pay" ? { kind: "unknown_pay", show } : { kind: "unclear_eligibility", show }], [], done);
       }}
     >
       <ChoiceList name={`${id}-policy`} legend={label} options={POLICY[kind]} value={choice} onChange={setChoice} />
-      <EditorActions pending={pending} error={error} onCancel={() => done()} />
-    </form>
+    </EditorForm>
   );
 }
 
@@ -800,10 +997,13 @@ function PayRow({ bound, records, update }: { bound: "minimum" | "target"; recor
   // The figure for both arrangements is the one edited here.
   const main = records.find((r) => !r.applies_to);
   const minimum = bound === "minimum";
+  const text = [main && `${minimum ? "At least" : "Around"} ${payText(main)}`, ...records.filter((r) => r.applies_to).map(payText)].filter(Boolean).join("; ");
   return (
     <PreferenceRow
       rowKey={`pay-${bound}`}
       label={minimum ? "Minimum" : "Target"}
+      question={minimum ? "What's the least you'd consider?" : "What pay are you aiming for?"}
+      now={text}
       unset={records.length === 0}
       value={
         records.length > 0 ? (
@@ -823,6 +1023,7 @@ function PayRow({ bound, records, update }: { bound: "minimum" | "target"; recor
           "Not set"
         )
       }
+      importance={records.length > 0 ? <LayerTag layer={(main ?? records[0])?.record.layer} /> : undefined}
       editor={(done) => <PayEditor bound={bound} records={records} update={update} done={done} />}
     />
   );
@@ -832,20 +1033,32 @@ function PayEditor({ bound, records, update, done }: { bound: "minimum" | "targe
   const { pending, error: saveError, commit } = useCommit(update);
   const id = useId();
   const main = records.find((r) => !r.applies_to);
-  const others = records.filter((r) => r.applies_to);
+  const [removed, setRemoved] = useState<string[]>([]);
+  const others = records.filter((r) => r.applies_to && !removed.includes(r.record.id));
   const [amount, setAmount] = useState(main ? String(main.amount) : "");
   const [currency, setCurrency] = useState(main?.currency ?? "");
   const [period, setPeriod] = useState<Period>(periodOf(main?.period));
   const [error, setError] = useState<string | null>(null);
   const minimum = bound === "minimum";
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
+    <EditorForm
+      pending={pending}
+      error={error ?? saveError}
+      onCancel={() => done()}
+      extra={
+        main && (
+          <button type="button" disabled={pending} onClick={() => commit([], [main.record.id, ...removed], () => done("Removed."))} className={`${inlineActionClass} max-sm:min-h-11`}>
+            Remove {bound}
+          </button>
+        )
+      }
+      onSubmit={() => {
         setError(null);
+        // Only a figure for one arrangement removed, and nothing else entered.
+        if (!main && !amount.trim() && removed.length > 0) return commit([], removed, done);
         const value = Number(amount.replace(/[,_\s]/g, ""));
         const code = currency.trim().toUpperCase();
-        if (!Number.isFinite(value) || value <= 0) return setError("Enter the amount as a number, like 140000.");
+        if (!amount.trim() || !Number.isFinite(value) || value <= 0) return setError("Enter the amount as a number, like 140000.");
         if (!/^[A-Z]{3}$/.test(code)) return setError("Choose the currency: a three-letter code like USD or EUR. Narrow never assumes one.");
         commit(
           [
@@ -858,17 +1071,17 @@ function PayEditor({ bound, records, update, done }: { bound: "minimum" | "targe
               applies_to: null,
             },
           ],
-          [],
+          removed,
           done,
         );
       }}
     >
-      <div className="grid max-w-[460px] gap-2 grid-cols-[minmax(0,1fr)_96px] sm:grid-cols-[minmax(0,1fr)_88px_112px]">
+      <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-2 sm:grid-cols-[minmax(0,1fr)_88px_112px]">
         <div className="min-w-0 max-sm:col-span-2">
           <label htmlFor={`${id}-amount`} className={labelClass}>
             Amount
           </label>
-          <input id={`${id}-amount`} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="numeric" placeholder="140,000" className={inputClass} />
+          <input id={`${id}-amount`} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="numeric" autoComplete="off" placeholder="140,000" className={inputClass} />
         </div>
         <div className="min-w-0">
           <label htmlFor={`${id}-currency`} className={labelClass}>
@@ -903,34 +1116,32 @@ function PayEditor({ bound, records, update, done }: { bound: "minimum" | "targe
           </select>
         </div>
       </div>
-      <p className="mt-2 text-[12.5px] text-fg-muted">
-        {minimum ? "Verified pay below it is left out. Pay that isn't published never counts as meeting it." : "Changes the order. Leaves nothing out."}
-      </p>
+      <div className="flex flex-col gap-1.5">
+        {minimum ? (
+          <>
+            <Note>Verified pay below it is left out.</Note>
+            <IfUnknown>Pay that isn&apos;t published, or is in another currency or period (never converted), never counts as meeting it.</IfUnknown>
+          </>
+        ) : (
+          <Note>Changes the order. Leaves nothing out.</Note>
+        )}
+      </div>
       {others.length > 0 && (
-        <ul className="mt-3 max-w-[460px] space-y-1 text-[13px] text-fg-body">
-          {others.map((o) => (
-            <li key={o.record.id} className="flex items-baseline justify-between gap-3">
-              <span className="nr-tnum">{payText(o)}</span>
-              <button type="button" disabled={pending} onClick={() => commit([], [o.record.id], done)} className={`${inlineActionClass} max-sm:min-h-11`}>
-                Remove <span className="sr-only">{payText(o)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div>
+          <p className={labelClass}>For one arrangement only</p>
+          <ul className="divide-y divide-line-subtle border-y border-line-subtle text-[13px] text-fg-body">
+            {others.map((o) => (
+              <li key={o.record.id} className="flex min-h-10 items-center justify-between gap-3 py-1.5">
+                <span className="min-w-0 nr-tnum">{payText(o)}</span>
+                <button type="button" disabled={pending} onClick={() => setRemoved([...removed, o.record.id])} className={`${inlineActionClass} max-sm:min-h-11`}>
+                  Remove <span className="sr-only">{payText(o)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
-      <EditorActions
-        pending={pending}
-        error={error ?? saveError}
-        onCancel={() => done()}
-        extra={
-          main && (
-            <button type="button" disabled={pending} onClick={() => commit([], [main.record.id], () => done("Removed."))} className={`${inlineActionClass} ml-2 max-sm:min-h-11`}>
-              Remove <span className="sr-only">{bound}</span>
-            </button>
-          )
-        }
-      />
-    </form>
+    </EditorForm>
   );
 }
 
@@ -946,19 +1157,25 @@ const KINDS: Record<string, { label: string; hint: string }> = {
   scaleup: { label: "Scale-up", hint: "Growth stage." },
 };
 
-const SCOPE_TITLE: Record<string, string> = {
-  team: "Team",
-  company_size: "Company size",
-  stage: "Stage",
+const SCOPE: Record<string, { title: string; question: string }> = {
+  team: { title: "Team", question: "What size of team suits you?" },
+  company_size: { title: "Company size", question: "What size of company suits you?" },
+  stage: { title: "Stage", question: "Which company stages suit you?" },
 };
+
+function companyText(on: CompanyControl[]): string {
+  return on.map((i) => `${KINDS[i.value]?.label ?? i.value} · ${IMPORTANCE_TEXT[i.importance] ?? i.importance}`).join("; ");
+}
 
 function CompanyScope({ scope, items, update }: { scope: string; items: CompanyControl[]; update: UpdatePreferences }) {
   const on = items.filter((i) => i.importance !== "off");
-  const title = SCOPE_TITLE[scope] ?? scope;
+  const { title, question } = SCOPE[scope] ?? { title: scope, question: scope };
   return (
     <PreferenceRow
       rowKey={`company-${scope}`}
       label={title}
+      question={question}
+      now={companyText(on)}
       unset={on.length === 0}
       value={
         on.length > 0 ? (
@@ -976,55 +1193,70 @@ function CompanyScope({ scope, items, update }: { scope: string; items: CompanyC
           "No preference"
         )
       }
-      editor={(done) => (
-        <div>
-          <ul className="max-w-[460px] divide-y divide-line-subtle">
-            {items.map((i) => (
-              <CompanyKind key={i.value} item={i} update={update} />
-            ))}
-          </ul>
-          <DoneButton onDone={() => done()} />
-        </div>
-      )}
+      editor={(done) => <CompanyEditor items={items} update={update} done={done} />}
     />
   );
 }
 
-function CompanyKind({ item, update }: { item: CompanyControl; update: UpdatePreferences }) {
+function stanceOf(importance: string): "require" | "avoid" | "want" {
+  return importance === "must_have" ? "require" : importance === "avoid" ? "avoid" : "want";
+}
+
+function CompanyEditor({ items, update, done }: { items: CompanyControl[]; update: UpdatePreferences; done: Done }) {
   const { pending, error, commit } = useCommit(update);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const id = useId();
-  const kind = KINDS[item.value] ?? { label: item.value, hint: "" };
-  // Shows the choice at once; the refreshed controls replace it, and a refusal puts it back.
-  const [shown, setShown] = useOptimistic(item.importance);
-  const saved = (text: string) => setMessage({ ok: true, text });
+  const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(items.map((i) => [i.value, i.importance])));
+  const anyRequired = Object.values(draft).includes("must_have");
   return (
-    <li>
-      <div role="group" aria-labelledby={id} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-2.5 first:pt-0">
-        <div className="min-w-0">
-          <p id={id} className="text-[13.5px] font-medium text-fg">
-            {kind.label}
-          </p>
-          {kind.hint && <p className="text-caption text-fg-muted">{kind.hint}</p>}
-          <p className="empty:hidden">{error ? <Outcome message={{ ok: false, text: error }} /> : message && <Outcome message={message} />}</p>
-        </div>
-        <Importance
-          name={`${id}-importance`}
-          legend="How much it matters"
-          value={shown}
-          withAvoid
-          disabled={pending}
-          onChange={(value) => {
-            if (value === "off") {
-              if (item.record) commit([], [item.record.id], saved, () => setShown(value));
-              return;
-            }
-            const stance = value === "must_have" ? "require" : value === "avoid" ? "avoid" : "want";
-            commit([{ kind: "company", company: item.value, stance }], [], saved, () => setShown(value));
-          }}
-        />
+    <EditorForm
+      pending={pending}
+      error={error}
+      onCancel={() => done()}
+      onSubmit={() => {
+        const set: PreferenceInput[] = [];
+        const remove: string[] = [];
+        for (const i of items) {
+          const next = draft[i.value] ?? i.importance;
+          if (next === i.importance) continue;
+          if (next === "off") {
+            if (i.record) remove.push(i.record.id);
+          } else set.push({ kind: "company", company: i.value, stance: stanceOf(next) });
+        }
+        if (set.length === 0 && remove.length === 0) return done();
+        commit(set, remove, done);
+      }}
+    >
+      <ul className="divide-y divide-line-subtle border-y border-line-subtle">
+        {items.map((i) => {
+          const kind = KINDS[i.value] ?? { label: i.value, hint: "" };
+          const labelId = `${id}-${i.value}`;
+          return (
+            <li key={i.value}>
+              <div role="group" aria-labelledby={labelId} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3">
+                <div className="min-w-0">
+                  <p id={labelId} className="text-[13.5px] font-medium text-fg">
+                    {kind.label}
+                  </p>
+                  {kind.hint && <p className="text-caption text-fg-muted">{kind.hint}</p>}
+                </div>
+                <Importance
+                  name={`${labelId}-importance`}
+                  legend="How much it matters"
+                  value={draft[i.value] ?? i.importance}
+                  withAvoid
+                  disabled={pending}
+                  onChange={(value) => setDraft({ ...draft, [i.value]: value })}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="flex flex-col gap-1.5">
+        <Note>Must have leaves out roles that say otherwise. Nice to have and Avoid only change the order.</Note>
+        {anyRequired && <IfUnknown>If a posting doesn&apos;t say, a must have stays unresolved and is never a Strong fit.</IfUnknown>}
       </div>
-    </li>
+    </EditorForm>
   );
 }
 

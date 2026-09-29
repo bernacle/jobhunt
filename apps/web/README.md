@@ -91,11 +91,16 @@ decision brief); everything else sits on the ground. Tiers are words
   API's ordered lists ([`src/lib/decision.ts`](src/lib/decision.ts)); it
   never renders every line, never counts what it leaves out, and never
   drops an unknown (the rest is in the evidence). Detail is reached through
-  a few patterns only: `SummaryRow` (setting · value · one action, editor
-  in place, one at a time), `SummarySection` (conclusion first, then a
-  labelled disclosure), `EvidencePanel` (a side panel, a full-height sheet
-  on phones), `ClaimReviewRow`, and `StateMessage` (one state, one next
-  step, details on demand). Repeated items share tracks
+  a few patterns only: `SummaryRow` (setting or fact · value · one action;
+  a row never changes shape), `Sheet` (one focused surface: a 440px panel
+  at the side, a sheet from the bottom on phones) used by `EvidencePanel`
+  for evidence and by each preference's editor (one decision at a time, a
+  draft with Save and Cancel), `SummarySection` (conclusion first, then a
+  labelled disclosure), `ClaimReviewRow`, and `StateMessage` (one state,
+  one next step, details on demand). The opportunity page is a decision
+  brief: the verdict, two reasons and the most material concern, then its
+  key facts once each (`SummaryRow`s, their evidence behind each row's
+  action), then the actions. Repeated items share tracks
   (`--nr-track-label`, `--nr-row-min`); Today's peers share rows with
   CSS subgrid.
 

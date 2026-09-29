@@ -80,10 +80,13 @@ export function SummarySection({
 }
 
 /**
- * One setting: its name, its current value (with how much it matters only
- * when the value doesn't already say), and one action. An editor, when
- * open, takes the value's place under the same name. On phones the name
- * sits above the value and the action stays within reach on the right.
+ * One setting or fact: its name, its value (with how much it matters, or
+ * how far it is confirmed, only when the value doesn't already say), and
+ * one action. A row never changes shape: what the action opens (an editor,
+ * the evidence) opens over the page. On phones the name sits above the
+ * value and the action stays within reach on the right. Preferences,
+ * Settings, Profile and an opportunity's key facts share it, so the same
+ * kind of information starts in the same place everywhere.
  */
 export function SummaryRow({
   id,
@@ -92,7 +95,6 @@ export function SummaryRow({
   unset = false,
   importance,
   action,
-  editor,
   control,
   status,
 }: {
@@ -101,9 +103,8 @@ export function SummaryRow({
   value?: ReactNode;
   unset?: boolean;
   importance?: ReactNode;
+  /** One action; it may stretch over the whole row (the row is `relative`). */
   action?: ReactNode;
-  /** The open editor, if this row is being edited. */
-  editor?: ReactNode;
   /** A control that is its own value (the theme's segmented choice). */
   control?: ReactNode;
   /** The outcome of the last change ("Saved."), next to the value. */
@@ -114,23 +115,23 @@ export function SummaryRow({
       role="group"
       aria-labelledby={id}
       className={
-        "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 border-t border-line-subtle py-2.5 max-sm:min-h-[var(--nr-row-min-touch)] " +
+        "relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 border-t border-line-subtle py-2.5 max-sm:min-h-[var(--nr-row-min-touch)] " +
         "sm:min-h-[var(--nr-row-min)] sm:grid-cols-[var(--nr-track-label)_minmax(0,1fr)_auto] sm:items-baseline sm:py-3"
       }
     >
       <p id={id} className="text-[12.5px] leading-[1.45] text-fg-muted sm:text-[13.5px] sm:text-fg-secondary">
         {label}
       </p>
-      <div className={`min-w-0 max-sm:col-start-1 max-sm:row-start-2 ${editor ? "max-sm:col-span-2" : ""}`}>
-        {editor ?? control ?? (
+      <div className="min-w-0 max-sm:col-start-1 max-sm:row-start-2">
+        {control ?? (
           <p className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-            <span className={`text-[14px] leading-[1.45] nr-tnum ${unset ? "text-fg-muted" : "font-medium text-fg"}`}>{value}</span>
+            <span className={`text-[14px] leading-[1.45] nr-tnum [overflow-wrap:anywhere] ${unset ? "text-fg-muted" : "font-medium text-fg"}`}>{value}</span>
             {importance && <span className="text-[12.5px] text-fg-muted">{importance}</span>}
             {status}
           </p>
         )}
       </div>
-      {!editor && action && <div className="justify-self-end max-sm:col-start-2 max-sm:row-span-2 max-sm:row-start-1">{action}</div>}
+      {action && <div className="justify-self-end max-sm:col-start-2 max-sm:row-span-2 max-sm:row-start-1">{action}</div>}
     </div>
   );
 }

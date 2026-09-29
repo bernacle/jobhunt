@@ -12,8 +12,8 @@ import {
   PreferenceEditing,
   WorkControls,
 } from "@/components/preference-controls";
-import { AddPreference, InYourWords, RemovePreference } from "@/components/preferences";
-import { Disclosure, RowGroup, SummaryRow } from "@/components/summary";
+import { AddPreferenceRow, InYourWords, RemovePreference } from "@/components/preferences";
+import { RowGroup, SummaryRow } from "@/components/summary";
 import { TasteReview } from "@/components/taste";
 import { PageHeader } from "@/components/ui";
 import { api, loadOrNoProfile } from "@/lib/api";
@@ -35,7 +35,8 @@ const CATEGORY: Record<string, string> = {
 
 /**
  * What Narrow goes by, as a summary of decisions: one row per setting with
- * its current value, edited one at a time. The person's words, the
+ * its current value. Changing one opens that decision alone, in a focused
+ * sheet, and returns to the same overview. The person's words, the
  * structured settings they fill in, and what Narrow learned stay in their
  * own layers; the layers are explained once, on demand.
  */
@@ -116,11 +117,7 @@ export default async function PreferencesPage() {
                 action={<RemovePreference id={p.id} label={`${p.stance} ${p.value}`} remove={removePreference} />}
               />
             ))}
-            <div className="border-t border-line-subtle py-3">
-              <Disclosure label="Add a preference">
-                <AddPreference set={setPreference} />
-              </Disclosure>
-            </div>
+            <AddPreferenceRow set={setPreference} />
           </RowGroup>
 
           <RowGroup id="taste" title="What Narrow uses">

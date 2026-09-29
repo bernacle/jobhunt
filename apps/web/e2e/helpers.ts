@@ -71,8 +71,16 @@ export function sentEmails(): SentEmail[] {
   }
 }
 
-/** Automated accessibility checks (WCAG A/AA rules), in a real browser. */
+/**
+ * Automated accessibility checks (WCAG A/AA rules), in a real browser.
+ * Once any entrance animation has finished: a sheet fading in is measured
+ * at the colors it settles on, not halfway through.
+ */
 export async function expectAccessible(page: Page) {
+  // (A spinner's endless turn is not waited for.)
+  await page.waitForFunction(() =>
+    document.getAnimations().every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   expect(results.violations.map((v) => `${v.id}: ${v.help} — ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
 }

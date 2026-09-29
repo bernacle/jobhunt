@@ -1,11 +1,13 @@
 "use client";
 
-import { useActionState, useId, useState, useTransition } from "react";
+import { useActionState, useId, useRef, useState, useTransition } from "react";
 
 import type { ActionResult, StatementState } from "@/app/actions";
 import type { PreferenceInput, PreferenceUpdateResult, PreferenceView, StatementView } from "@/lib/api-types";
 import { STANCE_LABEL } from "@/lib/format";
 
+import { EditorForm, Note, focusChoice } from "./preference-controls";
+import { Sheet } from "./sheet";
 import { Disclosure } from "./summary";
 import { Button, Notice, helpClass, inlineActionClass, inputClass, labelClass, selectClass, textareaClass } from "./ui";
 
@@ -54,53 +56,73 @@ function toInput(kind: Kind, value: string, stance: Stance): PreferenceInput {
   }
 }
 
+const RULE_NOTE: Record<Stance, string> = {
+  require: "A job that states the opposite is left out. If the posting doesn't say, it stays unresolved.",
+  want: "Changes the order. Never leaves a job out.",
+  accept: "Changes the order. Never leaves a job out.",
+  avoid: "Changes the order. Never leaves a job out.",
+};
+
 /**
  * A precise preference: what it's about, the rule, the value. The same
  * structured model the API, the CLI and AI assistants use; no free text
- * is parsed here.
+ * is parsed here. In a sheet, `onDone` closes it with the outcome.
  */
-export function AddPreference({ set }: { set: (input: PreferenceInput) => Promise<ActionResult<PreferenceUpdateResult>> }) {
+export function AddPreference({
+  set,
+  onDone,
+  onCancel,
+}: {
+  set: (input: PreferenceInput) => Promise<ActionResult<PreferenceUpdateResult>>;
+  onDone?: (message: string) => void;
+  onCancel?: () => void;
+}) {
   const [kind, setKind] = useState<Kind>("role");
+  const [rule, setRule] = useState<Stance>("want");
+  const [value, setValue] = useState("");
   const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const ids = { kind: useId(), rule: useId(), value: useId(), help: useId() };
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const ids = { kind: useId(), rule: useId(), value: useId() };
   const current = KINDS.find((k) => k.kind === kind)!;
 
   return (
-    <form
-      aria-describedby={ids.help}
-      className="grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end"
-      onSubmit={(e) => {
-        e.preventDefault();
+    <EditorForm
+      pending={pending}
+      error={error}
+      onCancel={onCancel}
+      saveLabel="Add preference"
+      onSubmit={() => {
         setMessage(null);
-        const data = new FormData(e.currentTarget);
-        const value = String(data.get("value") ?? "").trim();
-        const rule = String(data.get("rule") ?? "want") as Stance;
-        if (!value) return;
+        setError(null);
+        if (!value.trim()) return setError(`Enter a value, like “${current.placeholder.split(",")[0]}”.`);
         startTransition(async () => {
-          const r = await set(toInput(kind, value, rule));
-          setMessage(r.ok ? { ok: true, text: r.data.unchanged ? "Already in effect." : "Saved." } : { ok: false, text: `${r.title}. ${r.message}` });
+          const r = await set(toInput(kind, value.trim(), rule));
+          if (!r.ok) return setError(`${r.title}. ${r.message}`);
+          const text = r.data.unchanged ? "Already in effect." : "Saved.";
+          if (onDone) onDone(text);
+          else setMessage(text);
         });
       }}
     >
-      <div className="min-w-0">
-        <label htmlFor={ids.kind} className={labelClass}>
-          About
-        </label>
-        <select id={ids.kind} value={kind} onChange={(e) => setKind(e.target.value as Kind)} className={selectClass}>
-          {KINDS.map((k) => (
-            <option key={k.kind} value={k.kind}>
-              {k.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="grid min-w-0 gap-3 sm:grid-cols-[140px_minmax(0,1fr)]">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+        <div className="min-w-0">
+          <label htmlFor={ids.kind} className={labelClass}>
+            About
+          </label>
+          <select id={ids.kind} value={kind} onChange={(e) => setKind(e.target.value as Kind)} className={selectClass}>
+            {KINDS.map((k) => (
+              <option key={k.kind} value={k.kind}>
+                {k.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="min-w-0">
           <label htmlFor={ids.rule} className={labelClass}>
             Rule
           </label>
-          <select id={ids.rule} name="rule" defaultValue="want" className={selectClass}>
+          <select id={ids.rule} value={rule} onChange={(e) => setRule(e.target.value as Stance)} className={selectClass}>
             {STANCES.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
@@ -108,20 +130,68 @@ export function AddPreference({ set }: { set: (input: PreferenceInput) => Promis
             ))}
           </select>
         </div>
-        <div className="min-w-0">
-          <label htmlFor={ids.value} className={labelClass}>
-            Value
-          </label>
-          <input id={ids.value} name="value" required placeholder={current.placeholder} className={inputClass} />
-        </div>
       </div>
-      <Button type="submit" variant="secondary" disabled={pending} loading={pending} className="h-9 max-sm:h-11 max-sm:w-full">
-        Add preference
-      </Button>
-      <p id={ids.help} className={`${helpClass} empty:hidden md:col-span-3 ${message?.ok === false ? "text-danger" : ""}`} aria-live="polite">
-        {message?.text}
-      </p>
-    </form>
+      <div>
+        <label htmlFor={ids.value} className={labelClass}>
+          Value
+        </label>
+        <input id={ids.value} value={value} onChange={(e) => setValue(e.target.value)} placeholder={current.placeholder} autoComplete="off" className={inputClass} />
+      </div>
+      <Note>{RULE_NOTE[rule]}</Note>
+      {message && (
+        <p role="status" className={helpClass}>
+          {message}
+        </p>
+      )}
+    </EditorForm>
+  );
+}
+
+/**
+ * The last row of "Roles, domains and more": adds one preference in the
+ * same focused sheet as every other setting, and says the outcome here.
+ */
+export function AddPreferenceRow({ set }: { set: (input: PreferenceInput) => Promise<ActionResult<PreferenceUpdateResult>> }) {
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState("");
+  const trigger = useRef<HTMLButtonElement>(null);
+  const close = (message?: string) => {
+    setOpen(false);
+    setStatus(message ?? "");
+    requestAnimationFrame(() => trigger.current?.focus());
+  };
+  return (
+    <>
+      <div className="flex min-h-[var(--nr-row-min)] items-center gap-3 border-t border-line-subtle py-2 max-sm:min-h-[var(--nr-row-min-touch)]">
+        <button
+          ref={trigger}
+          type="button"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={() => {
+            setStatus("");
+            setOpen(true);
+          }}
+          className={`${inlineActionClass} text-[13px] max-sm:min-h-11`}
+        >
+          Add a preference
+        </button>
+        <span role="status" className="text-caption text-fg-muted empty:hidden">
+          {status}
+        </span>
+      </div>
+      <Sheet
+        open={open}
+        onClose={() => close()}
+        title="Add a preference"
+        subtitle="A role, a domain, a way of working, a kind of company or a time zone."
+        fit
+        closeWord={false}
+        initialFocus={focusChoice}
+      >
+        {open && <AddPreference set={set} onDone={close} onCancel={() => close()} />}
+      </Sheet>
+    </>
   );
 }
 
