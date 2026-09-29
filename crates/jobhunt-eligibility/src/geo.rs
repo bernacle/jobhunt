@@ -1296,6 +1296,19 @@ pub fn lookup_code_near(text: &str, after_city: bool, near: Option<&Country>) ->
     lookup_code(text, after_city)
 }
 
+/// Read a code from location or restriction text. A bare "TN" there names
+/// Tennessee; an ISO code in a structured country field is read with
+/// [`country`] instead. A preceding place still supplies its own context.
+fn lookup_location_code_near(text: &str, after_city: bool, near: Option<&Country>) -> Option<Area> {
+    if near.is_none() && !after_city && text.trim().trim_end_matches('.') == "TN" {
+        return US_STATES
+            .iter()
+            .find(|s| s.code == "TN")
+            .and_then(subdivision_area);
+    }
+    lookup_code_near(text, after_city, near)
+}
+
 /// [`lookup_code_near`] without a nearby country. Alone, Narrow's own
 /// countries come first ("CA" is Canada), then subdivisions, and only then
 /// the other ISO codes: "GA" is Georgia, not Gabon; "NC" North Carolina,
@@ -1691,10 +1704,10 @@ fn parse_list(text: &str, remote: bool) -> Vec<Place> {
             })
         });
         let coded = containing
-            .or_else(|| lookup_code_near(part.trim(), after_city, near))
+            .or_else(|| lookup_location_code_near(part.trim(), after_city, near))
             .or_else(|| {
                 code.as_deref()
-                    .and_then(|c| lookup_code_near(c, after_city, near))
+                    .and_then(|c| lookup_location_code_near(c, after_city, near))
             });
         let (found, resolution) = match coded {
             Some(area) => (vec![(area, 0)], Some(Resolution::Place(area))),
@@ -1852,7 +1865,7 @@ pub fn places_in_text(text: &str) -> Vec<Area> {
                 {
                     // Only Narrow's own countries and subdivisions ("AM"
                     // and "PM" are times, not Amazonas or Saint Pierre).
-                    lookup_code(&phrase, false)
+                    lookup_location_code_near(&phrase, false, None)
                         .filter(|a| !matches!(a, Area::Country(c) if !c.curated))
                 } else {
                     None
@@ -2253,6 +2266,11 @@ mod tests {
             areas("Remote (WA)"),
             s(&[("Washington State, United States", true)])
         );
+        assert_eq!(
+            areas("Remote - TN"),
+            s(&[("Tennessee, United States", true)])
+        );
+        assert_eq!(lookup_code("TN", false), country("TN").map(Area::Country));
         assert_eq!(areas("VIC"), s(&[("Victoria, Australia", false)]));
         // Narrow's own names still come first, as before ("PA" alone is
         // Panama, "LA" Los Angeles), and never a town of that name.
@@ -2269,12 +2287,19 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         let found = names("Candidates must reside in GA, NC, SC, VA or TN.");
-        for state in ["Georgia", "North Carolina", "South Carolina", "Virginia"] {
+        for state in [
+            "Georgia",
+            "North Carolina",
+            "South Carolina",
+            "Virginia",
+            "Tennessee",
+        ] {
             assert!(
                 found.contains(&format!("{state}, United States")),
                 "{state} in {found:?}"
             );
         }
+        assert_eq!(found.len(), 5, "unexpected place in {found:?}");
         // Codes that are words stay words.
         assert!(names("Standup is at 9 AM, demo at 4 PM.").is_empty());
         assert!(names("WELCOME TO THE TEAM").is_empty());

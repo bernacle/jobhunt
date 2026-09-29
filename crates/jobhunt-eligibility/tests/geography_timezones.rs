@@ -329,6 +329,7 @@ fn a_state_code_limits_remote_work_to_that_state() {
         ("Remote (WA)", "Washington State"),
         ("Remote - NC", "North Carolina"),
         ("Remote, AZ", "Arizona"),
+        ("Remote - TN", "Tennessee"),
     ] {
         let j = remote(location, "We build developer tools.");
         assert_eq!(
@@ -348,6 +349,66 @@ fn a_state_code_limits_remote_work_to_that_state() {
         &at("Atlanta, GA"),
     );
     assert_eq!(geography(&d).verdict, Verdict::Pass, "{:#?}", d.reasons);
+    let d = evaluate_record(
+        &remote("Remote - TN", "We build developer tools."),
+        &at("Nashville, TN"),
+    );
+    assert_ne!(d.status, Ineligible, "{:#?}", d.reasons);
+    assert_eq!(geography(&d).verdict, Verdict::Pass, "{:#?}", d.reasons);
+}
+
+#[test]
+fn a_structured_country_code_remains_a_country() {
+    for (code, expected) in [("GA", "Gabon"), ("SC", "Seychelles"), ("TN", "Tunisia")] {
+        let mut j = job("lever:example", "", Some(WorkplaceType::OnSite), "");
+        j.posting.location = None;
+        j.posting.locations = vec![SourceLocation {
+            name: Some(code.into()),
+            locality: None,
+            region: None,
+            country: Some(code.into()),
+        }];
+        match requirements(&j).options.as_slice() {
+            [
+                WorkOption::Office {
+                    area: Some(Area::Country(c)),
+                    raw,
+                    ..
+                },
+            ] => {
+                assert_eq!(c.name, expected, "{code}");
+                assert_eq!(raw, code);
+            }
+            other => panic!("{code}: {other:?}"),
+        }
+    }
+
+    // The same tokens can name a subdivision inside a different structured
+    // country; established city nicknames still name cities.
+    for (name, code, expected) in [
+        ("TN", "US", "Tennessee, United States"),
+        ("SC", "BR", "Santa Catarina, Brazil"),
+        ("LA", "US", "Los Angeles, United States"),
+    ] {
+        let mut j = job("lever:example", "", Some(WorkplaceType::OnSite), "");
+        j.posting.location = None;
+        j.posting.locations = vec![SourceLocation {
+            name: Some(name.into()),
+            locality: None,
+            region: None,
+            country: Some(code.into()),
+        }];
+        match requirements(&j).options.as_slice() {
+            [
+                WorkOption::Office {
+                    area: Some(area), ..
+                },
+            ] => {
+                assert_eq!(area.to_string(), expected, "{name}, {code}");
+            }
+            other => panic!("{name}, {code}: {other:?}"),
+        }
+    }
 }
 
 #[test]

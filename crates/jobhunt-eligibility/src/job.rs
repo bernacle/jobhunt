@@ -24,8 +24,8 @@ use jobhunt_jobs::{EmploymentType, JobRecord, WorkplaceType};
 use jobhunt_profile::words::{Pattern, words};
 
 use crate::geo::{
-    Area, Country, Place, Resolution, lookup_code, parse_places, places_in_text, resolve_name,
-    resolve_within,
+    Area, Country, Place, Resolution, lookup_code, lookup_code_near, parse_places, places_in_text,
+    resolve_name, resolve_within,
 };
 use crate::zones::{Clock, Zone, zones_in};
 
@@ -660,6 +660,26 @@ fn structured_places(record: &JobRecord) -> Vec<(Place, Evidence, bool)> {
             })
             .and_then(|a| a.country());
         for mut place in parse_places(&name) {
+            // A bare code in a structured location uses that location's
+            // country: "GA"/GA is Gabon, "SC"/BR Santa Catarina. Keep
+            // Narrow's city nicknames such as "LA"/US as cities.
+            let code = name.trim();
+            if let Some(c) = country
+                && !place.remote
+                && (2..=3).contains(&code.len())
+                && code.chars().all(|ch| ch.is_ascii_uppercase())
+                && matches!(
+                    place.area,
+                    Some(Area::Country(_) | Area::Subdivision { .. })
+                )
+            {
+                place.area = Some(
+                    lookup_code_near(code, false, Some(c))
+                        .filter(|a| a.country().is_some_and(|x| x.code == c.code))
+                        .unwrap_or(Area::Country(c)),
+                );
+                place.ambiguous.clear();
+            }
             // A bare name read as a place in another country: the source's
             // country is stated, a name's most populous reading only
             // likely ("Alexandria" with country "US" is not Egypt's). Read
