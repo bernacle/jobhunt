@@ -58,6 +58,7 @@ contract!(
     state_import_is_atomic_and_idempotent,
     write_lock_serializes_writers,
     structured_preference_values_round_trip,
+    evidence_sources_round_trip,
 );
 
 async fn round_trips_and_classifies_the_lifecycle(store: &dyn Store) {
@@ -488,6 +489,155 @@ async fn profile_round_trip_revisions_and_claims(store: &dyn Store) {
         ProfileEventKind::ResumeImported
     );
     assert!(events.last().unwrap().detail.contains("ana_lima.md"));
+}
+
+/// A profile fed by a resume, a LinkedIn export and a GitHub account
+/// (BRU-309): origins, document kinds and corroborations survive a reload
+/// on every backend, and so does taking a source out. Fictional data.
+async fn evidence_sources_round_trip(store: &dyn Store) {
+    use jobhunt_profile::{
+        DocumentId, DocumentKind, GithubAccount, GithubRepo, GithubSnapshot, Origin,
+        ParsedExperience, ParsedResume, ParsedSkillLine, SourceDocument,
+    };
+    let document = |kind: DocumentKind, seed: &str| SourceDocument {
+        id: DocumentId::derive(&[seed]),
+        kind,
+        file_name: Some(format!("{seed}.txt")),
+        sha256: format!("{:0>64}", seed.len()),
+        pages: None,
+        text: format!("text of {seed}"),
+        parser: "test".into(),
+        first_imported_at: at(0),
+        last_imported_at: at(0),
+    };
+    let position = |header: &str| ParsedExperience {
+        company: Some("Northwind Labs".into()),
+        title: Some("Senior Software Engineer".into()),
+        start: Some("2021-03".parse().unwrap()),
+        current: true,
+        header: header.into(),
+        bullets: vec!["Built the settlement pipeline in Rust.".into()],
+        ..ParsedExperience::default()
+    };
+    // Backends list records in their own order; compare them sorted.
+    let sorted = |mut d: jobhunt_profile::ProfileData| {
+        d.documents.sort_by_key(|x| x.id);
+        d.experiences.sort_by_key(|x| x.id);
+        d.projects.sort_by_key(|x| x.id);
+        d.education.sort_by_key(|x| x.id);
+        d.skills.sort_by_key(|x| x.id);
+        d.claims.sort_by_key(|x| x.id);
+        d
+    };
+    let service = ProfileService::new(store);
+    service
+        .import_resume(
+            document(DocumentKind::Text, "resume"),
+            &ParsedResume {
+                experiences: vec![position("Northwind Labs — Senior Software Engineer")],
+                ..ParsedResume::default()
+            },
+            at(1),
+        )
+        .await
+        .unwrap();
+    service
+        .import_linkedin(
+            document(DocumentKind::Linkedin, "linkedin"),
+            &ParsedResume {
+                experiences: vec![position(
+                    "Senior Software Engineer · Northwind Labs · Mar 2021 – Present",
+                )],
+                skills: vec![ParsedSkillLine {
+                    category: None,
+                    skills: vec!["Kafka".into()],
+                    line: "Skills: Kafka".into(),
+                }],
+                ..ParsedResume::default()
+            },
+            at(2),
+        )
+        .await
+        .unwrap();
+    let snapshot = GithubSnapshot {
+        account: GithubAccount {
+            login: "rileyx".into(),
+            html_url: "https://github.com/rileyx".into(),
+            kind: "User".into(),
+            public_repos: 1,
+            created_at: None,
+        },
+        repos: vec![GithubRepo {
+            id: 7,
+            name: "lox".into(),
+            full_name: "rileyx/lox".into(),
+            owner: "rileyx".into(),
+            html_url: "https://github.com/rileyx/lox".into(),
+            description: Some("A tiny interpreter".into()),
+            fork: false,
+            archived: false,
+            is_template: false,
+            private: false,
+            size: 10,
+            stars: 1,
+            forks: 0,
+            language: Some("Rust".into()),
+            languages: Some(vec![("Rust".into(), 100)]),
+            topics: vec![],
+            created_at: Some(at(0)),
+            pushed_at: Some(at(0)),
+        }],
+        orgs: vec![],
+        fetched_at: at(3),
+        problems: vec![],
+    };
+    let (_, data) = service.import_github(&snapshot, at(3)).await.unwrap();
+    assert_eq!(
+        sorted(service.require().await.unwrap()),
+        sorted(data.clone()),
+        "everything round-trips"
+    );
+    let kinds: Vec<DocumentKind> = data.documents.iter().map(|d| d.kind).collect();
+    assert!(kinds.contains(&DocumentKind::Linkedin) && kinds.contains(&DocumentKind::Github));
+    let job = data
+        .claims
+        .iter()
+        .find(|c| c.kind == jobhunt_profile::ClaimKind::Employment)
+        .unwrap();
+    assert_eq!(
+        data.claim_sources(job),
+        vec![Origin::Resume, Origin::Linkedin]
+    );
+    assert!(
+        data.projects
+            .iter()
+            .all(|p| p.meta.origin == Origin::Github)
+    );
+    assert!(
+        data.skills
+            .iter()
+            .any(|s| s.meta.origin == Origin::Linkedin)
+    );
+
+    let (_, removed) = service
+        .remove_source(Origin::Linkedin, at(4))
+        .await
+        .unwrap();
+    assert_eq!(
+        sorted(service.require().await.unwrap()),
+        sorted(removed.clone()),
+        "removal round-trips"
+    );
+    assert!(
+        removed
+            .documents
+            .iter()
+            .all(|d| d.kind != DocumentKind::Linkedin)
+    );
+    let events = store.profile_events(removed.id(), 3).await.unwrap();
+    assert_eq!(events[0].kind, ProfileEventKind::SourceRemoved);
+    assert_eq!(events[1].kind, ProfileEventKind::GithubImported);
+    assert_eq!(events[2].kind, ProfileEventKind::LinkedinImported);
 }
 
 /// The values the structured Preferences controls write (BRU-308) survive

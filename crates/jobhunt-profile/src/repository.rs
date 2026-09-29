@@ -18,6 +18,10 @@ use crate::ids::ProfileId;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProfileEventKind {
     ResumeImported,
+    LinkedinImported,
+    GithubImported,
+    /// An imported source (LinkedIn, GitHub) was taken out.
+    SourceRemoved,
     ProfileImported,
     BasicsEdited,
     RecordAdded,
@@ -38,8 +42,11 @@ pub enum ProfileEventKind {
 }
 
 impl ProfileEventKind {
-    const ALL: [ProfileEventKind; 17] = [
+    const ALL: [ProfileEventKind; 20] = [
         Self::ResumeImported,
+        Self::LinkedinImported,
+        Self::GithubImported,
+        Self::SourceRemoved,
         Self::ProfileImported,
         Self::BasicsEdited,
         Self::RecordAdded,
@@ -61,6 +68,9 @@ impl ProfileEventKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ResumeImported => "resume_imported",
+            Self::LinkedinImported => "linkedin_imported",
+            Self::GithubImported => "github_imported",
+            Self::SourceRemoved => "source_removed",
             Self::ProfileImported => "profile_imported",
             Self::BasicsEdited => "basics_edited",
             Self::RecordAdded => "record_added",

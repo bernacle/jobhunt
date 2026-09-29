@@ -1,4 +1,5 @@
-//! `narrow profile`: inspect, correct, export and import the profile.
+//! `narrow profile`: inspect, correct, export and import the profile, and
+//! add evidence from a LinkedIn export or a public GitHub account.
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -7,6 +8,7 @@ use std::process::ExitCode;
 use anyhow::{Context, bail};
 use chrono::Utc;
 use clap::Subcommand;
+use jobhunt_app::profile_sources::{EvidenceSource, GithubAccess};
 use jobhunt_profile::{
     BasicsEdit, EducationEdit, ExperienceEdit, PartialDate, ProfileExport, ProjectEdit, Removal,
 };
@@ -64,6 +66,37 @@ pub enum ProfileCommand {
     History {
         #[arg(short = 'n', long, default_value_t = 20, value_name = "N")]
         limit: usize,
+    },
+    /// Add evidence from your LinkedIn data export: the .zip LinkedIn sends
+    /// (Settings → Data privacy → Get a copy of your data), its folder, or
+    /// one of its CSV files. Only career files are read (profile, positions,
+    /// education, skills, certifications, projects, languages); messages,
+    /// connections and contacts are never opened. Run it again with a newer
+    /// export; your decisions and edits are kept.
+    #[command(name = "import-linkedin")]
+    ImportLinkedin {
+        #[arg(value_name = "EXPORT")]
+        path: PathBuf,
+    },
+    /// Add evidence from your public GitHub repositories, through GitHub's
+    /// API: the repositories you own (not forks), their main languages and
+    /// topics. Nothing private. GITHUB_TOKEN, when set, is sent to GitHub
+    /// for a higher rate limit and language statistics (no scopes needed;
+    /// never stored).
+    #[command(name = "import-github")]
+    ImportGithub {
+        /// Your GitHub username or profile URL (default: the GitHub link on
+        /// your profile, or the account imported before).
+        #[arg(value_name = "USER")]
+        user: Option<String>,
+    },
+    /// Take an imported LinkedIn export or GitHub account out of your
+    /// profile: what only it supported goes, what other sources support
+    /// stays, and your confirmations and rejections are kept.
+    #[command(name = "remove-source")]
+    RemoveSource {
+        #[arg(value_name = "SOURCE", value_parser = ["linkedin", "github"])]
+        source: String,
     },
 }
 
@@ -386,6 +419,21 @@ async fn execute(args: ProfileArgs, app: &jobhunt_app::LocalApp) -> anyhow::Resu
         ProfileCommand::History { limit } => {
             let events = service.history(limit).await?;
             finish(profile_render::history(&mut out, &events))
+        }
+        ProfileCommand::ImportLinkedin { path } => {
+            let result = app.import_linkedin_path(&path, now).await?;
+            finish(profile_render::source_import(&mut out, &result))
+        }
+        ProfileCommand::ImportGithub { user } => {
+            let access = GithubAccess::new(std::env::var("GITHUB_TOKEN").ok());
+            let result = app.import_github(user.as_deref(), &access, now).await?;
+            finish(profile_render::source_import(&mut out, &result))
+        }
+        ProfileCommand::RemoveSource { source } => {
+            let source = EvidenceSource::parse(&source)
+                .ok_or_else(|| anyhow::anyhow!("unknown source {source:?}"))?;
+            let result = app.remove_source(source, now).await?;
+            finish(profile_render::source_removal(&mut out, &result))
         }
     }
 }

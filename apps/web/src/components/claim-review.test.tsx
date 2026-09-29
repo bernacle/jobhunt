@@ -57,6 +57,34 @@ describe("ClaimReview", () => {
     expect(screen.getByRole("region", { name: "Your profile in general" })).toHaveTextContent("read from your resume");
   });
 
+  it("shows every source behind a claim, each with its own words", async () => {
+    const both: UnresolvedClaim = {
+      id: "clm_3",
+      kind: "employment",
+      text: "LinkedIn export: Staff Software Engineer at Acme Payments (Jun 2020 – Present)",
+      why: "read from your LinkedIn export, which disagrees with another source; check it",
+      about: "Staff Software Engineer at Acme Payments",
+      provenance: "extracted",
+      confidence: "medium",
+      basis: "dates differ from your resume: “Staff Software Engineer at Acme Payments (Jan 2021 – Present)”",
+      evidence: [
+        { source: "linkedin", document: "Basic_LinkedInDataExport.zip", section: "Experience", snippet: "Staff Software Engineer · Acme Payments · Jun 2020 – Present" },
+        { source: "github", document: "github.com/analima", section: "Repositories", snippet: "analima/ledgerlint — A linter" },
+      ],
+    };
+    const { container } = render(<ClaimReview claims={[both]} total={1} decide={vi.fn(async () => ok)} />);
+    const group = screen.getByRole("region", { name: "Staff Software Engineer at Acme Payments" });
+    expect(within(group).getByText("read from your LinkedIn export")).toBeInTheDocument();
+    await userEvent.click(within(group).getByRole("button", { name: /^See evidence/ }));
+    const panel = screen.getByRole("dialog");
+    expect(within(panel).getByText("From your LinkedIn export")).toBeInTheDocument();
+    expect(within(panel).getByText("Staff Software Engineer · Acme Payments · Jun 2020 – Present")).toBeInTheDocument();
+    expect(within(panel).getByText("Basic_LinkedInDataExport.zip · Experience")).toBeInTheDocument();
+    expect(within(panel).getByText("From GitHub")).toBeInTheDocument();
+    expect(within(panel).getByText(/dates differ from your resume/)).toBeInTheDocument();
+    expect(await violations(container)).toEqual([]);
+  });
+
   it("confirms and rejects (with an optional note) through the API", async () => {
     const decide = vi.fn(async () => ok);
     render(<ClaimReview claims={claims} total={2} decide={decide} />);

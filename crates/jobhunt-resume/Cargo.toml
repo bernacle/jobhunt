@@ -1,6 +1,6 @@
 [package]
 name = "jobhunt-resume"
-description = "Reads resumes (PDF, text, Markdown) locally and parses them deterministically into JobHunt's profile model."
+description = "Reads resumes (PDF, text, Markdown) and LinkedIn data exports locally and parses them deterministically into JobHunt's profile model."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,12 +9,18 @@ publish.workspace = true
 
 [dependencies]
 chrono.workspace = true
+csv.workspace = true
 jobhunt-core.workspace = true
 jobhunt-profile.workspace = true
 pdf-extract.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 unicode-normalization.workspace = true
+zip.workspace = true
+
+[dev-dependencies]
+chrono.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

@@ -27,6 +27,10 @@ pub struct TallyView {
     pub stale: usize,
     /// Back in the resume after being stale.
     pub restored: usize,
+    /// Already in the profile from another source (or entered by the
+    /// person): this source was added as evidence, not as a duplicate.
+    #[serde(default)]
+    pub corroborated: usize,
 }
 
 impl From<&Tally> for TallyView {
@@ -37,6 +41,7 @@ impl From<&Tally> for TallyView {
             unchanged: t.unchanged,
             stale: t.stale,
             restored: t.restored,
+            corroborated: t.corroborated,
         }
     }
 }

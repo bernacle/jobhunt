@@ -199,6 +199,13 @@ pub struct CloudConfig {
     pub instance: String,
     /// Record usage events.
     pub usage_events: bool,
+    /// A GitHub token (no scopes) for importing people's public GitHub
+    /// evidence at the authenticated rate limit (`JOBHUNT_GITHUB_TOKEN`);
+    /// without it imports share GitHub's unauthenticated limit. Secret.
+    pub github_token: Option<String>,
+    /// Where GitHub's API is (`JOBHUNT_GITHUB_ENDPOINT`): a test hook for a
+    /// local server, not a deployment setting.
+    pub github_api: Option<String>,
     /// The product configuration (sources, verification policy, …).
     pub app: Arc<LoadedConfig>,
     problems: Vec<String>,
@@ -211,6 +218,7 @@ impl std::fmt::Debug for CloudConfig {
             .field("public_url", &self.public_url.as_ref().map(Url::as_str))
             .field("bind", &self.bind)
             .field("auth", &self.auth)
+            .field("github_token", &self.github_token.as_ref().map(|_| "set"))
             .finish_non_exhaustive()
     }
 }
@@ -521,6 +529,8 @@ impl CloudConfig {
             verification_batch: parse(env, "JOBHUNT_VERIFY_BATCH", 100, &mut problems),
             instance,
             usage_events: parse(env, "JOBHUNT_USAGE_EVENTS", true, &mut problems),
+            github_token: env("JOBHUNT_GITHUB_TOKEN"),
+            github_api: env("JOBHUNT_GITHUB_ENDPOINT"),
             app: Arc::new(app),
             problems,
         }

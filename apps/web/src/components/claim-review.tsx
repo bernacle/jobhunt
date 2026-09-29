@@ -10,25 +10,44 @@ import { EvidenceFact, EvidenceQuote, EvidenceSection } from "./evidence";
 import { EvidenceTrigger } from "./evidence-panel";
 import { Button, inputClass, labelClass } from "./ui";
 
-const PROVENANCE: Record<string, string> = {
-  extracted: "Read from your resume",
-  inferred: "Inferred by Narrow",
-  user_entered: "Entered by you",
+// Where words were read: "your resume", "your LinkedIn export", "GitHub".
+const SOURCE: Record<string, string> = {
+  resume: "your resume",
+  linkedin: "your LinkedIn export",
+  github: "GitHub",
 };
 
-// The same, as a group's context line.
-const FROM: Record<string, string> = {
-  extracted: "read from your resume",
-  inferred: "inferred by Narrow",
-  user_entered: "entered by you",
-};
+function sourceOf(claim: UnresolvedClaim): string {
+  return claim.evidence?.[0]?.source ?? "resume";
+}
+
+/** How Narrow got a claim, as a group's context line ("read from your resume"). */
+function from(claim: UnresolvedClaim): string {
+  switch (claim.provenance) {
+    case "extracted":
+      return `read from ${SOURCE[sourceOf(claim)] ?? "a source"}`;
+    case "inferred":
+      return "inferred by Narrow";
+    case "user_entered":
+      return "entered by you";
+    default:
+      return claim.provenance ?? "";
+  }
+}
 
 type Decide = (id: string, decision: "confirm" | "reject" | "reset", note?: string) => Promise<ActionResult<ClaimDecisionResult>>;
 
 /** The words behind a claim, where they are from, and why it needs review: on demand. */
 function ClaimEvidence({ claim }: { claim: UnresolvedClaim }) {
-  const where = [claim.document, claim.section].filter(Boolean).join(" · ");
-  const provenance = PROVENANCE[claim.provenance ?? ""] ?? claim.provenance;
+  const provenance = sentence(from(claim));
+  // Every source that says it (a resume and a LinkedIn export can both
+  // list one position); older answers only carry the main one.
+  const evidence =
+    claim.evidence && claim.evidence.length > 0
+      ? claim.evidence
+      : claim.snippet
+        ? [{ source: "resume", snippet: claim.snippet, document: claim.document, section: claim.section }]
+        : [];
   return (
     <EvidenceTrigger
       label="See evidence"
@@ -37,11 +56,13 @@ function ClaimEvidence({ claim }: { claim: UnresolvedClaim }) {
       subtitle={[claim.about, provenance].filter(Boolean).join(" · ")}
       conclusion={`${sentence(claim.why)}.`}
     >
-      {claim.snippet && (
-        <EvidenceSection label="From your resume">
-          <EvidenceQuote source={where || undefined}>{claim.snippet}</EvidenceQuote>
-        </EvidenceSection>
-      )}
+      {evidence
+        .filter((e) => e.snippet)
+        .map((e, i) => (
+          <EvidenceSection key={`${e.source}-${i}`} label={`From ${SOURCE[e.source] ?? e.source}`}>
+            <EvidenceQuote source={[e.document, e.section].filter(Boolean).join(" · ") || undefined}>{e.snippet}</EvidenceQuote>
+          </EvidenceSection>
+        ))}
       <EvidenceSection label="How Narrow got it">
         {provenance && <EvidenceFact label="Source">{provenance}</EvidenceFact>}
         {claim.about && <EvidenceFact label="About">{claim.about}</EvidenceFact>}
@@ -132,7 +153,7 @@ function ClaimReviewRow({ claim, decide, outcome, onDecided }: { claim: Unresolv
 }
 
 function groupKey(c: UnresolvedClaim): string {
-  return `${c.about ?? ""}\u0000${c.provenance ?? ""}`;
+  return `${c.about ?? ""}\u0000${from(c)}`;
 }
 
 /**
@@ -154,7 +175,7 @@ export function ClaimReview({ claims, total, decide }: { claims: UnresolvedClaim
     const key = groupKey(c);
     let group = groups.find((g) => g.key === key);
     if (!group) {
-      group = { key, about: c.about ?? "Your profile in general", source: FROM[c.provenance ?? ""] ?? "", items: [] };
+      group = { key, about: c.about ?? "Your profile in general", source: from(c), items: [] };
       groups.push(group);
     }
     group.items.push(c);

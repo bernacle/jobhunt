@@ -41,6 +41,7 @@ export function cloudEnv() {
     JOBHUNT_NOTIFY_MIN_INTERVAL_HOURS: "0",
     JOBHUNT_DISCOVERY_ENDPOINT: FIXTURES_URL,
     JOBHUNT_VERIFY_ENDPOINT: FIXTURES_URL,
+    JOBHUNT_GITHUB_ENDPOINT: `${FIXTURES_URL}/github`,
     JOBHUNT_LOG_FORMAT: "text",
     // Nothing in the stack may reach the internet.
     HTTP_PROXY: "http://127.0.0.1:9",

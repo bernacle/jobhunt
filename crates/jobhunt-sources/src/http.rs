@@ -65,6 +65,8 @@ pub struct Probe {
     /// Where the redirects (if any) ended.
     pub final_url: Url,
     pub body: Vec<u8>,
+    /// The response's headers (an API's pagination and rate-limit ones).
+    pub headers: HeaderMap,
 }
 
 /// Cheap to clone; clones share the connection pool and host limits.
@@ -152,18 +154,29 @@ impl HttpClient {
     /// 5xx, timeouts, connection errors) are retried first like every
     /// request; a status that stays transient is returned as the answer.
     pub async fn probe(&self, url: &Url) -> Result<Probe, SourceError> {
+        self.probe_with(url, &HeaderMap::new()).await
+    }
+
+    /// [`HttpClient::probe`] with extra request headers (an API's `Accept`
+    /// or `Authorization`). Header values are never logged.
+    pub async fn probe_with(&self, url: &Url, headers: &HeaderMap) -> Result<Probe, SourceError> {
         let mut attempt = 0;
         loop {
             let result = {
                 let _permit = self.host_permit(url).await;
-                self.probe_once(url).await
+                self.probe_once(url, headers).await
             };
             let transient = match &result {
                 Ok(probe) => probe.status == 429 || (500..=599).contains(&probe.status),
                 Err(failure) => failure.is_transient(),
             };
             if transient && attempt < self.settings.max_retries {
-                let delay = self.settings.retry_base_delay * 2u32.saturating_pow(attempt);
+                let backoff = self.settings.retry_base_delay * 2u32.saturating_pow(attempt);
+                let delay = match &result {
+                    Ok(probe) => retry_after(&probe.headers)
+                        .map_or(backoff, |wait| wait.min(MAX_RETRY_AFTER).max(backoff)),
+                    Err(_) => backoff,
+                };
                 attempt += 1;
                 warn!(url = %url, attempt, "transient answer to a probe, retrying");
                 tokio::time::sleep(delay).await;
@@ -173,22 +186,25 @@ impl HttpClient {
         }
     }
 
-    async fn probe_once(&self, url: &Url) -> Result<Probe, Failure> {
+    async fn probe_once(&self, url: &Url, headers: &HeaderMap) -> Result<Probe, Failure> {
         debug!(url = %url, "GET (probe)");
         let response = self
             .inner
             .get(url.clone())
+            .headers(headers.clone())
             .send()
             .await
             .map_err(Failure::Transport)?;
         let status = response.status().as_u16();
         let final_url = response.url().clone();
+        let headers = response.headers().clone();
         let body = response.bytes().await.map_err(Failure::Transport)?;
         debug!(url = %url, status, final_url = %final_url, "probe answered");
         Ok(Probe {
             status,
             final_url,
             body: body.to_vec(),
+            headers,
         })
     }
 

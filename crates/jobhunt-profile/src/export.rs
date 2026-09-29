@@ -10,7 +10,11 @@
 //!
 //! Version history:
 //!
-//! * `1`: first version.
+//! * `1`: first version. Later additions, all optional (a profile that
+//!   does not use them writes the same file): the `linkedin` and `github`
+//!   origins and document kinds, and `corroborations` on records and
+//!   claims. Older readers refuse files that use them, with a schema
+//!   error.
 
 use std::collections::HashSet;
 
@@ -188,20 +192,24 @@ impl ProfileExport {
                 ));
             }
         };
-        for e in &self.experiences {
-            check_source(e.id.to_string(), e.meta.source.as_ref());
-        }
-        for p in &self.projects {
-            check_source(p.id.to_string(), p.meta.source.as_ref());
-        }
-        for e in &self.education {
-            check_source(e.id.to_string(), e.meta.source.as_ref());
-        }
-        for s in &self.skills {
-            check_source(s.id.to_string(), s.meta.source.as_ref());
+        let metas = self
+            .experiences
+            .iter()
+            .map(|e| (e.id.to_string(), &e.meta))
+            .chain(self.projects.iter().map(|p| (p.id.to_string(), &p.meta)))
+            .chain(self.education.iter().map(|e| (e.id.to_string(), &e.meta)))
+            .chain(self.skills.iter().map(|s| (s.id.to_string(), &s.meta)));
+        for (id, meta) in metas {
+            check_source(id.clone(), meta.source.as_ref());
+            for c in &meta.corroborations {
+                check_source(id.clone(), Some(c));
+            }
         }
         for c in &self.claims {
             check_source(c.id.to_string(), c.source.as_ref());
+            for other in &c.corroborations {
+                check_source(c.id.to_string(), Some(other));
+            }
         }
         for p in &self.projects {
             if p.name.trim().is_empty() {

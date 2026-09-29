@@ -22,6 +22,9 @@
 //! * [`LocalApp::update_preferences`] ([`preferences`]);
 //! * [`LocalApp::profile_view`] ([`profile_view`]): the profile, without
 //!   contact details;
+//! * [`LocalApp::import_linkedin`], [`LocalApp::import_github`] and
+//!   [`LocalApp::remove_source`] ([`profile_sources`]): evidence from a
+//!   LinkedIn export or a public GitHub account, in the same graph;
 //! * [`LocalApp::application_context`] ([`context`]): evidence a client may
 //!   use to help with an application, only what the evidence policy allows;
 //! * [`LocalApp::export_state`] / [`LocalApp::import_state`] ([`state`]);
@@ -47,6 +50,7 @@ pub mod feedback;
 pub mod inspect;
 pub mod preferences;
 pub mod profile_edit;
+pub mod profile_sources;
 pub mod profile_view;
 pub mod resolve;
 pub mod shortlist;

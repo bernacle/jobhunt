@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { uploadResume } from "@/app/actions";
+import { importGithub, removeSource, uploadLinkedin, uploadResume } from "@/app/actions";
 import { ResumeUpload } from "@/components/resume-upload";
+import { GithubImport, LinkedinUpload, RemoveSource } from "@/components/source-import";
 import { Disclosure, RowGroup, SummaryRow } from "@/components/summary";
 import { Consideration, Inferred } from "@/components/trust";
 import { LinkButton, PageHeader } from "@/components/ui";
 import { api, loadOrNoProfile } from "@/lib/api";
-import type { Signal } from "@/lib/api-types";
+import type { DocumentSummary, Signal } from "@/lib/api-types";
 import { ago } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Profile" };
@@ -27,7 +28,27 @@ function signals(list: Signal[]) {
 }
 
 function Stale() {
-  return <span className="ml-2 font-mono text-mono-xs font-normal text-warning">no longer in your resume</span>;
+  return <span className="ml-2 font-mono text-mono-xs font-normal text-warning">no longer in its source</span>;
+}
+
+const SOURCE: Record<string, string> = { resume: "resume", linkedin: "LinkedIn", github: "GitHub" };
+
+/** Where a record comes from, when it is more than the resume alone. */
+function Sources({ sources }: { sources?: string[] }) {
+  const list = sources ?? [];
+  if (list.length === 0 || (list.length === 1 && list[0] === "resume")) return null;
+  return <span className="ml-2 font-mono text-mono-xs font-normal text-fg-muted">{list.map((s) => SOURCE[s] ?? s).join(" + ")}</span>;
+}
+
+function documentTitle(d: DocumentSummary): string {
+  if (d.source === "linkedin") return "LinkedIn export";
+  if (d.source === "github") return "GitHub";
+  return d.file_name ?? "resume";
+}
+
+function documentDetail(d: DocumentSummary): string {
+  if (d.source === "linkedin" || d.source === "github") return d.file_name ?? "";
+  return [d.pages ? `${d.pages} ${d.pages === 1 ? "page" : "pages"}` : "", d.kind].filter(Boolean).join(" · ");
 }
 
 /**
@@ -46,7 +67,9 @@ export default async function ProfilePage() {
   const documents = profile.documents ?? [];
   const projects = profile.projects ?? [];
   const education = profile.education ?? [];
-  const current = documents.find((d) => d.current);
+  const current = documents.find((d) => d.current && (d.source ?? "resume") === "resume");
+  const linkedin = documents.find((d) => d.source === "linkedin");
+  const github = documents.find((d) => d.source === "github");
   const used = profile.technologies.filter((t) => t.strength !== "listed");
   const listed = profile.technologies.filter((t) => t.strength === "listed");
   const row = "grid gap-x-4 gap-y-1 border-t border-line-subtle py-3 sm:grid-cols-[minmax(0,1fr)_auto]";
@@ -92,6 +115,7 @@ export default async function ProfilePage() {
                       {e.company ?? "Company not stated"}
                       <span className="font-normal text-fg-secondary"> · {e.title ?? "role not stated"}</span>
                       {e.stale && <Stale />}
+                      <Sources sources={e.sources} />
                     </p>
                     {e.technologies.length > 0 && <p className="mt-0.5 text-row text-fg-secondary">{e.technologies.join(", ")}</p>}
                   </div>
@@ -137,6 +161,7 @@ export default async function ProfilePage() {
                     <p className="text-[14px] leading-[1.4] font-medium">
                       {p.name}
                       {p.stale && <Stale />}
+                      <Sources sources={p.sources} />
                     </p>
                     {p.description && <p className="mt-0.5 text-row text-fg-secondary">{p.description}</p>}
                   </div>
@@ -179,18 +204,26 @@ export default async function ProfilePage() {
         </RowGroup>
 
         <RowGroup id="sources" title="Sources">
-          {documents.map((d) => (
-            <div key={d.id} className="flex min-h-[var(--nr-row-min)] flex-col justify-center border-t border-line-subtle py-2.5">
-              <p className="text-[14px] font-medium">
-                {d.file_name ?? "resume"}
-                {d.current && <span className="ml-2 font-mono text-mono-xs font-normal text-fg-muted">current</span>}
-              </p>
-              <p className="mt-0.5 font-mono text-mono-s text-fg-muted">
-                Imported {ago(d.last_imported_at, now)}
-                {d.pages ? ` · ${d.pages} ${d.pages === 1 ? "page" : "pages"}` : ""} · {d.kind}
-              </p>
-            </div>
-          ))}
+          {documents.map((d) => {
+            const removable = d.source === "linkedin" || d.source === "github" ? d.source : null;
+            return (
+              <div key={d.id} className="flex min-h-[var(--nr-row-min)] flex-col justify-center border-t border-line-subtle py-2.5">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-medium">
+                      {documentTitle(d)}
+                      {d.current && !removable && <span className="ml-2 font-mono text-mono-xs font-normal text-fg-muted">current</span>}
+                    </p>
+                    <p className="mt-0.5 font-mono text-mono-s text-fg-muted">
+                      Imported {ago(d.last_imported_at, now)}
+                      {documentDetail(d) && ` · ${documentDetail(d)}`}
+                    </p>
+                  </div>
+                  {removable && <RemoveSource source={removable} label={documentTitle(d)} remove={removeSource} />}
+                </div>
+              </div>
+            );
+          })}
           <div className="border-t border-line-subtle py-3">
             {current ? (
               <Disclosure label="Replace resume">
@@ -199,6 +232,16 @@ export default async function ProfilePage() {
             ) : (
               <ResumeUpload action={uploadResume} hasResume={false} />
             )}
+          </div>
+          <div className="border-t border-line-subtle py-3">
+            <Disclosure label={linkedin ? "Update from LinkedIn" : "Add your LinkedIn export"}>
+              <LinkedinUpload action={uploadLinkedin} imported={Boolean(linkedin)} />
+            </Disclosure>
+          </div>
+          <div className="border-t border-line-subtle py-3">
+            <Disclosure label={github ? "Update from GitHub" : "Add your GitHub"}>
+              <GithubImport action={importGithub} login={github?.file_name?.replace(/^github\.com\//, "")} />
+            </Disclosure>
           </div>
         </RowGroup>
       </div>

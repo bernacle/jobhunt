@@ -93,6 +93,10 @@ pub enum AppError {
     InvalidArguments(String),
     #[error("could not reach any source ({failed} failed): {detail}")]
     SourceUnavailable { failed: usize, detail: String },
+    /// An evidence source (GitHub's API) could not be read; the message
+    /// says why and what to do.
+    #[error("{0}")]
+    EvidenceUnavailable(String),
     #[error("{0}")]
     VerificationUnavailable(String),
     #[error("{0}")]
@@ -122,7 +126,9 @@ impl AppError {
             Self::NoJobs => ErrorKind::NoJobs,
             Self::InvalidPreference(_) => ErrorKind::InvalidPreference,
             Self::InvalidArguments(_) => ErrorKind::InvalidArguments,
-            Self::SourceUnavailable { .. } => ErrorKind::SourceUnavailable,
+            Self::SourceUnavailable { .. } | Self::EvidenceUnavailable(_) => {
+                ErrorKind::SourceUnavailable
+            }
             Self::VerificationUnavailable(_) => ErrorKind::VerificationUnavailable,
             Self::Conflict(_) => ErrorKind::Conflict,
             Self::InvalidImport(_) => ErrorKind::InvalidImport,

@@ -96,7 +96,8 @@ any MCP client (or the test harness in
 `crates/jobhunt-cli/tests/common/mod.rs`) can drive it. For offline manual
 runs, `JOBHUNT_DISCOVERY_ENDPOINT` and `JOBHUNT_VERIFY_ENDPOINT` send every
 discovery and verification request to one base URL (a local mock serving
-the fixtures); they are test hooks, not user settings.
+the fixtures), and `JOBHUNT_GITHUB_ENDPOINT` does the same for GitHub
+evidence imports; they are test hooks, not user settings.
 
 ## The quality gate: `./scripts/check.sh`
 

@@ -13,6 +13,7 @@ fictional.
 | `not_a_pdf.pdf` | text | a file named `.pdf` that is not one |
 | `ana_lima.md`, `ana_lima_v2.md` | written by hand | Markdown resumes, and a corrected re-import |
 | `plain.txt` | written by hand | a plain-text resume with a different layout |
+| `linkedin_export/` | written by hand, in the layout of LinkedIn's "Get a copy of your data" export | the career files Narrow reads (Profile, Positions, Education, Skills, Certifications, Projects, Languages) and decoy private files (messages, connections, e-mail addresses, phone numbers, ads, searches, invitations) whose `SENTINEL-…` values must never be read; the tests zip it at run time |
 
 To regenerate the Chromium PDFs:
 

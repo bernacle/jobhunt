@@ -1,7 +1,10 @@
 //! The profile as the MCP `get_profile` tool returns it: professional
-//! context, never contact details or the resume's raw text.
+//! context, never contact details or the raw text of a source.
 
-use jobhunt_profile::{Claim, ClaimKind, EvidenceStrength, LastSeen, ProfileData, Subject};
+use jobhunt_profile::{
+    Claim, ClaimKind, EvidenceStrength, LastSeen, Origin, ProfileData, SourceRef, Subject,
+    ref_origin,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -26,8 +29,12 @@ pub struct ExperienceSummary {
     pub technologies: Vec<String>,
     /// Domains worked in there.
     pub domains: Vec<String>,
-    /// No longer in the latest resume.
+    /// No source contains it any more.
     pub stale: bool,
+    /// The sources that contain it now: `resume`, `linkedin`, `github`
+    /// (empty for what the person entered themselves, or when stale).
+    #[serde(default)]
+    pub sources: Vec<String>,
 }
 
 /// A technology or skill and what backs it.
@@ -53,6 +60,36 @@ pub struct Signal {
     pub evidence: usize,
 }
 
+/// One source's words behind a claim.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct EvidenceView {
+    /// `resume`, `linkedin` or `github`.
+    pub source: String,
+    /// The file or account (`resume.pdf`, `github.com/octocat`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document: Option<String>,
+    /// The source's own words, verbatim (empty when the source gave none).
+    pub snippet: String,
+    /// Where in the source ("Experience", "Positions", "Repositories").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
+}
+
+impl EvidenceView {
+    fn of(data: &ProfileData, source: &SourceRef) -> Self {
+        Self {
+            source: ref_origin(&data.documents, source).as_str().to_owned(),
+            document: data
+                .documents
+                .iter()
+                .find(|d| d.id == source.document)
+                .and_then(|d| d.file_name.clone()),
+            snippet: source.snippet.clone(),
+            section: source.section.clone(),
+        }
+    }
+}
+
 /// A claim waiting for the person's decision. Not usable as a fact until
 /// confirmed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -70,25 +107,30 @@ pub struct UnresolvedClaim {
     /// `exp_…`, `proj_…` or `edu_…` it is about.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub about_id: Option<String>,
-    /// `extracted` (read from the resume), `inferred` (concluded by
-    /// JobHunt) or `user_entered`.
+    /// `extracted` (read from a source), `inferred` (concluded by JobHunt)
+    /// or `user_entered`.
     #[serde(default)]
     pub provenance: String,
     /// How sure the reading is: `high`, `medium` or `low`.
     #[serde(default)]
     pub confidence: String,
-    /// The resume's own words behind it, verbatim.
+    /// The source's own words behind it, verbatim (its main source).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snippet: Option<String>,
-    /// The resume section the words are from.
+    /// The section the words are from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub section: Option<String>,
-    /// The file the words are from.
+    /// The file (or account) the words are from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub document: Option<String>,
     /// For inferred claims: what the inference rests on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub basis: Option<String>,
+    /// Every source that says it, its main one first (a resume and a
+    /// LinkedIn export both listing a position): the detail behind
+    /// `snippet`.
+    #[serde(default)]
+    pub evidence: Vec<EvidenceView>,
 }
 
 impl UnresolvedClaim {
@@ -118,7 +160,7 @@ impl UnresolvedClaim {
             id: c.id.to_string(),
             kind: c.kind.as_str().to_owned(),
             text: c.text.clone(),
-            why: data.standing(c).describe().to_owned(),
+            why: data.describe(c),
             about,
             about_id,
             provenance: c.provenance.as_str().to_owned(),
@@ -132,8 +174,18 @@ impl UnresolvedClaim {
                     .and_then(|d| d.file_name.clone())
             }),
             basis: c.basis.clone(),
+            evidence: c
+                .source
+                .iter()
+                .chain(&c.corroborations)
+                .map(|s| EvidenceView::of(data, s))
+                .collect(),
         }
     }
+}
+
+fn origins(list: Vec<Origin>) -> Vec<String> {
+    list.into_iter().map(|o| o.as_str().to_owned()).collect()
 }
 
 /// A project.
@@ -150,6 +202,12 @@ pub struct ProjectSummary {
     pub description: Option<String>,
     pub technologies: Vec<String>,
     pub stale: bool,
+    /// `resume`, `linkedin`, `github`: the sources that contain it now.
+    #[serde(default)]
+    pub sources: Vec<String>,
+    /// Its address (a repository), when a source gave one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 
 /// An education entry.
@@ -165,22 +223,30 @@ pub struct EducationSummary {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub period: Option<String>,
     pub stale: bool,
+    /// `resume`, `linkedin`, `github`: the sources that contain it now.
+    #[serde(default)]
+    pub sources: Vec<String>,
 }
 
-/// A resume imported into the profile (never its text).
+/// A source imported into the profile (never its text): a resume, a
+/// LinkedIn export, a GitHub account.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct DocumentSummary {
     /// `doc_…`.
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_name: Option<String>,
-    /// `pdf`, `text` or `markdown`.
+    /// `pdf`, `text` or `markdown` (a resume), `linkedin` or `github`.
     pub kind: String,
+    /// `resume`, `linkedin` or `github`.
+    #[serde(default)]
+    pub source: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pages: Option<u32>,
     pub first_imported_at: String,
     pub last_imported_at: String,
-    /// The most recently imported one: the resume the profile follows.
+    /// The most recently imported of its source: the resume (or export,
+    /// or account) the profile follows.
     pub current: bool,
 }
 
@@ -206,7 +272,8 @@ pub struct ProfileView {
     pub projects: Vec<ProjectSummary>,
     #[serde(default)]
     pub education: Vec<EducationSummary>,
-    /// Imported resumes, the current one first.
+    /// Imported sources (resumes, a LinkedIn export, a GitHub account),
+    /// the current ones first.
     #[serde(default)]
     pub documents: Vec<DocumentSummary>,
     /// Preferences in effect.
@@ -257,6 +324,7 @@ impl ProfileView {
                     technologies: names(&about(ClaimKind::Technology)),
                     domains: names(&about(ClaimKind::Domain)),
                     stale: e.meta.is_stale(),
+                    sources: origins(data.record_sources(&e.meta)),
                 }
             })
             .collect();
@@ -340,6 +408,8 @@ impl ProfileView {
                             .collect::<Vec<_>>(),
                     ),
                     stale: p.meta.is_stale(),
+                    sources: origins(data.record_sources(&p.meta)),
+                    url: p.url.clone(),
                 })
                 .collect(),
             education: data
@@ -352,10 +422,14 @@ impl ProfileView {
                     field: e.field.clone(),
                     period: e.period().display(),
                     stale: e.meta.is_stale(),
+                    sources: origins(data.record_sources(&e.meta)),
                 })
                 .collect(),
             documents: {
-                let current = data.latest_document().map(|d| d.id);
+                let current: Vec<_> = Origin::IMPORTED
+                    .into_iter()
+                    .filter_map(|o| data.latest_document_of(o).map(|d| d.id))
+                    .collect();
                 let mut docs: Vec<DocumentSummary> = data
                     .documents
                     .iter()
@@ -363,10 +437,11 @@ impl ProfileView {
                         id: d.id.to_string(),
                         file_name: d.file_name.clone(),
                         kind: d.kind.as_str().to_owned(),
+                        source: d.kind.origin().as_str().to_owned(),
                         pages: d.pages,
                         first_imported_at: crate::views::time(d.first_imported_at),
                         last_imported_at: crate::views::time(d.last_imported_at),
-                        current: Some(d.id) == current,
+                        current: current.contains(&d.id),
                     })
                     .collect();
                 docs.sort_by(|a, b| {

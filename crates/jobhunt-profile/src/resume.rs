@@ -1,4 +1,5 @@
-//! What a resume parser hands to the profile domain.
+//! What a resume parser (or another source's reader: a LinkedIn export,
+//! GitHub) hands to the profile domain.
 //!
 //! Parsers (the deterministic one in `jobhunt-resume`, or an optional
 //! AI-assisted one later) only *structure* the document: they find the
@@ -63,6 +64,10 @@ pub struct ParsedExperience {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ParsedProject {
     pub name: String,
+    /// An identity the source gives the project, stable when its name
+    /// changes (a GitHub repository's id). Resume projects have none and
+    /// are known by name.
+    pub key: Option<String>,
     pub description: Option<String>,
     pub role: Option<String>,
     pub url: Option<String>,

@@ -13,6 +13,7 @@ use crate::aggregate::ProfileData;
 use crate::date::PartialDate;
 use crate::evidence::{Claim, ClaimKind, Confidence, Provenance, Subject};
 use crate::export::{ExportError, ProfileExport};
+use crate::github::{GithubImport, GithubSnapshot};
 use crate::ids::{
     ClaimId, EducationId, ExperienceId, PreferenceId, ProfileId, ProjectId, RecordId, SkillId,
     StatementId, resolve_prefix,
@@ -29,6 +30,7 @@ use crate::preferences::{
 };
 use crate::repository::{ProfileEvent, ProfileEventKind, ProfileRepository, StorageError};
 use crate::resume::ParsedResume;
+use crate::sources::SourceRemoval;
 use crate::statement::StatementParser;
 
 /// A use case failed.
@@ -204,6 +206,94 @@ impl<'a, R: ProfileRepository + ?Sized> ProfileService<'a, R> {
         );
         self.commit(&mut data, vec![event], now).await?;
         Ok((report, data))
+    }
+
+    /// Imports (or re-imports) a LinkedIn data export: its career files,
+    /// read into `parsed` and rendered as `document`. See
+    /// [`crate::import`] for the rules.
+    pub async fn import_linkedin(
+        &self,
+        document: SourceDocument,
+        parsed: &ParsedResume,
+        now: DateTime<Utc>,
+    ) -> Result<(ImportReport, ProfileData), ProfileError> {
+        let mut data = self.load_or_new(now).await?;
+        let report = crate::sources::merge_linkedin(&mut data, document, parsed, now);
+        let event = ProfileEvent::new(
+            now,
+            ProfileEventKind::LinkedinImported,
+            report.document.map(|d| d.to_string()),
+            import_detail("LinkedIn export", &report),
+        );
+        self.commit(&mut data, vec![event], now).await?;
+        Ok((report, data))
+    }
+
+    /// Imports (or re-imports) a public GitHub account. A profile follows
+    /// one account: importing another is refused until the first is
+    /// removed ([`ProfileService::remove_source`]).
+    pub async fn import_github(
+        &self,
+        snapshot: &GithubSnapshot,
+        now: DateTime<Utc>,
+    ) -> Result<(GithubImport, ProfileData), ProfileError> {
+        let mut data = self.load_or_new(now).await?;
+        if let Some(login) = crate::github::imported_login(&data)
+            && !login.eq_ignore_ascii_case(&snapshot.account.login)
+        {
+            return Err(ProfileError::Invalid(format!(
+                "this profile already follows the GitHub account {login}; remove it first \
+                 (narrow profile remove-source github) to import {}",
+                snapshot.account.login
+            )));
+        }
+        let import = crate::github::merge_github(&mut data, snapshot, now);
+        let event = ProfileEvent::new(
+            now,
+            ProfileEventKind::GithubImported,
+            import.report.document.map(|d| d.to_string()),
+            import_detail(&format!("github.com/{}", import.login), &import.report),
+        );
+        self.commit(&mut data, vec![event], now).await?;
+        Ok((import, data))
+    }
+
+    /// Takes an imported LinkedIn or GitHub source out of the profile. See
+    /// [`crate::sources`] for what is kept.
+    pub async fn remove_source(
+        &self,
+        origin: Origin,
+        now: DateTime<Utc>,
+    ) -> Result<(SourceRemoval, ProfileData), ProfileError> {
+        if !matches!(origin, Origin::Linkedin | Origin::Github) {
+            return Err(ProfileError::Invalid(
+                "only a LinkedIn export or a GitHub account can be removed; \
+                 import an updated resume instead"
+                    .into(),
+            ));
+        }
+        let mut data = self.require().await?;
+        let removal = crate::sources::remove_source(&mut data, origin, now).ok_or_else(|| {
+            ProfileError::NotFound {
+                what: "imported source",
+                input: origin.as_str().to_owned(),
+            }
+        })?;
+        let event = ProfileEvent::new(
+            now,
+            ProfileEventKind::SourceRemoved,
+            Some(origin.as_str().to_owned()),
+            format!(
+                "{}: {} records and {} claims deleted, {} claims kept from other sources, {} decisions kept",
+                origin.label(),
+                removal.records_deleted,
+                removal.claims_deleted,
+                removal.claims_kept,
+                removal.decisions_kept
+            ),
+        );
+        self.commit(&mut data, vec![event], now).await?;
+        Ok((removal, data))
     }
 
     /// Resolves user input (a full id or a unique prefix) to a record.
@@ -1190,6 +1280,19 @@ impl<'a, R: ProfileRepository + ?Sized> ProfileService<'a, R> {
     }
 }
 
+/// One line of history for an import.
+fn import_detail(name: &str, report: &ImportReport) -> String {
+    let t = |x: &crate::import::Tally| x.added + x.updated + x.unchanged + x.corroborated;
+    format!(
+        "{name}: {} experiences, {} projects, {} claims added, {} corroborated, {} stale",
+        t(&report.experiences),
+        t(&report.projects),
+        report.claims.added,
+        report.claims.corroborated,
+        report.claims.stale
+    )
+}
+
 fn reject_or_delete(
     data: &mut ProfileData,
     origin: Option<Origin>,
@@ -1293,6 +1396,7 @@ fn user_claim(
         confidence: Confidence::High,
         verification: Verification::Unverified,
         source: None,
+        corroborations: Vec::new(),
         basis: None,
         import_key: None,
         supersedes: None,

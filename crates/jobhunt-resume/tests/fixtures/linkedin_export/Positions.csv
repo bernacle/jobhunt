@@ -1,0 +1,6 @@
+Company Name,Title,Description,Location,Started On,Finished On
+Northwind Labs,Senior Software Engineer,"• Built the settlement pipeline in Rust.
+• Led the migration from batch to streaming settlement with Kafka.
+• Mentored four engineers.","Lisbon, Portugal",Mar 2021,
+Contoso Freight,Software Engineer,"Maintained the shipment tracking API in Go and PostgreSQL.",Remote,Jan 2018,Feb 2021
+Fabrikam Studio,Intern,,,Jun 2017,Sep 2017

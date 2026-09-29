@@ -34,6 +34,9 @@
 //! | GET | `/api/v1/taste` | stated preferences and learned taste (`get_taste`) |
 //! | GET, POST | `/api/v1/profile/claims` | claims needing review; confirm / reject them |
 //! | PUT | `/api/v1/profile/resume` | import or re-import a resume (the body is the file) |
+//! | PUT | `/api/v1/profile/linkedin` | import a LinkedIn data export (the body is the file) |
+//! | POST | `/api/v1/profile/github` | import a public GitHub account |
+//! | DELETE | `/api/v1/profile/sources/{source}` | take a LinkedIn or GitHub source out |
 //! | GET, PUT | `/api/v1/notifications` | email notification settings |
 //! | POST | `/api/v1/notifications/confirm` | confirm the address |
 //! | * | `/mcp` | hosted MCP (Streamable HTTP) |
@@ -58,6 +61,9 @@ use jobhunt_app::feedback::{FeedbackResult, PipelineView};
 use jobhunt_app::inspect::{JobDetail, VerificationReport};
 use jobhunt_app::preferences::{PreferenceUpdate, PreferenceUpdateResult};
 use jobhunt_app::profile_edit::{ClaimDecisionResult, ClaimReview, ResumeImportResult};
+use jobhunt_app::profile_sources::{
+    EvidenceSource, GithubAccess, SourceImportResult, SourceRemovalResult,
+};
 use jobhunt_app::profile_view::ProfileView;
 use jobhunt_app::shortlist::MAX_LIMIT;
 use jobhunt_app::state::StateExport;
@@ -1035,6 +1041,111 @@ async fn import_resume(
     Ok(Json(result))
 }
 
+/// The most a LinkedIn export upload may be (the service's body limit).
+const MAX_LINKEDIN_BYTES: usize = 16 * 1024 * 1024;
+
+async fn import_linkedin(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+    headers: http::HeaderMap,
+    Params(q): Params<LinkedinQuery>,
+    body: axum::body::Bytes,
+) -> Result<Json<SourceImportResult>, ApiError> {
+    if body.is_empty() {
+        return Err(ApiError::invalid(
+            "the body must be the LinkedIn export (.zip or .csv)",
+        ));
+    }
+    if body.len() > MAX_LINKEDIN_BYTES {
+        return Err(ApiError::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "invalid_request",
+            "the export is larger than 16 MB; ask LinkedIn for just the files you need (profile, positions, skills, …)",
+        ));
+    }
+    let file_name = q
+        .file_name
+        .map(|n| n.trim().to_owned())
+        .filter(|n| !n.is_empty() && n.len() <= 200);
+    let result = run(state.app_for(&principal), move |app| async move {
+        app.import_linkedin(&body, file_name, Utc::now()).await
+    })
+    .await?;
+    // Counts only: never the export's content or its file name.
+    state.usage().record(
+        Some(&principal.user),
+        "linkedin_imported",
+        serde_json::json!({
+            "client": client_of(&headers),
+            "first_import": result.first_import,
+            "unchanged": result.unchanged,
+            "experiences_added": result.experiences.added,
+            "corroborated": result.experiences.corroborated + result.claims.corroborated,
+            "claims_added": result.claims.added,
+            "conflicts": result.conflicts,
+            "needs_review": result.needs_review,
+        }),
+    );
+    Ok(Json(result))
+}
+
+async fn import_github(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+    headers: http::HeaderMap,
+    Body(request): Body<GithubImportRequest>,
+) -> Result<Json<SourceImportResult>, ApiError> {
+    let access = GithubAccess::at(
+        state.config().github_api.clone(),
+        state.config().github_token.clone(),
+    );
+    let result = run(state.app_for(&principal), move |app| async move {
+        app.import_github(request.username.as_deref(), &access, Utc::now())
+            .await
+    })
+    .await?;
+    // Counts only: never the account name.
+    state.usage().record(
+        Some(&principal.user),
+        "github_imported",
+        serde_json::json!({
+            "client": client_of(&headers),
+            "first_import": result.first_import,
+            "unchanged": result.unchanged,
+            "projects_added": result.projects.added,
+            "corroborated": result.projects.corroborated + result.claims.corroborated,
+            "claims_added": result.claims.added,
+            "problems": result.problems.len(),
+            "needs_review": result.needs_review,
+        }),
+    );
+    Ok(Json(result))
+}
+
+async fn remove_source(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+    Path(source): Path<String>,
+) -> Result<Json<SourceRemovalResult>, ApiError> {
+    let source = EvidenceSource::parse(&source)
+        .ok_or_else(|| ApiError::invalid("the source is `linkedin` or `github`"))?;
+    let result = run(state.app_for(&principal), move |app| async move {
+        app.remove_source(source, Utc::now()).await
+    })
+    .await?;
+    state.usage().record(
+        Some(&principal.user),
+        "source_removed",
+        serde_json::json!({
+            "source": result.source,
+            "records_deleted": result.records_deleted,
+            "claims_deleted": result.claims_deleted,
+            "decisions_kept": result.decisions_kept,
+        }),
+    );
+    Ok(Json(result))
+}
+
 /// A plausible email address (the confirmation link proves it works).
 fn valid_email(email: &str) -> bool {
     let Some((local, domain)) = email.split_once('@') else {
@@ -1261,6 +1372,12 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v1/taste", get(taste))
         .route("/api/v1/profile/claims", get(claims).post(decide_claims))
         .route("/api/v1/profile/resume", axum::routing::put(import_resume))
+        .route(
+            "/api/v1/profile/linkedin",
+            axum::routing::put(import_linkedin),
+        )
+        .route("/api/v1/profile/github", post(import_github))
+        .route("/api/v1/profile/sources/{source}", delete(remove_source))
         .route(
             "/api/v1/notifications",
             get(notifications).put(update_notifications),

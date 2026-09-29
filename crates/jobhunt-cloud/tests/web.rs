@@ -1,6 +1,7 @@
 //! BRU-295 over real HTTP and a real Postgres: the Today feed, feedback
 //! from the web, the pipeline, preferences and learned taste, the profile
-//! (resume upload, claim review), email notifications through the outbox
+//! (resume upload, claim review, LinkedIn and GitHub evidence), email
+//! notifications through the outbox
 //! (with an in-memory provider: no test sends real email), and isolation
 //! between accounts.
 //!
@@ -52,6 +53,11 @@ struct Server {
 
 impl Server {
     async fn start() -> Option<Self> {
+        Self::start_with(&[]).await
+    }
+
+    /// With extra environment (`JOBHUNT_GITHUB_ENDPOINT` for a mock).
+    async fn start_with(extra: &[(&str, String)]) -> Option<Self> {
         let db = TestDatabase::create().await?;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
@@ -79,6 +85,7 @@ impl Server {
             ("JOBHUNT_NOTIFY_MIN_INTERVAL_HOURS", "0".to_owned()),
         ]
         .into_iter()
+        .chain(extra.iter().cloned())
         .map(|(k, v)| (k.to_owned(), v))
         .collect();
         let config = Arc::new(CloudConfig::from_env(&move |name: &str| {
@@ -1104,6 +1111,168 @@ async fn profile_resume_upload_and_claim_review() {
     let (status, body) = server.get("/api/v1/feed", &expired).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert_eq!(body["error"]["code"], "unauthenticated");
+    server.finish().await;
+}
+
+/// LinkedIn and GitHub evidence through the API (BRU-309): a LinkedIn CSV
+/// upload beside the resume, a GitHub import against a mock of GitHub's
+/// API, and taking both out again. Fictional data only.
+#[tokio::test]
+async fn profile_linkedin_and_github_evidence() {
+    use wiremock::matchers::path;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let github = MockServer::start().await;
+    Mock::given(path("/users/analima"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "login": "analima", "html_url": "https://github.com/analima",
+            "type": "User", "public_repos": 1
+        })))
+        .mount(&github)
+        .await;
+    Mock::given(path("/users/analima/repos"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
+            "id": 7, "name": "ledgerlint", "full_name": "analima/ledgerlint",
+            "owner": {"login": "analima"}, "html_url": "https://github.com/analima/ledgerlint",
+            "description": "A linter for double-entry ledgers", "fork": false,
+            "archived": false, "private": false, "size": 10, "stargazers_count": 3,
+            "forks_count": 0, "language": "Go", "topics": [],
+            "created_at": "2022-01-01T00:00:00Z", "pushed_at": "2026-09-01T00:00:00Z"
+        }])))
+        .mount(&github)
+        .await;
+    Mock::given(path("/users/analima/orgs"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .mount(&github)
+        .await;
+    let Some(server) = Server::start_with(&[("JOBHUNT_GITHUB_ENDPOINT", github.uri())]).await
+    else {
+        return;
+    };
+    let token = server.token("ana").await;
+    let (status, _) = server.upload(&token, "ana_lima.md", "text/markdown").await;
+    assert_eq!(status, StatusCode::OK);
+
+    // LinkedIn: one CSV of the export is enough.
+    let positions = "Company Name,Title,Description,Location,Started On,Finished On
+        Acme Payments,Staff Software Engineer,,Remote,Jan 2021,
+        Initech,Backend Engineer,,,Jan 2015,May 2016
+";
+    let upload = |bytes: &'static str, name: &'static str| {
+        server
+            .http
+            .put(format!(
+                "{}/api/v1/profile/linkedin?file_name={name}",
+                server.base
+            ))
+            .bearer_auth(&token)
+            .header("x-jobhunt-client", "web")
+            .body(bytes)
+            .send()
+    };
+    let response = upload(positions, "Positions.csv").await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let imported: Value = response.json().await.unwrap();
+    assert_eq!(imported["source"], "linkedin");
+    assert_eq!(imported["first_import"], true);
+    assert_eq!(imported["experiences"]["added"], 1);
+    assert_eq!(imported["experiences"]["corroborated"], 1);
+    let acme = imported["profile"]["experiences"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["title"] == "Staff Software Engineer")
+        .unwrap();
+    assert_eq!(acme["sources"], json!(["resume", "linkedin"]));
+    let sources: Vec<&str> = imported["profile"]["documents"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|d| d["current"] == true)
+        .map(|d| d["source"].as_str().unwrap())
+        .collect();
+    assert_eq!(sources.len(), 2, "the current resume and the export");
+    let again: Value = upload(positions, "Positions.csv")
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(again["unchanged"], true);
+    assert_eq!(again["experiences"]["added"], 0);
+    // Not an export: a stable code, and nothing changes.
+    let response = upload("hello", "notes.txt").await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["error"]["code"], "invalid_arguments");
+
+    // GitHub: the account the resume links, through the mock.
+    let (status, gh) = server
+        .post("/api/v1/profile/github", &token, json!({}))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{gh}");
+    assert_eq!(gh["label"], "github.com/analima");
+    assert_eq!(gh["projects"]["corroborated"], 1, "the resume's ledgerlint");
+    let (_, review) = server.get("/api/v1/profile/claims", &token).await;
+    let recent = review["claims"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["text"] == "Recent hands-on Go work in public GitHub repositories")
+        .expect("the inference waits for review");
+    assert_eq!(recent["provenance"], "inferred");
+    assert_eq!(recent["evidence"][0]["source"], "github");
+    let (status, err) = server
+        .post(
+            "/api/v1/profile/github",
+            &token,
+            json!({"username": "not a login"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{err}");
+
+    // Removal.
+    let (status, removed) = server
+        .call(
+            reqwest::Method::DELETE,
+            "/api/v1/profile/sources/linkedin",
+            &token,
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{removed}");
+    assert_eq!(removed["records_deleted"], 1, "Initech");
+    let (_, profile) = server.get("/api/v1/profile", &token).await;
+    assert!(
+        profile["experiences"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|e| e["company"] != "Initech")
+    );
+    let (status, _) = server
+        .call(
+            reqwest::Method::DELETE,
+            "/api/v1/profile/sources/resume",
+            &token,
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) = server
+        .call(
+            reqwest::Method::DELETE,
+            "/api/v1/profile/sources/github",
+            &token,
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+
+    // Another account sees none of it.
+    let other = server.token("bruno").await;
+    let (status, _) = server.get("/api/v1/profile", &other).await;
+    assert_eq!(status, StatusCode::CONFLICT);
     server.finish().await;
 }
 
