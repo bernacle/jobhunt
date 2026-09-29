@@ -1,4 +1,13 @@
-import type { FeedItem, FeedView, FeedbackResult, LearnedView, PreferenceControls, PreferenceView, TasteView } from "@/lib/api-types";
+import type {
+  FeedItem,
+  FeedView,
+  FeedbackResult,
+  JobDetail,
+  LearnedView,
+  PreferenceControls,
+  PreferenceView,
+  TasteView,
+} from "@/lib/api-types";
 
 /** A recommendation as the API returns it (values from a real response). */
 export function feedItem(overrides: Partial<FeedItem> = {}): FeedItem {
@@ -195,6 +204,72 @@ export function controls(overrides: Partial<PreferenceControls> = {}): Preferenc
         { value: "scaleup", scope: "stage", importance: "off", layer: "none" },
       ],
     },
+    ...overrides,
+  };
+}
+
+/**
+ * One opportunity's full detail as the API returns it (the shape of a
+ * real response for a fixture board): a strong fit with published,
+ * confirmed pay, remote from anywhere, verified on the employer's board.
+ */
+export function jobDetail(overrides: Partial<JobDetail> = {}): JobDetail {
+  return {
+    id: "opp_0123456789abcdef0123456789abcdef",
+    short_id: "opp_01234567",
+    job_id: "job_0123456789abcdef",
+    title: "Senior Backend Engineer (Go)",
+    company: "Ledgerly",
+    department: "Engineering",
+    url: "https://job-boards.greenhouse.io/ledgerly/jobs/7001001",
+    apply_url: "https://job-boards.greenhouse.io/ledgerly/jobs/7001001#app",
+    locations: ["Remote - Worldwide"],
+    workplace: "remote",
+    employment: "full_time",
+    posted_at: "2026-09-18T13:00:00Z",
+    description: "We are a small product team of 12 engineers building developer tools for payments.\n\nOwn backend services in Go and PostgreSQL, with Kafka.",
+    description_truncated: false,
+    compensation: { status: "published", ranges: ["USD 150,000 – 190,000 per year"], verified: true, verified_at: "2026-09-25T11:42:00Z" },
+    eligibility: {
+      status: "eligible",
+      headline: "The listing is remote from anywhere",
+      option: "Remote (anywhere)",
+      disclaimer: "A compatibility signal from the posting and your profile, not legal advice about work authorization.",
+      reasons: [{ rule: "region_constraint", verdict: "pass", conclusion: "the listing is remote from anywhere", evidence: ["Remote - Worldwide"] }],
+    },
+    verification: {
+      state: "verified_active",
+      trusted: true,
+      verified_at: "2026-09-25T11:42:00Z",
+      freshness: "fresh",
+      authority: "employer_configured_ats",
+      source: "greenhouse:ledgerly",
+    },
+    source_count: 1,
+    sources: [
+      {
+        job_id: "job_0123456789abcdef",
+        source: "greenhouse:ledgerly",
+        url: "https://job-boards.greenhouse.io/ledgerly/jobs/7001001",
+        authority: "employer_configured_ats",
+        status: "open",
+        first_seen_at: "2026-09-18T14:00:00Z",
+        last_seen_at: "2026-09-25T11:42:00Z",
+        last_success_at: "2026-09-25T11:42:00Z",
+        verification: "verified_active",
+      },
+    ],
+    decision: {
+      tier: "strong_fit",
+      recommendation: "recommended",
+      verdict: "a strong fit for what you want.",
+      summary: "backend · senior · Go · USD 150,000 – 190,000 per year · remote",
+      worth: ["Backend roles: a role you want", "Small teams: a kind of company or team you want", "Go: in your recent work", "Payments: a domain you know"],
+      caveats: ["senior level, a step below your latest title"],
+      unknowns: ["The posting doesn't say whether it's product companies"],
+      history: [],
+    },
+    pipeline: { stage: "unseen", furthest: "unseen", feedback: [] },
     ...overrides,
   };
 }

@@ -6,8 +6,9 @@ import { expectAccessible, onboardViaApi, signIn } from "./helpers";
  * BRU-308: the structured settings and the person's words are one set of
  * preferences. A sentence fills in the settings; a setting changed
  * directly replaces what the sentence set, and the sentence stays as
- * written. BRU-313: the page is a summary of those decisions, each row
- * edited in place, one at a time.
+ * written. BRU-313: the page is a summary of those decisions. BRU-314:
+ * each one is changed alone, in a focused sheet, as a draft saved (or
+ * cancelled) in one step; the overview keeps its shape.
  */
 const WORDS = "remote from Brazil, at least USD 140k, prefer small teams";
 
@@ -15,11 +16,20 @@ function row(page: Page, name: string) {
   return page.getByRole("group", { name, exact: true });
 }
 
+/** Opens a row's editor (the one open sheet) and returns it. */
+async function edit(page: Page, name: string) {
+  await row(page, name).getByRole("button", { name: new RegExp(`^(Edit|Add|Change) ${name}$`, "i") }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet).toBeVisible();
+  return sheet;
+}
+
 /** Opens a row's editor, chooses an answer, saves, and waits for the API. */
 async function choose(page: Page, name: string, answer: string) {
-  await row(page, name).getByRole("button", { name: new RegExp(`^(Edit|Add|Change) ${name}$`, "i") }).click();
-  await row(page, name).getByText(answer, { exact: true }).click();
-  await row(page, name).getByRole("button", { name: "Save" }).click();
+  const sheet = await edit(page, name);
+  await sheet.getByText(answer, { exact: true }).click();
+  await sheet.getByRole("button", { name: "Save" }).click();
+  await expect(sheet).toBeHidden();
   await expect(row(page, name).getByRole("status")).toHaveText(/Saved|Already in effect/);
 }
 
@@ -49,10 +59,16 @@ test.describe.serial("Preferences", () => {
     await expect(row(page, "Company size").getByText("No preference")).toBeVisible();
     // No editor is open until the person asks for one.
     await expect(page.getByRole("radio")).toHaveCount(0);
-    await row(page, "Where you live").getByRole("button", { name: "Edit where you live" }).click();
-    await expect(row(page, "Where you live").getByLabel("Where you live")).toHaveValue("Brazil");
-    await expect(row(page, "Where you live").getByText(/Latin America.* include you/)).toBeVisible();
+    const home = await edit(page, "Where you live");
+    await expect(home).toHaveAccessibleName("Where do you live?");
+    await expect(home.getByLabel("Where you live")).toHaveValue("Brazil");
+    await expect(home.getByLabel("Where you live")).toBeFocused();
+    await expect(home.getByText(/Latin America.* include you/)).toBeVisible();
+    // Nothing outside the sheet can be changed meanwhile.
+    await expect(page.getByRole("radio")).toHaveCount(0);
     await page.keyboard.press("Escape");
+    await expect(home).toBeHidden();
+    await expect(row(page, "Where you live").getByRole("button", { name: "Edit where you live" })).toBeFocused();
     await expectAccessible(page);
   });
 
@@ -61,20 +77,27 @@ test.describe.serial("Preferences", () => {
     await choose(page, "Work setup", "Prefer remote");
     await choose(page, "Relocation", "Not willing to relocate");
     await choose(page, "When pay isn't published", "Hide them");
-    await row(page, "Team").getByRole("button", { name: "Edit team" }).click();
-    await page.getByRole("group", { name: "Small team", exact: true }).getByText("Must have").click();
-    await expect(page.getByRole("group", { name: "Small team", exact: true }).getByRole("radio", { name: "Must have" })).toBeChecked();
-    await row(page, "Team").getByRole("button", { name: "Done" }).click();
+    const team = await edit(page, "Team");
+    await team.getByRole("group", { name: "Small team", exact: true }).getByText("Must have").click();
+    await expect(team.getByRole("group", { name: "Small team", exact: true }).getByRole("radio", { name: "Must have" })).toBeChecked();
+    await team.getByRole("button", { name: "Save" }).click();
+    await expect(row(page, "Team").getByRole("status")).toHaveText(/Saved|Already in effect/);
+
+    // Cancel changes nothing.
+    const scope = await edit(page, "Remote roles open to");
+    await scope.getByText("The Americas", { exact: true }).click();
+    await scope.getByRole("button", { name: "Cancel" }).click();
+    await expect(row(page, "Remote roles open to").getByText("The Americas")).toHaveCount(0);
 
     // The currency is never filled in for the person.
-    const target = row(page, "Target");
-    await target.getByRole("button", { name: "Add target" }).click();
+    const target = await edit(page, "Target");
     await target.getByLabel("Amount").fill("180000");
     await target.getByRole("button", { name: "Save" }).click();
     await expect(target.getByRole("alert")).toContainText("never assumes");
     await target.getByLabel("Currency").fill("USD");
     await target.getByRole("button", { name: "Save" }).click();
-    await expect(target.getByRole("status")).toHaveText(/Saved|Already in effect/);
+    await expect(target).toBeHidden();
+    await expect(row(page, "Target").getByRole("status")).toHaveText(/Saved|Already in effect/);
 
     await page.reload();
     await expect(row(page, "Work setup").getByText("Prefer remote")).toBeVisible();
@@ -94,7 +117,7 @@ test.describe.serial("Preferences", () => {
       await signIn(page, name, "/preferences");
       await expect(row(page, "Work setup")).toBeVisible();
       await expectAccessible(page);
-      await row(page, "Minimum").getByRole("button", { name: "Edit minimum" }).click();
+      await edit(page, "Minimum");
       await expectAccessible(page);
     });
   }

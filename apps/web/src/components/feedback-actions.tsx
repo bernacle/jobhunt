@@ -26,8 +26,8 @@ export interface FeedbackActionsProps {
   canPutAside?: boolean;
   /**
    * `lead`: Today's lead (full-size buttons). `peer`: the denser peers.
-   * `detail`: the opportunity page's action bar. On phones every variant
-   * becomes a 2×2 grid of 44px targets.
+   * `detail`: the opportunity page's actions, under its key facts. On
+   * phones every variant becomes a 2×2 grid of 44px targets.
    */
   variant?: "lead" | "peer" | "detail";
 }
@@ -73,7 +73,7 @@ export function FeedbackActions({ id, title, company, actions, onDone, canPutAsi
   };
 
   const busy = pending !== null;
-  const size = variant === "lead" ? "md" : "sm";
+  const size = variant === "peer" ? "sm" : "md";
   // Phones: 44px targets. The lead and the page's bar are a 2×2 grid,
   // primary bottom right; a peer keeps its four on one row.
   const peer = variant === "peer";

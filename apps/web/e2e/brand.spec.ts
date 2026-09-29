@@ -32,10 +32,15 @@ for (const scheme of ["dark", "light"] as const) {
     expect(background).toBe(scheme === "dark" ? "rgb(12, 13, 14)" : "rgb(247, 247, 248)");
     await expectAccessible(page);
     await page.getByRole("list", { name: "Recommendations" }).getByRole("article").first().getByRole("heading", { level: 2 }).getByRole("link").click();
-    await expect(page.getByRole("heading", { level: 2, name: "Why Narrow surfaced it" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Full reasoning" })).toBeVisible();
+    await expectAccessible(page);
     // Open, the evidence is accessible too.
-    await page.getByText("Eligibility checks").click();
-    await page.getByText("Full reasoning").click();
+    await page.getByRole("button", { name: "Checks for eligibility" }).click();
+    await expect(page.getByRole("dialog", { name: "Eligibility checks" })).toBeVisible();
+    await expectAccessible(page);
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Full reasoning" }).click();
+    await expect(page.getByRole("dialog", { name: "Why Narrow surfaced it" })).toBeVisible();
     await expectAccessible(page);
   });
 }

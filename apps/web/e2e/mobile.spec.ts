@@ -37,8 +37,15 @@ test("on a phone, Settings is reachable and the opportunity page has its own act
   const viewport = page.viewportSize()!;
   expect(box!.y + box!.height).toBeGreaterThan(viewport.height - 80);
   await expect(page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: /Today/ })).toBeVisible();
+  // The decision comes before the facts; the evidence opens as a full-height sheet.
+  await expect(page.getByRole("group", { name: "Pay", exact: true })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+  await page.getByRole("button", { name: "Checks for eligibility" }).click();
+  const checks = page.getByRole("dialog", { name: "Eligibility checks" });
+  expect((await checks.boundingBox())!.width).toBeGreaterThanOrEqual(viewport.width - 1);
+  await checks.getByRole("button", { name: "Close" }).click();
+  await expect(checks).toBeHidden();
   await expectAccessible(page);
 });
 
@@ -64,7 +71,7 @@ test("Today's evidence is a full-height sheet on a phone, and peers keep 44px ac
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
-test("Preferences work on a phone: summary rows, a focused editor, thumb-sized choices", async ({ page }) => {
+test("Preferences work on a phone: summary rows, one decision in a sheet, thumb-sized choices", async ({ page }) => {
   await onboardViaApi("e2e-mobile-prefs");
   await signIn(page, "e2e-mobile-prefs", "/preferences");
   const setup = page.getByRole("group", { name: "Work setup", exact: true });
@@ -72,23 +79,38 @@ test("Preferences work on a phone: summary rows, a focused editor, thumb-sized c
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
   const edit = setup.getByRole("button", { name: /^(Edit|Add) work setup$/ });
+  // The whole row is the target, and at least 44px tall.
   expect((await edit.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-  await edit.click();
+  await setup.click({ position: { x: 8, y: 8 } });
+  const sheet = page.getByRole("dialog", { name: "How do you want to work?" });
+  await expect(sheet).toBeVisible();
+  // A sheet from the bottom, full width, with Save within thumb reach.
+  const viewport = page.viewportSize()!;
+  const box = (await sheet.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(viewport.width - 1);
+  expect(box.y + box.height).toBeGreaterThanOrEqual(viewport.height - 1);
+  const saveBox = (await sheet.getByRole("button", { name: "Save" }).boundingBox())!;
+  expect(saveBox.height).toBeGreaterThanOrEqual(44);
+  expect(saveBox.y + saveBox.height).toBeLessThanOrEqual(viewport.height);
   // Every choice is a 44px target.
   for (const option of ["Remote only", "Prefer remote", "No preference"]) {
-    const box = await setup.locator("label").filter({ hasText: option }).boundingBox();
-    expect(box!.height).toBeGreaterThanOrEqual(44);
+    const choice = await sheet.locator("label").filter({ hasText: option }).boundingBox();
+    expect(choice!.height).toBeGreaterThanOrEqual(44);
   }
-  await setup.getByText("Remote only").click();
-  await setup.getByRole("button", { name: "Save" }).click();
+  await expectAccessible(page);
+  await sheet.getByText("Remote only").click();
+  await sheet.getByRole("button", { name: "Save" }).click();
+  await expect(sheet).toBeHidden();
   await expect(setup.getByRole("status")).toHaveText(/Saved|Already in effect/);
   await expect(setup.getByText("Remote only")).toBeVisible();
   const team = page.getByRole("group", { name: "Team", exact: true });
   await team.getByRole("button", { name: /^(Edit|Add) team$/ }).click();
-  const small = page.getByRole("group", { name: "Small team", exact: true });
+  const small = page.getByRole("dialog").getByRole("group", { name: "Small team", exact: true });
   for (const option of ["Off", "Nice to have", "Must have"]) {
-    const box = await small.locator("label").filter({ hasText: option }).boundingBox();
-    expect(box!.height).toBeGreaterThanOrEqual(44);
+    const choice = await small.locator("label").filter({ hasText: option }).boundingBox();
+    expect(choice!.height).toBeGreaterThanOrEqual(44);
   }
-  await expectAccessible(page);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
 });

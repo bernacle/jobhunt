@@ -11,8 +11,9 @@ import { textLinkClass } from "./ui";
 
 /**
  * The opportunity page's actions: the same as on Today while undecided,
- * the stage once it's in Applications. In the page's header on wide
- * screens; a bar within thumb reach at the bottom on phones and tablets.
+ * the stage once it's in Applications. Under the key facts on wide
+ * screens, where Today's lead has them (right-aligned, primary last); a
+ * bar within thumb reach at the bottom on phones and tablets.
  */
 export function DetailActions({
   id,
@@ -50,7 +51,7 @@ export function DetailActions({
   return (
     <div
       className={
-        "lg:ml-auto max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-30 max-lg:flex max-lg:justify-end " +
+        "flex justify-end max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0 max-lg:z-30 " +
         "max-lg:border-t max-lg:border-line-subtle max-lg:bg-ground max-lg:px-4 max-lg:pt-2.5 max-lg:pb-[calc(16px+env(safe-area-inset-bottom))] " +
         "max-sm:block md:max-lg:px-10"
       }

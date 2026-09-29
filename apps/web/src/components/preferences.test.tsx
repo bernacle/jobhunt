@@ -6,7 +6,7 @@ import type { PreferenceUpdateResult } from "@/lib/api-types";
 
 import { learned, tasteView } from "../../test/fixtures";
 import { violations } from "../../test/axe";
-import { AddPreference, Interpretation, StatementForm } from "./preferences";
+import { AddPreference, AddPreferenceRow, Interpretation, StatementForm } from "./preferences";
 import { NotInUse, TasteReview } from "./taste";
 
 const result: PreferenceUpdateResult = {
@@ -71,6 +71,41 @@ describe("AddPreference", () => {
     expect(kinds).toEqual(["role", "domain", "work_style", "company", "timezone"]);
     // No currency is ever filled in for the person.
     expect(screen.queryByLabelText("Currency")).not.toBeInTheDocument();
+  });
+});
+
+describe("AddPreferenceRow", () => {
+  it("adds one preference in a focused sheet, saying what a rule does, and returns to the row", async () => {
+    const set = vi.fn(async () => ok);
+    const { container } = render(<AddPreferenceRow set={set} />);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Add a preference" }));
+    const sheet = screen.getByRole("dialog", { name: "Add a preference" });
+    expect(within(sheet).getByLabelText("About")).toHaveFocus();
+    expect(within(sheet).getByText("Changes the order. Never leaves a job out.")).toBeInTheDocument();
+    await userEvent.selectOptions(within(sheet).getByLabelText("Rule"), "require");
+    // A requirement says what it does, including when a posting doesn't say.
+    expect(within(sheet).getByText(/is left out\. If the posting doesn't say, it stays unresolved/)).toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole("button", { name: "Add preference" }));
+    expect(within(sheet).getByRole("alert")).toHaveTextContent("Enter a value");
+    expect(set).not.toHaveBeenCalled();
+    expect(await violations(container)).toEqual([]);
+    await userEvent.type(within(sheet).getByLabelText("Value"), "platform");
+    await userEvent.click(within(sheet).getByRole("button", { name: "Add preference" }));
+    expect(set).toHaveBeenCalledWith({ kind: "role", role: "platform", stance: "require" });
+    expect(await screen.findByText("Saved.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("Cancel adds nothing", async () => {
+    const set = vi.fn(async () => ok);
+    render(<AddPreferenceRow set={set} />);
+    await userEvent.click(screen.getByRole("button", { name: "Add a preference" }));
+    await userEvent.type(screen.getByLabelText("Value"), "adtech");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(set).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a preference" })).toBeInTheDocument();
   });
 });
 

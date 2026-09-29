@@ -118,6 +118,27 @@ export function VerificationStatus({
 }
 
 /**
+ * How current the listing is, as a key fact: the one place an opportunity
+ * page says it. The check only for a current, trusted verification; an
+ * aging one keeps a grey check; a stale, untrusted, failed or closed one
+ * says so in words, without a check.
+ */
+export function ListingFact({ verification, now }: { verification: VerificationBrief; now?: Date }) {
+  const mark = verificationMark(verification);
+  return (
+    <span>
+      {verificationLine(verification, now)}
+      {mark && (
+        <>
+          {" "}
+          <VerifiedCheck aging={mark === "aging"} />
+        </>
+      )}
+    </span>
+  );
+}
+
+/**
  * Eligibility as a fact: only a pass reads as settled. `brief` leaves out
  * the headline of a pass (the evidence has it); a condition or an unclear
  * reading always says what it is.

@@ -93,17 +93,25 @@ test.describe.serial("the product loop", () => {
     const title = (await first.getByRole("heading", { level: 2 }).textContent()) ?? "";
     await first.getByRole("link", { name: title, exact: true }).click();
     await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
-    // The conclusion first: the verdict, then one section per question.
+    // The conclusion first: the verdict, then each key fact once, then the description.
     await expect(page.getByText(/^A strong fit|^Worth reviewing/).first()).toBeVisible();
-    for (const section of ["Eligibility", "Compensation", "Location", "Why Narrow surfaced it", "Description", "Sources"]) {
-      await expect(page.getByRole("heading", { level: 2, name: section, exact: true })).toBeVisible();
+    for (const fact of ["Pay", "Location", "Eligibility", "Listing"]) {
+      await expect(page.getByRole("group", { name: fact, exact: true })).toBeVisible();
     }
-    // The checks and the provenance are one labelled action away.
+    await expect(page.getByRole("region", { name: "Description" })).toBeVisible();
+    await expect(page.getByText(/^Verified .* on the employer's job board/)).toHaveCount(1);
+    // The reasoning, the checks and the provenance are one labelled action away.
     await expect(page.getByText(/A compatibility signal/)).toBeHidden();
-    await page.getByText("Eligibility checks").click();
-    await expect(page.getByText(/A compatibility signal/)).toBeVisible();
-    await page.getByText("Source history").click();
-    await expect(page.getByRole("link", { name: /^Greenhouse · / })).toBeVisible();
+    await page.getByRole("button", { name: "Checks for eligibility" }).click();
+    await expect(page.getByRole("dialog", { name: "Eligibility checks" }).getByText(/A compatibility signal/)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Checks for eligibility" })).toBeFocused();
+    await page.getByRole("button", { name: "Sources of the listing" }).click();
+    await expect(page.getByRole("dialog", { name: "Where it's listed" }).getByRole("link", { name: /^Greenhouse · / })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Full reasoning" }).click();
+    await expect(page.getByRole("dialog", { name: "Why Narrow surfaced it" }).getByText(/Narrow read it as/)).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Today" })).toBeVisible();
     await expectAccessible(page);
   });
