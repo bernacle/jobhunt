@@ -569,7 +569,8 @@ impl JobHuntServer {
     #[tool(
         name = "get_feed",
         description = "What is new for the person since they last looked: the few \
-        recommendations (strong fits and jobs worth reviewing) they have not dealt with yet, \
+        recommendations (strong fits only: the company and role unusually right for them, with \
+        what still needs checking) they have not dealt with yet, \
         plus ones they reviewed that changed materially (pay published, remote policy, \
         reopened), each with why it may be worth their time and what to consider. Empty \
         (caught_up: true) when nothing new is worth their time; it never pads the list with \

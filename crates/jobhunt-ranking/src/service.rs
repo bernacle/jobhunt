@@ -14,15 +14,21 @@ use jobhunt_eligibility::{
 };
 use jobhunt_jobs::verification::{FreshnessPolicy, VerificationRepository, cached, cached_many};
 use jobhunt_jobs::{JobId, JobQuery, JobRecord, JobRepository, JobStatus, OpportunityId};
+use jobhunt_profile::taste::compose;
 use jobhunt_profile::{ProfileData, ProfileError, ProfileRepository, ProfileService};
 
 use crate::cache::{FeedbackRepository, RankKey, RankingRepository, cached_rank};
 use crate::facets::facets;
 use crate::feedback::{FeedbackAction, FeedbackEvent, OpportunityState, Stage};
+use crate::fit::{FitLevel, ReviewState};
 use crate::person::Person;
 use crate::rank::{Candidate, Context, Exclusion, Gate, Ranking, Tier, order, rank};
 use crate::reason::{ReasonReader, ReasonReading};
-use crate::taste::{FeedbackOpportunity, TasteModel, derive};
+use crate::review::{
+    self, CandidateBrief, FitReview, FitReviewRequest, FitReviewer, ReviewBudget, ReviewStats,
+    review_key,
+};
+use crate::taste::{FeedbackOpportunity, TasteModel, derive, learned_signals};
 
 /// Something the use case needs is missing, or storage failed.
 #[derive(Debug, thiserror::Error)]
@@ -57,6 +63,21 @@ pub struct Recorded {
     pub recorded: bool,
 }
 
+/// Folds a review into a ranking: the fit, then the tier, score and brief
+/// that follow from it.
+fn refit(ranking: &mut Ranking, review: &FitReview, ctx: &Context<'_>) {
+    review::apply(&mut ranking.fit, review);
+    ranking.tier = Tier::of(ranking.fit.level);
+    ranking.score = ranking.fit.score();
+    crate::brief::refit(
+        &mut ranking.brief,
+        &ranking.gate,
+        &ranking.fit,
+        &ranking.practicality,
+        ctx.person.has_preferences() || !ctx.taste_profile.assertions.is_empty(),
+    );
+}
+
 /// One ranking with what it was computed from.
 #[derive(Debug, Clone)]
 pub struct Explained {
@@ -77,7 +98,7 @@ pub struct RankQuery {
     /// How many of the best rankings to store as shown.
     pub store_top: usize,
     /// Maybe and low-priority jobs are shown too (by default only strong
-    /// fits and jobs worth reviewing are).
+    /// fits and jobs worth reviewing, the plausible fits, are).
     pub all: bool,
 }
 
@@ -136,6 +157,8 @@ pub struct RankReport {
     pub person: Person,
     /// Where the time went, for operations.
     pub timings: RankTimings,
+    /// What the semantic review stage did (all zero without a reviewer).
+    pub review: ReviewStats,
 }
 
 /// How long each part of a ranking took, in milliseconds.
@@ -147,6 +170,8 @@ pub struct RankTimings {
     pub load_ms: u64,
     pub eligibility_ms: u64,
     pub ranking_ms: u64,
+    /// The semantic review of the shortlist (cache lookups and calls).
+    pub review_ms: u64,
 }
 
 fn ms_since(started: std::time::Instant) -> u64 {
@@ -170,6 +195,9 @@ pub struct RankingService<'a, R: ?Sized> {
     repo: &'a R,
     reader: &'a dyn ReasonReader,
     policy: FreshnessPolicy,
+    /// Reviews the shortlist semantically, when configured.
+    reviewer: Option<&'a dyn FitReviewer>,
+    budget: ReviewBudget,
 }
 
 impl<'a, R> RankingService<'a, R>
@@ -187,11 +215,20 @@ where
             repo,
             reader,
             policy: FreshnessPolicy::default(),
+            reviewer: None,
+            budget: ReviewBudget::default(),
         }
     }
 
     pub fn with_policy(mut self, policy: FreshnessPolicy) -> Self {
         self.policy = policy;
+        self
+    }
+
+    /// Reviews each ranking's shortlist with `reviewer`, within `budget`.
+    pub fn with_reviewer(mut self, reviewer: &'a dyn FitReviewer, budget: ReviewBudget) -> Self {
+        self.reviewer = Some(reviewer);
+        self.budget = budget;
         self
     }
 
@@ -374,11 +411,13 @@ where
         let data = data.ok_or(RankingError::NoProfile)?;
         let facts = ProfileFacts::from_profile(&data);
         let taste = self.taste(&person).await?;
+        let taste_profile = compose(&data, &learned_signals(&taste));
         let state = self.state(records).await?;
         let assessment = self.assess(records, &facts, now).await?;
         let ctx = Context {
             person: &person,
             taste: &taste,
+            taste_profile: &taste_profile,
             now,
         };
         let candidate = Candidate {
@@ -386,9 +425,21 @@ where
             assessment: &assessment,
             state: &state,
         };
-        let (ranking, reused) = cached_rank(self.repo, &candidate, &ctx, true)
+        let (mut ranking, reused) = cached_rank(self.repo, &candidate, &ctx, true)
             .await?
             .ok_or(RankingError::NoRecords)?;
+        // A stored review of this job applies here too (never a new call:
+        // explaining one job must not cost a model call).
+        if let Some(reviewer) = self.reviewer
+            && let Some(record) = records.iter().find(|r| r.id == ranking.job)
+        {
+            let brief = CandidateBrief::build(&data, &taste_profile, &person);
+            let request = FitReviewRequest::build(&brief, record, &ranking.facets);
+            let key = review_key(&request, &reviewer.name());
+            if let Ok(Some(review)) = self.repo.cached_fit_review(&person.profile_id, &key).await {
+                refit(&mut ranking, &review, &ctx);
+            }
+        }
         Ok(Explained {
             ranking,
             assessment,
@@ -411,6 +462,7 @@ where
         let data = data.ok_or(RankingError::NoProfile)?;
         let facts = ProfileFacts::from_profile(&data);
         let taste = self.taste(&person).await?;
+        let taste_profile = compose(&data, &learned_signals(&taste));
         let mut by_job: HashMap<JobId, Vec<FeedbackEvent>> = HashMap::new();
         for event in self.feedback().await? {
             by_job.entry(event.job).or_default().push(event);
@@ -424,6 +476,7 @@ where
         let ctx = Context {
             person: &person,
             taste: &taste,
+            taste_profile: &taste_profile,
             now,
         };
         timings.person_ms = ms_since(started);
@@ -484,6 +537,17 @@ where
             });
         }
         timings.ranking_ms = ms_since(started);
+        let started = std::time::Instant::now();
+        let mut review = ReviewStats::default();
+        if let Some(reviewer) = self.reviewer {
+            let records: Vec<&[JobRecord]> =
+                prepared.iter().map(|p| p.records.as_slice()).collect();
+            review = self
+                .review_shortlist(reviewer, &data, &ctx, &mut rankings, &records, now)
+                .await;
+        }
+        timings.review_ms = ms_since(started);
+        review.elapsed_ms = timings.review_ms;
         let mut ordered: Vec<Ranking> = Vec::with_capacity(rankings.len());
         let mut index: HashMap<OpportunityId, usize> = HashMap::new();
         for (i, r) in rankings {
@@ -518,7 +582,135 @@ where
             taste,
             person,
             timings,
+            review,
         })
+    }
+
+    /// The semantic stage (see [`crate::review`]): the shortlist (strong
+    /// and plausible fits, best first) is looked up in stored reviews, and
+    /// up to the budget's new reviews are asked for, a few at a time,
+    /// until the deadline. A failed review leaves the rules' assessment
+    /// standing and says so; a stored review that can't be read is asked
+    /// for again.
+    async fn review_shortlist(
+        &self,
+        reviewer: &dyn FitReviewer,
+        data: &ProfileData,
+        ctx: &Context<'_>,
+        rankings: &mut [(usize, Ranking)],
+        records: &[&[JobRecord]],
+        now: DateTime<Utc>,
+    ) -> ReviewStats {
+        let mut stats = ReviewStats::default();
+        let name = reviewer.name();
+        let profile_id = ctx.person.profile_id.clone();
+        let brief = CandidateBrief::build(data, ctx.taste_profile, ctx.person);
+        // Best first: the jobs Today would choose from, then the plausible.
+        let mut order: Vec<usize> = (0..rankings.len())
+            .filter(|i| {
+                let r = &rankings[*i].1;
+                !r.gate.is_excluded()
+                    && matches!(r.fit.level, FitLevel::Strong | FitLevel::Plausible)
+            })
+            .collect();
+        order.sort_by(|a, b| {
+            let (x, y) = (&rankings[*a].1, &rankings[*b].1);
+            y.fit
+                .level
+                .cmp(&x.fit.level)
+                .then(y.gate.rank().cmp(&x.gate.rank()))
+                .then(y.score.total_cmp(&x.score))
+        });
+        order.truncate(self.budget.shortlist);
+        stats.shortlisted = order.len();
+        let mut pending: Vec<(usize, FitReviewRequest, String)> = Vec::new();
+        for i in order {
+            let (at, ranking) = &rankings[i];
+            let Some(record) = records
+                .get(*at)
+                .and_then(|rs| rs.iter().find(|r| r.id == ranking.job))
+            else {
+                continue;
+            };
+            let request = FitReviewRequest::build(&brief, record, &ranking.facets);
+            let key = review_key(&request, &name);
+            match self.repo.cached_fit_review(&profile_id, &key).await {
+                Ok(Some(review)) => {
+                    stats.cache_hits += 1;
+                    let before = rankings[i].1.fit.level;
+                    refit(&mut rankings[i].1, &review, ctx);
+                    if rankings[i].1.fit.level != before {
+                        stats.changed += 1;
+                    }
+                }
+                Ok(None) => pending.push((i, request, key)),
+                Err(error) => {
+                    tracing::warn!(%error, "a stored fit review could not be read; reviewing again");
+                    pending.push((i, request, key));
+                }
+            }
+        }
+        let started = std::time::Instant::now();
+        let mut asked = 0;
+        let mut queue = pending.into_iter();
+        loop {
+            if asked >= self.budget.new_reviews || started.elapsed() >= self.budget.deadline {
+                stats.deferred += queue.len();
+                break;
+            }
+            let room = self
+                .budget
+                .concurrency
+                .max(1)
+                .min(self.budget.new_reviews - asked);
+            let batch: Vec<(usize, FitReviewRequest, String)> = queue.by_ref().take(room).collect();
+            if batch.is_empty() {
+                break;
+            }
+            asked += batch.len();
+            let answers = futures::future::join_all(
+                batch.iter().map(|(_, request, _)| reviewer.review(request)),
+            )
+            .await;
+            for ((i, _, key), answer) in batch.into_iter().zip(answers) {
+                stats.calls += 1;
+                match answer {
+                    Ok(review) => {
+                        stats.input_tokens += review.input_tokens;
+                        stats.output_tokens += review.output_tokens;
+                        if let Err(error) = self
+                            .repo
+                            .store_fit_review(&profile_id, &key, &review, now)
+                            .await
+                        {
+                            tracing::warn!(%error, "could not store a fit review");
+                        }
+                        let before = rankings[i].1.fit.level;
+                        refit(&mut rankings[i].1, &review, ctx);
+                        if rankings[i].1.fit.level != before {
+                            stats.changed += 1;
+                        }
+                    }
+                    Err(error) => {
+                        stats.failures += 1;
+                        rankings[i].1.fit.review = ReviewState::Unavailable { why: error.short() };
+                    }
+                }
+            }
+        }
+        tracing::info!(
+            reviewer = %name,
+            shortlisted = stats.shortlisted,
+            cache_hits = stats.cache_hits,
+            calls = stats.calls,
+            failures = stats.failures,
+            deferred = stats.deferred,
+            changed = stats.changed,
+            input_tokens = stats.input_tokens,
+            output_tokens = stats.output_tokens,
+            "fit review"
+        );
+        stats
     }
 
     /// Opportunities the person saved or applied to (and, with

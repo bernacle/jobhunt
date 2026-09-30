@@ -332,8 +332,9 @@ development and tests: [apps/web/README.md](../apps/web/README.md).
 
 `GET /api/v1/feed` (the `get_feed` tool) answers "what is worth my time
 that I haven't dealt with?", so a visit can end. It is built from the
-product's ranking (tiers, gates, briefs); only the selection is its own
-(`jobhunt_app::feed`):
+product's ranking (fit, practicality, gates, briefs; see
+[fit-and-practicality.md](fit-and-practicality.md)); only the selection is
+its own (`jobhunt_app::feed`):
 
 | The person's state | On the feed |
 | --- | --- |
@@ -343,21 +344,24 @@ product's ranking (tiers, gates, briefs); only the selection is its own
 | looked at, put aside ("not now") or saved | only if it **changed** materially since |
 | rejected, applied, interviewing, offer, closed, ineligible | never (the ranking's gate) |
 
-- Only strong fits and jobs worth reviewing are candidates. With nothing
-  new, the feed is **caught up**: empty, with when job boards were last
-  read and when the next scheduled read is due, never padded with maybes.
+- Only strong fits are candidates (since BRU-322; jobs worth reviewing stay
+  in search). With nothing new, the feed is **caught up**: empty, with when
+  job boards were last read and when the next scheduled read is due, never
+  padded with weaker matches. There is no quota: one strong fit is a feed
+  of one.
 - **One role per company.** Today is a few distinct decisions: each
   company's best-ranked candidate, in rank order, until the feed is full.
-  The company's other candidates go with it (`also_at_company`, "+3 more
+  The company's other strong fits go with it (`also_at_company`, "+3 more
   roles at Supabase") instead of taking slots, and are not recorded as
-  shown, so they stay new. Fewer companies means a shorter feed, never a
+  shown, so they stay new; a company's weaker roles never ride along. Fewer companies means a shorter feed, never a
   padded one.
 - Preparing the feed ranks every open opportunity for the person: records,
   verification state and eligibility come in a fixed number of batched
   queries whatever the corpus size, and what is read from each posting is
   remembered per posting version in the process. Each feed logs where its
-  time went (`today prepared`: person, load, eligibility, ranking, verify,
-  classify, select).
+  time went (`today prepared`: person, load, eligibility, ranking, review,
+  verify, classify, select) and what the semantic review did (reviews from
+  cache, calls, failures).
 - A **material change** is one the job's history records (UPDATED /
   REOPENED) in a field that changes whether someone would want or could
   take the job: pay published or changed, location or remote policy, work
@@ -369,8 +373,8 @@ product's ranking (tiers, gates, briefs); only the selection is its own
   me"** is a rejection, with an optional reason in the person's words,
   which teaches. The two are kept apart on purpose.
 - The summary counts are the ranking's own (open jobs checked, left after
-  eligibility, worth reviewing, new, on the feed now); nothing is
-  estimated.
+  eligibility, worth reviewing, strong fits, new, on the feed now); nothing
+  is estimated.
 - The feed verifies its best candidates whose listings aren't trusted yet
   (at most 12), like a search; it never reads job boards (the workers do).
 - What it showed is recorded per account (`user_opportunities`:
@@ -717,6 +721,7 @@ startup with every problem listed.
 | `JOBHUNT_VERIFICATION_FRESH_HOURS` / `_STALE_HOURS` | all | no | from the config file (24 / 72) |
 | `JOBHUNT_USAGE_EVENTS` | server | no | `true` |
 | `JOBHUNT_AI_PROVIDER` | server | no | `anthropic` or `openai` (any OpenAI-compatible server): a model that reads people's descriptions of what they want into their taste profile; unset or `none` uses the built-in reader. Also `JOBHUNT_AI_MODEL` (Anthropic default `claude-opus-5-5`), `JOBHUNT_AI_BASE_URL`, `JOBHUNT_AI_API_KEY` (secret), `JOBHUNT_AI_TIMEOUT_SECS`. An unusable setting falls back to the built-in reader and never stops the server. What is sent: [taste-profile.md](taste-profile.md#exactly-what-is-sent) |
+| `JOBHUNT_AI_REVIEW_FIT` | server, worker | no | `true` to review the fit of each ranking's shortlist with the `JOBHUNT_AI_*` model (optionally `JOBHUNT_AI_REVIEW_MODEL`); off by default. A dozen new reviews per ranking at most, each (person, posting version, model) once, stored sealed; failures leave the rules' assessment. What is sent and the cost: [fit-and-practicality.md](fit-and-practicality.md#semantic-review) |
 | `JOBHUNT_GITHUB_TOKEN` | server | no | a GitHub token without scopes: GitHub evidence imports at the authenticated rate limit, with language statistics (secret; without it, imports share GitHub's 60 requests/hour and use each repository's primary language) |
 | `JOBHUNT_WEB_URL` | server, notify | for email | the web app's https URL (links in emails) |
 | `JOBHUNT_EMAIL_PROVIDER` | server, notify | for email | `resend`, `file` (development; refused in production) or `none` (default) |

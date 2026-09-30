@@ -66,7 +66,7 @@ async fn first_run_then_a_fast_repeated_shortlist() {
             "passed basic eligibility",
             "looked plausible",
             "worth reviewing",
-            "Member of Technical Staff - Systems — Modal   Strong fit",
+            "Member of Technical Staff - Systems — Modal   Worth reviewing",
             "✓ Verified open just now · ✓ Eligible",
             "Why this may be worth your time",
             "Used stored jobs (every source read just now",

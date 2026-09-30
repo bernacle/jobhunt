@@ -112,9 +112,11 @@ fn rank_for(record: &JobRecord, person: &Person, facts: &ProfileFacts) -> Rankin
         state: &state,
     };
     let taste = TasteModel::empty("rules/1");
+    let profile = crate::testing::taste_of(person);
     let ctx = Context {
         person,
         taste: &taste,
+        taste_profile: &profile,
         now: now(),
     };
     rank(&candidate, &ctx).expect("a ranking")
@@ -137,9 +139,9 @@ fn excluded(r: &Ranking) -> Option<&Exclusion> {
     }
 }
 
-/// On Today: not excluded, and at least worth reviewing.
+/// On Today: not excluded, and a strong fit.
 fn on_today(r: &Ranking) -> bool {
-    !r.gate.is_excluded() && r.tier >= Tier::WorthReviewing
+    !r.gate.is_excluded() && r.tier == Tier::StrongFit
 }
 
 #[test]
@@ -155,8 +157,9 @@ fn brazil_remote_and_global_remote_with_unknown_pay_appear_unresolved() {
         assert!(on_today(&r), "{location}: {:?} {:?}", r.tier, summaries(&r));
         assert_eq!(
             r.tier,
-            Tier::WorthReviewing,
-            "{location}: unknown pay against a required minimum is never a strong fit"
+            Tier::StrongFit,
+            "{location}: unknown pay against a required minimum is a thing to check, never a \
+             doubt about the fit"
         );
         assert!(
             has(
@@ -173,8 +176,14 @@ fn brazil_remote_and_global_remote_with_unknown_pay_appear_unresolved() {
             r.brief.unknowns
         );
         assert!(
-            !has(&r, SignalKind::Plus, "Meets your minimum"),
+            !r.signals
+                .iter()
+                .any(|s| s.summary.contains("Meets your minimum")),
             "unknown pay never meets a minimum"
+        );
+        assert_eq!(
+            r.practicality.pay,
+            crate::practicality::PayStanding::Unpublished
         );
     }
 }
@@ -182,17 +191,25 @@ fn brazil_remote_and_global_remote_with_unknown_pay_appear_unresolved() {
 #[test]
 fn verified_pay_decides_the_minimum() {
     let person = person();
-    // At or above the minimum across the range: it meets it, and nothing
-    // stands between the job and a strong fit.
+    // At or above the minimum across the range: it meets it, a practical
+    // fact, never a reason for fit.
     let mut above = remote("Remote - Brazil", SMALL_TEAM);
     usd(&mut above, 150_000.0, 180_000.0);
     let r = rank_for(&above, &person, &facts(Stance::Required));
     assert_eq!(r.gate, Gate::Recommended);
     assert!(has(
         &r,
-        SignalKind::Plus,
+        SignalKind::Context,
         "Meets your minimum of USD 140,000 per year"
     ));
+    assert_eq!(r.practicality.pay, crate::practicality::PayStanding::Meets);
+    assert!(
+        r.practicality
+            .facts
+            .iter()
+            .any(|f| f.contains("Meets your minimum"))
+    );
+    assert!(!r.brief.worth.iter().any(|w| w.contains("minimum")));
     assert_eq!(r.tier, Tier::StrongFit, "{:?}", summaries(&r));
 
     // Verified below: a conflict, out of Today.
@@ -216,7 +233,16 @@ fn currency_is_never_assumed() {
     let r = rank_for(&eur, &person, &facts(Stance::Required));
     assert!(has(&r, SignalKind::Unknown, "currencies are not converted"));
     assert!(has(&r, SignalKind::Unknown, "Unresolved"));
-    assert!(r.tier <= Tier::WorthReviewing);
+    assert!(
+        r.brief.unknowns[0].starts_with("Unresolved"),
+        "{:?}",
+        r.brief.unknowns
+    );
+    assert_eq!(
+        r.tier,
+        Tier::StrongFit,
+        "pay that can't be compared is a thing to check"
+    );
 
     // A minimum read without a currency is never compared with anything.
     let mut no_currency = person.clone();
@@ -230,7 +256,14 @@ fn currency_is_never_assumed() {
         r.gate
     );
     assert!(has(&r, SignalKind::Unknown, "needs a currency"));
-    assert!(r.tier <= Tier::WorthReviewing);
+    assert!(
+        r.practicality
+            .checks
+            .iter()
+            .any(|c| c.contains("needs a currency")),
+        "{:?}",
+        r.practicality
+    );
 }
 
 #[test]
@@ -433,7 +466,7 @@ fn remote_geography_must_have_and_nice_to_have() {
         );
         assert_eq!(r.gate, Gate::Recommended, "{location}");
     }
-    // A posting with no scope: unresolved, never a strong fit.
+    // A posting with no scope: unresolved, a thing to check first.
     let r = rank_for(
         &remote("Remote", SMALL_TEAM),
         &must,
@@ -444,7 +477,15 @@ fn remote_geography_must_have_and_nice_to_have() {
         SignalKind::Unknown,
         "Unresolved: you require remote roles open to"
     ));
-    assert!(r.tier <= Tier::WorthReviewing);
+    assert!(
+        r.brief
+            .unknowns
+            .iter()
+            .take_while(|u| u.starts_with("Unresolved"))
+            .any(|u| u.starts_with("Unresolved: you require remote roles open to")),
+        "the person's requirements come first: {:?}",
+        r.brief.unknowns
+    );
 
     // Must have Europe (someone in Brazil with an eye on European teams):
     // a Brazil-only scope is a stated conflict, not "can't take it".
@@ -479,7 +520,7 @@ fn remote_geography_must_have_and_nice_to_have() {
 fn unrecognized_required_geography_stays_unresolved() {
     let mut paid = remote("Remote - Brazil", SMALL_TEAM);
     usd(&mut paid, 150_000.0, 180_000.0);
-    // Narnia alone: shown, unresolved, never a strong fit.
+    // Narnia alone: shown, unresolved, the first thing to check.
     let mut odd = person();
     odd.remote_geography = vec![geography("Narnia", Stance::Required)];
     let r = rank_for(&paid, &odd, &facts(Stance::Required));
@@ -489,8 +530,15 @@ fn unrecognized_required_geography_stays_unresolved() {
         SignalKind::Unknown,
         "Unresolved: you require remote roles open to Narnia"
     ));
-    assert_eq!(r.tier, Tier::WorthReviewing, "{:?}", summaries(&r));
-    // The same job with a recognized, met requirement can be a strong fit.
+    assert!(
+        r.practicality
+            .checks
+            .iter()
+            .any(|c| c.starts_with("Unresolved: you require remote roles open to Narnia")),
+        "{:?}",
+        r.practicality
+    );
+    // The same job with a recognized, met requirement: nothing to check.
     let mut latam = person();
     latam.remote_geography = vec![geography("Latin America", Stance::Required)];
     assert_eq!(
@@ -511,7 +559,7 @@ fn unrecognized_required_geography_stays_unresolved() {
         SignalKind::Unknown,
         "Unresolved: you require remote roles open to Europe or Narnia"
     ));
-    assert!(r.tier <= Tier::WorthReviewing);
+    assert!(!r.practicality.checks.is_empty());
     // Europe or Latin America: the certain match decides.
     either.remote_geography = vec![
         geography("Europe", Stance::Required),
@@ -533,7 +581,7 @@ fn unrecognized_required_geography_stays_unresolved() {
 }
 
 /// Codex review #6: an uncertain membership (Mexico in "North America")
-/// is unresolved: never rendered as met, never enough for a strong fit.
+/// is unresolved: never rendered as met, and said as a thing to check.
 #[test]
 fn an_uncertain_membership_is_not_a_match() {
     let mut mexico = ProfileFacts::living_in("Mexico City, Mexico");
@@ -554,7 +602,14 @@ fn an_uncertain_membership_is_not_a_match() {
         SignalKind::Unknown,
         "Unresolved: you require remote roles open to North America"
     ));
-    assert_eq!(r.tier, Tier::WorthReviewing);
+    assert!(
+        r.practicality
+            .checks
+            .iter()
+            .any(|c| c.contains("North America")),
+        "{:?}",
+        r.practicality
+    );
     // A wanted one that can't be checked weighs nothing either way.
     let mut nice = person();
     nice.remote_geography = vec![geography("North America", Stance::Wanted)];
@@ -640,9 +695,11 @@ fn geography_probe() {
     let state = OpportunityState::default();
     let taste = TasteModel::empty("rules/1");
     let run = |person: &Person| {
+        let profile = crate::testing::taste_of(person);
         let ctx = Context {
             person,
             taste: &taste,
+            taste_profile: &profile,
             now: now(),
         };
         let started = std::time::Instant::now();
@@ -844,7 +901,7 @@ fn a_us_only_remote_job_listing_offices_first_is_excluded() {
 }
 
 /// Anthropic: remote-friendly, but also 25% in an office and travel
-/// required. Unresolved, said first, never a strong fit.
+/// required. Unresolved and said first; the fit is a separate question.
 #[test]
 fn a_remote_job_with_an_office_policy_is_unresolved_and_says_so() {
     let mut anthropic = remote(
@@ -871,11 +928,15 @@ fn a_remote_job_with_an_office_policy_is_unresolved_and_says_so() {
     assert!(r.brief.unknowns[0].contains("25% of the time"));
     assert_eq!(
         r.tier,
-        Tier::WorthReviewing,
-        "never a strong fit: {:?}",
+        Tier::StrongFit,
+        "the office policy is a thing to check, not a doubt about fit: {:?}",
         summaries(&r)
     );
-    // The same job without the policy is fine, and can be a strong fit.
+    assert_eq!(
+        r.practicality.status,
+        crate::practicality::PracticalStatus::Check
+    );
+    // The same job without the policy: nothing to check about the setup.
     let mut plain = remote("Remote - Brazil", SMALL_TEAM);
     usd(&mut plain, 405_000.0, 485_000.0);
     assert_eq!(
@@ -971,4 +1032,52 @@ fn stated_remote_scope_and_ambiguous_geography() {
         SignalKind::Unknown,
         "Unresolved: you require remote roles open to Georgia"
     ));
+}
+
+/// BRU-320's Atlasfield: a range labeled for US-based candidates says
+/// nothing about pay in Brazil. Never read as meeting a floor or target,
+/// never compared, never a reason to exclude: unknown, and said so.
+#[test]
+fn a_pay_range_for_another_location_is_not_the_persons_pay() {
+    let mut someone = person();
+    someone.home = region_area("São Paulo, Brazil");
+    let labeled = |min: f64, max: f64| {
+        let mut r = remote("Remote - Americas", SMALL_TEAM);
+        let mut pay = salary(Some("USD"), min, max, None);
+        pay.components[0].label = Some("US base salary range".into());
+        r.posting.compensation = Some(pay);
+        r
+    };
+    for (min, max) in [(190_000.0, 230_000.0), (60_000.0, 80_000.0)] {
+        let r = rank_for(&labeled(min, max), &someone, &facts(Stance::Required));
+        assert!(!r.gate.is_excluded(), "{:?}", r.gate);
+        assert_eq!(
+            r.practicality.pay,
+            crate::practicality::PayStanding::ForAnotherLocation
+        );
+        assert!(
+            !r.signals
+                .iter()
+                .any(|s| s.summary.contains("Meets your minimum")
+                    || s.summary.contains("below your minimum")),
+            "{:?}",
+            summaries(&r)
+        );
+        assert!(
+            r.practicality.checks.iter().any(|c| c
+                .starts_with("The published pay range is for the United States; what it pays in Brazil isn't stated")),
+            "{:?}",
+            r.practicality
+        );
+        assert_eq!(r.tier, Tier::StrongFit, "pay never moves fit");
+    }
+    // Someone in the US: the same range is theirs.
+    let mut american = person();
+    american.home = region_area("Denver, Colorado");
+    let r = rank_for(
+        &labeled(190_000.0, 230_000.0),
+        &american,
+        &ProfileFacts::living_in("Denver, Colorado"),
+    );
+    assert_eq!(r.practicality.pay, crate::practicality::PayStanding::Meets);
 }

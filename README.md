@@ -32,29 +32,22 @@ Checked 11 open jobs
 6 looked plausible
 3 are worth reviewing
 
-  1. Member of Technical Staff - Systems — Modal   Strong fit
+  1. Member of Technical Staff - Systems — Modal   Worth reviewing
      backend, infrastructure · Linux · infrastructure, ai · USD 220,000 – 300,000 per year · on-site
      ✓ Verified open just now · ✓ Eligible: The on-site office is in New York, where you live
      Why this may be worth your time
-       + Infrastructure roles: a role you want
-       + Backend roles: a role you want
-       + Infrastructure: a domain you want
+       + Senior backend work (from what the description asks for), the kind of engineering you want
      opp_c22d474a · narrow why opp_c22d474a
 
-  2. Security Engineer, Cloud — Ramp   Strong fit
-     …
-
-  3. Forward Deployed Engineer - ML — Modal   Worth reviewing
-     solutions / forward-deployed engineering, machine learning · ai, infrastructure · USD 180,000 – 250,000 per year
-     ✓ Verified open just now · ✓ Eligible: The office is in New York, where you live
+  2. Security Engineer, Cloud — Ramp   Worth reviewing
+     infrastructure, security · AWS, Terraform · security, infrastructure · USD 211,400 – 290,600 per year · hybrid
+     ✓ Verified open just now · ✓ Eligible: The listing allows remote work from the United States
      Why this may be worth your time
-       + Infrastructure: a domain you want
-       + Meets your minimum of USD 180,000 per year across the range
-       + You've worked in infrastructure (Banco Horizonte)
-     Things to consider
-       - Not one of the roles you listed (infrastructure roles, backend roles)
-       - Customer-facing engineering (solutions / forward-deployed), not product engineering
-     opp_011ee5ec · narrow why opp_011ee5ec
+       + Touches infrastructure (the team: “Cloud”), close to the infrastructure work you want
+       + Senior level, matching your latest title
+     opp_55a62bd9 · narrow why opp_55a62bd9
+
+  3. …
 
 Not shown: 8 maybe or low priority (--all).
 Used stored jobs (every source read 2 hours ago; --refresh reads the job boards now).
@@ -62,7 +55,11 @@ Ranked against your profile. Tiers are coarse on purpose; `narrow why <id>` show
 ```
 
 Tiers are deliberately coarse (strong fit, worth reviewing, maybe, low
-priority); there is no match percentage. Verification and eligibility are
+priority) and say how well each job fits what you want; there is no match
+percentage. Here only the work matches what this person asked for
+("backend or infrastructure roles"): worth reviewing, not strong fits,
+however well paid. Say more (the kind of company, team, level, depth) and
+the jobs that match it all become strong fits. Verification and eligibility are
 on every line, and every reason can be traced to its evidence
 (`narrow why <id> --details`).
 
@@ -105,8 +102,8 @@ profile; what Narrow concludes from them waits for your review (see
 [LinkedIn and GitHub evidence](#linkedin-and-github-evidence)).
 
 Without a profile, `find` lists what it found and says how to start;
-without preferences it still works (on eligibility, experience and
-freshness) and says that preferences and feedback sharpen it.
+without preferences nothing is a strong fit (a job earns attention on what
+you want, never on eligibility or freshness alone), and it says so.
 
 ## The loop
 
@@ -1339,14 +1336,30 @@ it offers) is ranked normally, with its condition as a caveat.
 Uncertainty is never hidden, and a job is never ranked on eligibility it
 doesn't have.
 
-### Tiers, not percentages
+### Fit first, practicality second
 
-What you see is a coarse tier: **Strong fit**, **Worth reviewing**,
-**Maybe**, **Low priority**. Signals carry weights that order jobs within a
-tier; the sum is shown only by `why --details`, labelled as an ordering
-aid. A strong fit needs a reason in terms of what *you* want (a stated
-preference, learned taste, your own feedback), not just eligibility and
-freshness; anything you said you don't want caps a job at Maybe.
+Every job is assessed on two separate questions (the whole design is in
+[docs/fit-and-practicality.md](docs/fit-and-practicality.md)):
+
+- **Fit**: would you genuinely want this company and role? Read against
+  your taste profile (what you said, confirmed or corrected counts more
+  than Narrow's readings and inferences, which count more than patterns
+  learned from feedback): the shape of the work (the title's own role
+  words first), its depth (building a storage engine is not using
+  PostgreSQL), the level, the company, team, ownership and culture.
+- **Practicality**: can you pursue it, and what still needs checking?
+  Eligibility, verification, pay, the work setup. Practicality never
+  creates fit: pay, remote work, verification and freshness add nothing,
+  and what a posting doesn't say (pay, team size) never counts against it.
+
+What you see is a coarse tier, the fit: **Strong fit** (the work and at
+least one more aspect affirmatively fit what you want, and nothing
+contradicts it), **Worth reviewing** (something points to it, not enough),
+**Maybe** (little does), **Low priority** (something you said you don't
+want, a level two steps from yours, a specialization you neither want nor
+have shown). Today shows strong fits only; `find` also lists jobs worth
+reviewing. `why --details` shows how the fit was assessed: every reason and
+contradiction, whose statement it rests on, and the practicality.
 
 ### Signals
 
@@ -1357,7 +1370,7 @@ eligibility), a one-line summary, and its evidence.
 
 | Group | Reads |
 | --- | --- |
-| eligibility, verification | the stored assessment: eligible +, conditional as a caveat; verified fresh +, aging, or not trusted yet |
+| eligibility, verification | the stored assessment: eligible, conditional (a thing to check), uncertain; verified fresh, aging, or not trusted yet |
 | role | the job's role shape from its title (backend, frontend, full stack, platform, infrastructure, SRE / DevOps, data, mobile, machine learning, security, embedded, solutions / forward-deployed, sales, product management, design), or its description when the title says only "Software Engineer"; against roles you want, accept, require or avoid; a non-engineering job when your resume is engineering; your role experience (context) |
 | seniority | the title's level against your latest title (junior below a senior is a caveat; a step up is a stretch, not a penalty) |
 | stack | technologies the job *requires* (its title, requirements lists, "must"/"strong experience" sentences) against those your resume shows you used; "nice to have" and passing mentions don't count; one missing technology is never a reason to skip |
@@ -1386,11 +1399,13 @@ stored, which says so):
   a bare `$` is never USD. Anything else is an **unknown**, with why ("Pay
   is in EUR; your minimum is in USD");
 - **not published is unknown, not low**;
+- a range labeled for another location ("US base salary range" when you
+  live in Brazil) is not your pay: never compared, an unknown with why;
 - a range topping out below a **required** minimum rules the job out when
-  that pay is verified, and is a heavy penalty until then; below a
-  preferred minimum it is a heavy penalty. A range starting below your
-  minimum is a caveat;
-- reaching your target (across the range, or at its top) counts for it;
+  that pay is verified, and is a practical concern until then; below a
+  preferred minimum or your target it is a concern. None of it changes
+  the fit;
+- reaching your target is a practical fact, never a reason for fit;
 - your minimum or target without a currency is never compared (set one
   with `narrow preferences set compensation --currency …`);
 - if you've turned jobs down over pay before, unknown or low pay gets a
@@ -1537,7 +1552,7 @@ exits when the client disconnects (stdin closes).
 | Tool | Kind | Does |
 | --- | --- | --- |
 | `search_jobs` | refreshes caches, network | The shortlist (`find`): `query`, `limit` (1–25, default 5), `refresh` (`auto` \| `always` \| `never`), `verify` (default true), `include_lower_tiers`. Returns the funnel, and per opportunity: `id`, `title`, `company`, `tier`, `recommendation`, `verification` (state, trusted, verified_at, authority), `eligibility` (status, headline), `why`, `consider`, `next_step`; plus what was not shown and why |
-| `get_feed` | refreshes caches, network | What's new since the person last looked (the web's Today): up to `limit` (1–10, default 5) strong fits and jobs worth reviewing they haven't dealt with, plus reviewed ones that changed materially (pay published or changed, remote policy, work authorization, reopened), each with why and what to consider; `caught_up: true` and an empty list when nothing new is worth their time. Never padded with weaker matches |
+| `get_feed` | refreshes caches, network | What's new since the person last looked (the web's Today): up to `limit` (1–10, default 5) strong fits they haven't dealt with, plus reviewed ones that changed materially (pay published or changed, remote policy, work authorization, reopened), each with why and what to consider; `caught_up: true` and an empty list when nothing new is worth their time. Never padded with weaker matches |
 | `get_taste` | read | What JobHunt believes the person wants, kept apart: stated preferences and statements (which always win), and patterns learned from feedback with their confidence and evidence (contradictory and weak ones listed, not used) |
 | `get_job` | read | One opportunity: locations, workplace, compensation facts, description summary (`full_description` for all of it), verification, eligibility with reasons, the decision brief, pipeline state; `include_sources` adds every source record with its provenance and latest attempt. Does not mark it seen |
 | `verify_job` | network | Asks the authoritative sources now (`force`, or reuse an attempt from the last few minutes): listing and application state, authority, last attempt and success, compensation facts, eligibility, what remains uncertain, per source |

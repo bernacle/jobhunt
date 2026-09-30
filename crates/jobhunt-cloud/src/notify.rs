@@ -372,11 +372,14 @@ async fn compose(
             "notifications need JOBHUNT_WEB_URL and an email provider".into(),
         ));
     };
+    // The shortlist is reviewed here too: after discovery, in the
+    // background, so Today's requests find the reviews stored.
     let app = App::from_parts(
         Arc::clone(&config.app),
         Arc::new(store.for_user(account.user.clone())),
         DiscoveryMode::Background,
-    );
+    )
+    .with_fit_review(crate::config::fit_review(config));
     let already = store.notified_opportunities_all(&account.user).await?;
     let candidates = app
         .notification_candidates(&already, config.notify.max_items, now)

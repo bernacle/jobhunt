@@ -429,9 +429,9 @@ const SRE: &str = "Site reliability engineering: on-call rotation, incident resp
 const MARKETING: &str = "Own our brand campaigns and marketing calendar. Content, SEO and \
     events. No engineering.";
 
-/// Strong fits for Ana (a Go backend engineer who wants small product
-/// teams, remote, at least USD 120k), and jobs that are not worth her
-/// time.
+/// Jobs for Ana (a Go backend engineer who wants small product teams,
+/// remote, at least USD 120k): three strong fits and a developer-tools role
+/// only worth reviewing (`strong[3]`), and jobs that are not worth her time.
 fn corpus() -> (Vec<JobPosting>, Vec<JobPosting>) {
     let strong = vec![
         posting(
@@ -717,7 +717,8 @@ async fn today_shows_one_role_per_company() {
     };
     let token = server.token("ana").await;
     server.onboard(&token).await;
-    // Four strong roles at one company, and two strong ones elsewhere.
+    // Four roles at one company (three strong fits, and a developer-tools
+    // role only worth reviewing), and two strong ones elsewhere.
     let supa: Vec<JobPosting> = [
         ("701", "Senior Backend Engineer (Go)"),
         ("702", "Backend Engineer, Payments APIs"),
@@ -759,8 +760,8 @@ async fn today_shows_one_role_per_company() {
         .unwrap();
     assert_eq!(
         first.also_at_company.len(),
-        3,
-        "the other Supa roles go with it"
+        2,
+        "the other strong Supa roles go with it, not the weaker one"
     );
     assert!(
         first
@@ -768,7 +769,7 @@ async fn today_shows_one_role_per_company() {
             .iter()
             .all(|o| o.id != first.item.id && !ids(&feed).contains(&o.id))
     );
-    assert_eq!(feed.summary.new, 6, "held back is still new");
+    assert_eq!(feed.summary.new, 5, "held back is still new");
 
     // Held back is not shown: a day later the Supa role on the feed has
     // passed, and one of the others takes its place, new.
@@ -781,7 +782,7 @@ async fn today_shows_one_role_per_company() {
         .expect("another Supa role, never shown before");
     assert_ne!(next.item.id, first.item.id);
     assert!(first.also_at_company.iter().any(|o| o.id == next.item.id));
-    assert_eq!(next.also_at_company.len(), 2);
+    assert_eq!(next.also_at_company.len(), 1);
     assert!(
         next.first_shown_at.is_none(),
         "first shown by this feed, not before"
@@ -804,19 +805,19 @@ async fn today_is_a_small_feed_of_new_recommendations_that_can_be_finished() {
     let strong_ids = seed_each(&server, &strong, Some(1)).await;
     let weak_ids = seed_each(&server, &weak, Some(1)).await;
 
+    // Three strong fits; the developer-tools role is only worth reviewing
+    // (close to the platform work she wants), so it stays in search.
     let feed = server.feed(&token, 3).await;
     assert_eq!(feed.items.len(), 3, "a small shortlist");
     assert!(!feed.caught_up);
     assert_eq!(feed.summary.checked, 6);
     assert_eq!(feed.summary.worth_reviewing, 4);
-    assert_eq!(feed.summary.new, 4);
+    assert_eq!(feed.summary.strong_fits, 3);
+    assert_eq!(feed.summary.new, 3);
     assert_eq!(feed.summary.shown, 3);
+    assert!(!ids(&feed).contains(&strong_ids[3]), "no maybes on Today");
     for item in &feed.items {
-        assert!(
-            ["strong_fit", "worth_reviewing"].contains(&tier(item).as_str()),
-            "{}",
-            item.item.title
-        );
+        assert_eq!(tier(item), "strong_fit", "{}", item.item.title);
         assert!(!weak_ids.contains(&item.item.id), "no maybes on Today");
         assert!(!item.item.why.is_empty(), "every item says why");
         assert_eq!(item.item.compensation.status, "published");
@@ -831,9 +832,10 @@ async fn today_is_a_small_feed_of_new_recommendations_that_can_be_finished() {
     let again = server.feed(&token, 3).await;
     assert_eq!(ids(&again), ids(&feed));
 
-    // Deal with them: reject with a reason, save, mark applied.
-    let [rejected, saved, applied] =
-        [&feed.items[0], &feed.items[1], &feed.items[2]].map(|i| i.item.id.clone());
+    // Deal with them: reject one with a reason, save one, and apply to the
+    // job worth reviewing she found in search.
+    let [rejected, saved] = [&feed.items[0], &feed.items[1]].map(|i| i.item.id.clone());
+    let applied = strong_ids[3].clone();
     let (status, fb) = server
         .post(
             &format!("/api/v1/opportunities/{rejected}/feedback"),
@@ -1606,7 +1608,7 @@ async fn strong_new_recommendations_are_emailed_once_and_nothing_else_is() {
         Some(salary(150_000.0, 190_000.0)),
     );
     seed_each(&server, std::slice::from_ref(&seen), Some(1)).await;
-    let feed = server.feed(&token, 5).await;
+    let feed = server.feed(&token, 10).await;
     assert!(feed.items.iter().any(|i| i.item.company == "Omega"));
     let summary = server.notify().await;
     assert_eq!(summary.composed, 0, "{summary:?}");

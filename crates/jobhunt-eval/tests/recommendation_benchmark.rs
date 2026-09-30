@@ -297,13 +297,12 @@ fn today_is_captured_as_the_feed_selects_it() {
             );
         }
         for case in &c.cases {
-            // Excluded jobs never qualify; a qualifying job is at least
-            // worth reviewing.
+            // Excluded jobs never qualify; a qualifying job is a strong fit.
             if case.observed.gate.starts_with("excluded") {
                 assert!(!case.observed.qualifies, "{}/{}", c.id, case.job);
             }
             if case.observed.qualifies {
-                assert!(case.observed.tier >= jobhunt_ranking::Tier::WorthReviewing);
+                assert_eq!(case.observed.tier, jobhunt_ranking::Tier::StrongFit);
             }
         }
     }
@@ -551,4 +550,86 @@ fn the_built_in_reader_never_contradicts_the_confirmed_taste() {
             }
         }
     }
+}
+
+/// BRU-322's acceptance gate: what Today must never do again, and what it
+/// must keep doing. Quality stops being only recorded here: a ranking
+/// change that surfaces a No, an Impossible or a Maybe, lets pay carry a
+/// job, reads another location's range as the person's, or loses a
+/// practical Strong yes fails CI.
+#[test]
+fn the_ranker_meets_the_recommendation_gate() {
+    let f = fixtures();
+    let result = run(&f).unwrap_or_else(|e| panic!("{e}"));
+    let all = Metrics::of(result.candidates.iter().flat_map(|c| &c.cases));
+    let failing: Vec<String> = result
+        .candidates
+        .iter()
+        .flat_map(|c| {
+            c.cases
+                .iter()
+                .filter(|x| x.verdict().failed())
+                .map(move |x| format!("{}/{}: {}", c.id, x.job, x.verdict().as_str()))
+        })
+        .collect();
+    assert!(failing.is_empty(), "{failing:#?}");
+    assert_eq!(all.obvious_false_positives.hits, 0);
+    assert_eq!(all.maybes_surfaced, 0);
+    assert_eq!(all.surfaced_on_pay, 0);
+    assert_eq!(all.foreign_range_read_as_met.hits, 0);
+    assert_eq!(
+        all.strong_yes_surfaced.hits, all.strong_yes_surfaced.of,
+        "every practical Strong yes still surfaces"
+    );
+    assert!(
+        all.strong_yes_surfaced.of >= 15,
+        "not precise by being empty"
+    );
+    for c in &all.contradictions {
+        assert_eq!(c.surfaced, 0, "{} contradictions surfaced", c.kind);
+    }
+
+    // The golden cases, on the candidate they were observed on.
+    let airbnb = case(&result, SENIOR, "airbnb-early-career");
+    assert!(!airbnb.surfaced());
+    assert!(airbnb.observed.detected.contains(&Contradiction::Seniority));
+    let stripe = case(&result, SENIOR, "stripe-payments-us-remote");
+    assert!(!stripe.surfaced());
+    assert!(
+        stripe.observed.gate.contains("ineligible"),
+        "{}",
+        stripe.observed.gate
+    );
+    assert!(
+        stripe
+            .observed
+            .detected
+            .contains(&Contradiction::Eligibility)
+    );
+    let orioledb = case(&result, SENIOR, "supabase-orioledb");
+    assert!(!orioledb.surfaced());
+    assert!(
+        orioledb
+            .observed
+            .detected
+            .contains(&Contradiction::RoleDepth)
+    );
+    let anthropic = case(&result, SENIOR, "anthropic-staff-privacy");
+    assert!(!anthropic.surfaced());
+    assert!(!anthropic.observed.pay_carried);
+    // The contrast: the same storage engine is exactly right for the
+    // specialist.
+    let specialist = case(
+        &result,
+        "database-internals-specialist",
+        "supabase-orioledb",
+    );
+    assert!(specialist.surfaced());
+    assert!(
+        specialist.observed.fit.starts_with("strong"),
+        "{}",
+        specialist.observed.fit
+    );
+    // Pay unpublished doesn't hold a strong fit back.
+    assert!(case(&result, SENIOR, "lanternfish-platform-no-pay").surfaced());
 }

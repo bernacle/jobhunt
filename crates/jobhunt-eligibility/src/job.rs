@@ -835,7 +835,7 @@ pub fn sentences(text: &str) -> Vec<String> {
     out
 }
 
-const LIMIT_CUES: [&str; 38] = [
+const LIMIT_CUES: [&str; 41] = [
     "based in",
     "based out of",
     "located in",
@@ -874,6 +874,10 @@ const LIMIT_CUES: [&str; 38] = [
     "can be located",
     "_ only",
     "only in",
+    // "open to US-based candidates", "considering US-based applicants".
+    "_ based candidates",
+    "_ based applicants",
+    "_ based employees",
 ];
 
 /// Wording that makes a location statement a preference, not a rule.

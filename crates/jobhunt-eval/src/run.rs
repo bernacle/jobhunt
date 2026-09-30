@@ -3,24 +3,27 @@
 //!
 //! Every job is ranked exactly as `RankingService::rank` ranks it
 //! ([`jobhunt_ranking::rank()`] on the eligibility assessment, with the
-//! person read by [`Person::from_profile`]); the only differences are that
-//! nothing is stored and learned taste is empty (a person with no
-//! feedback yet).
+//! person read by [`Person::from_profile`] and the taste profile composed
+//! by [`fn@jobhunt_profile::taste::compose`]); the only differences are that
+//! nothing is stored, learned taste is empty (a person with no feedback
+//! yet) and no semantic reviewer is configured (the benchmark never calls
+//! a model).
 //!
 //! Today is then selected as `jobhunt-app`'s feed selects it (`feed.rs`):
 //! a job **qualifies** for Today ("worth your attention") when its gate is
-//! not an exclusion and its tier is at least worth reviewing; the **feed**
-//! is the qualifying jobs in rank order, one per company, at most
-//! [`FEED_LIMIT`]. Every benchmark job is new to the candidate, so the
-//! feed's "new" rule keeps all of them. If the feed's selection changes,
-//! [`qualifies`] and [`feed`] must change with it.
+//! not an exclusion and it is a strong fit; the **feed** is the qualifying
+//! jobs in rank order, one per company, at most [`FEED_LIMIT`]. Every
+//! benchmark job is new to the candidate, so the feed's "new" rule keeps
+//! all of them. If the feed's selection changes, [`qualifies`] and [`feed`]
+//! must change with it.
 
 use jobhunt_core::text::search_key;
 use jobhunt_eligibility::{Eligibility, ProfileFacts};
+use jobhunt_profile::taste::{TasteProfile, compose};
 use jobhunt_ranking::rank::order;
 use jobhunt_ranking::{
-    Candidate, Context, Exclusion, Gate, OpportunityState, Person, RULE_READER_REVISION, Ranking,
-    SignalGroup, SignalKind, TasteModel, Tier, rank,
+    Candidate, Context, ContradictionKind, Exclusion, Gate, OpportunityState, PayStanding, Person,
+    RULE_READER_REVISION, Ranking, Severity, SignalGroup, SignalKind, TasteModel, Tier, rank,
 };
 
 use crate::build::{self, BuildError};
@@ -31,10 +34,10 @@ use crate::taxonomy::{Contradiction, Label, TodayExpectation};
 pub const FEED_LIMIT: usize = 5;
 
 /// Whether a ranking earns "worth your attention": what the feed
-/// considers (`tier >= WorthReviewing` among the rankings that are not
-/// excluded).
+/// considers (strong fits among the rankings that are not excluded; see
+/// `jobhunt_app::feed::qualifies_for_today`).
 pub fn qualifies(r: &Ranking) -> bool {
-    !r.gate.is_excluded() && r.tier >= Tier::WorthReviewing
+    !r.gate.is_excluded() && r.tier == Tier::StrongFit
 }
 
 /// The Today feed from a pool: qualifying rankings in rank order, the
@@ -82,19 +85,21 @@ pub fn gate_label(gate: &Gate) -> String {
     }
 }
 
-/// The contradictions the current ranker flagged on its own: a negative
-/// signal (or a gate) of the kind that would carry each one.
+/// The contradictions the ranker flagged on its own: one its fit
+/// assessment holds against the job (material or holding), or a gate of
+/// the kind that would carry it.
 pub fn detected(r: &Ranking) -> Vec<Contradiction> {
-    let negative = |groups: &[SignalGroup]| {
-        r.signals
+    let against = |kinds: &[ContradictionKind]| {
+        r.fit
+            .contradictions
             .iter()
-            .any(|s| groups.contains(&s.group) && (s.weight < 0.0 || s.kind == SignalKind::Blocker))
+            .any(|c| kinds.contains(&c.kind) && c.severity >= Severity::Holding)
     };
     let mut out = Vec::new();
-    if negative(&[SignalGroup::Seniority]) {
+    if against(&[ContradictionKind::Seniority]) {
         out.push(Contradiction::Seniority);
     }
-    if negative(&[SignalGroup::Role, SignalGroup::Stack]) {
+    if against(&[ContradictionKind::RoleDepth, ContradictionKind::WorkShape]) {
         out.push(Contradiction::RoleDepth);
     }
     let ruled_out = matches!(
@@ -110,7 +115,11 @@ pub fn detected(r: &Ranking) -> Vec<Contradiction> {
     if ruled_out || blocked {
         out.push(Contradiction::Eligibility);
     }
-    if negative(&[SignalGroup::Company]) {
+    if against(&[
+        ContradictionKind::CompanyShape,
+        ContradictionKind::TeamShape,
+        ContradictionKind::Culture,
+    ]) {
         out.push(Contradiction::CompanyShape);
     }
     out
@@ -125,6 +134,13 @@ pub struct Observed {
     pub eligibility: Eligibility,
     pub tier: Tier,
     pub score: f64,
+    /// The fit level, and what it rests on (`strong (role 1.00, support
+    /// 3.00)`).
+    pub fit: String,
+    /// What the fit assessment holds against the job, most material first.
+    pub against: Vec<String>,
+    /// The practical status (`clear`, `check`, `concern`, `impossible`).
+    pub practical: String,
     /// Earns "worth your attention" (see [`qualifies`]).
     pub qualifies: bool,
     /// Among the few the feed shows.
@@ -294,6 +310,7 @@ fn rank_one(
     person: &Person,
     facts: &ProfileFacts,
     taste: &TasteModel,
+    taste_profile: &TasteProfile,
 ) -> Result<(Ranking, Eligibility), BuildError> {
     let assessment = build::assessment(job, record, facts);
     let records = [record.clone()];
@@ -306,6 +323,7 @@ fn rank_one(
     let ctx = Context {
         person,
         taste,
+        taste_profile,
         now: build::now(),
     };
     let ranking = rank(&candidate, &ctx).ok_or_else(|| BuildError::Job {
@@ -324,6 +342,7 @@ pub fn run_candidate(
     let person = Person::from_profile(&data);
     let facts = ProfileFacts::from_profile(&data);
     let taste = TasteModel::empty(RULE_READER_REVISION);
+    let taste_profile = compose(&data, &[]);
     let without_pay = Person {
         pay: Vec::new(),
         ..person.clone()
@@ -337,9 +356,10 @@ pub fn run_candidate(
             });
         };
         let record = build::record(job)?;
-        let (ranking, eligibility) = rank_one(job, &record, &person, &facts, &taste)?;
+        let (ranking, eligibility) =
+            rank_one(job, &record, &person, &facts, &taste, &taste_profile)?;
         let pay_carried = qualifies(&ranking)
-            && !qualifies(&rank_one(job, &record, &without_pay, &facts, &taste)?.0);
+            && !qualifies(&rank_one(job, &record, &without_pay, &facts, &taste, &taste_profile)?.0);
         ranked.push((judgment, job, ranking, eligibility, pay_carried));
     }
     let rankings: Vec<Ranking> = ranked.iter().map(|(_, _, r, ..)| r.clone()).collect();
@@ -375,6 +395,19 @@ pub fn run_candidate(
                 eligibility,
                 tier: r.tier,
                 score: r.score,
+                fit: format!(
+                    "{} (role {:.2}, support {:.2})",
+                    r.fit.level.as_str(),
+                    r.fit.role_fit,
+                    r.fit.support
+                ),
+                against: r
+                    .fit
+                    .contradictions
+                    .iter()
+                    .map(|c| format!("{} {}: {}", c.severity.as_str(), c.kind.as_str(), c.text))
+                    .collect(),
+                practical: r.practicality.status.as_str().to_owned(),
                 qualifies: qualifies(&r),
                 in_feed: on_feed.contains(&r.opportunity),
                 worth: r.brief.worth.clone(),
@@ -382,10 +415,7 @@ pub fn run_candidate(
                 unknowns: r.brief.unknowns.clone(),
                 detected: detected(&r),
                 pay_carried,
-                pay_read_as_met: r
-                    .signals
-                    .iter()
-                    .any(|s| s.group == SignalGroup::Compensation && s.weight > 0.0),
+                pay_read_as_met: r.practicality.pay == PayStanding::Meets,
                 eligibility_unconfirmed: matches!(r.gate, Gate::EligibilityUnclear { .. }),
             },
         })

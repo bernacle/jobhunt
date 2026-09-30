@@ -8,8 +8,13 @@
 //! marked applied or put aside, the person is caught up, and nothing
 //! mediocre takes their place.
 //!
-//! It is built from the same ranking (tiers, gates, briefs:
-//! [`jobhunt_ranking`]); only the selection is its own:
+//! It is built from the same ranking (fit, practicality, gates, briefs:
+//! [`jobhunt_ranking`]); only the selection is its own. Today is the small
+//! set Narrow puts its name behind: **strong fits** only
+//! ([`qualifies_for_today`]), whatever their practical unknowns (pay not
+//! published, remote scope unclear: shown as things to check). A plausible
+//! fit ("worth reviewing") stays in search and never fills Today; Today may
+//! hold one job, or none.
 //!
 //! | The person's state | On the feed |
 //! | --- | --- |
@@ -19,8 +24,8 @@
 //! | looked at / put aside ("not now") / saved | only if it **changed** materially since |
 //! | rejected, applied, interviewing, offer, closed, ineligible | never (the ranking gate excludes it) |
 //!
-//! Only strong fits and jobs worth reviewing are candidates: a feed with
-//! nothing new is *caught up*, not padded with maybes.
+//! Only strong fits are candidates: a feed with nothing new is *caught up*,
+//! not padded with weaker jobs, and there is no quota.
 //!
 //! A material change is one the job's history records (discovery's
 //! UPDATED / REOPENED events, see [`jobhunt_jobs::lifecycle`]) in a field
@@ -127,11 +132,20 @@ pub struct SameCompany {
     pub title: String,
 }
 
+/// Whether a ranking earns a place on Today ("worth your attention"): a
+/// strong fit, not excluded. Plausible fits never do, however few strong
+/// ones there are.
+pub fn qualifies_for_today(r: &Ranking) -> bool {
+    !r.gate.is_excluded() && r.tier == Tier::StrongFit
+}
+
 /// Today's picks, in rank order: each company's best-ranked candidate,
 /// until `limit` companies are on it. A company's other candidates go
-/// with its pick instead of taking a slot; nothing pads the feed when
-/// fewer companies qualify. One rule, no score: Today is a few distinct
-/// decisions, and "do I want this company?" is one of them.
+/// with its pick instead of taking a slot; they are strong fits on their
+/// own (only strong fits are candidates), never roles carried by the
+/// company's best one. Nothing pads the feed when fewer companies
+/// qualify. One rule, no score: Today is a few distinct decisions, and "do
+/// I want this company?" is one of them.
 fn one_per_company<T>(
     candidates: Vec<T>,
     limit: usize,
@@ -264,7 +278,7 @@ fn ms_since(started: Instant) -> u64 {
 }
 
 fn report_ms(t: &jobhunt_ranking::RankTimings) -> u64 {
-    t.person_ms + t.load_ms + t.eligibility_ms + t.ranking_ms
+    t.person_ms + t.load_ms + t.eligibility_ms + t.ranking_ms + t.review_ms
 }
 
 impl LocalApp {
@@ -302,8 +316,8 @@ impl LocalApp {
         (changes, latest)
     }
 
-    /// Sorts every recommendation worth reviewing into new, changed and
-    /// passed over (see the module docs).
+    /// Sorts every strong fit into new, changed and passed over (see the
+    /// module docs).
     async fn classify<'r>(
         &self,
         report: &'r RankReport,
@@ -313,7 +327,7 @@ impl LocalApp {
         let worth: Vec<&Ranking> = report
             .rankings
             .iter()
-            .filter(|r| r.tier >= Tier::WorthReviewing)
+            .filter(|r| qualifies_for_today(r))
             .collect();
         let ids: Vec<OpportunityId> = worth.iter().map(|r| r.opportunity).collect();
         let marks = self.store().feed_marks(&ids).await?;
@@ -540,6 +554,15 @@ impl LocalApp {
             classify_ms = timings.classify_ms,
             select_ms = timings.select_ms,
             considered = report.considered,
+            strong_fits = report
+                .rankings
+                .iter()
+                .filter(|r| qualifies_for_today(r))
+                .count(),
+            review_ms = report.timings.review_ms,
+            reviewed_from_cache = report.review.cache_hits,
+            review_calls = report.review.calls,
+            review_failures = report.review.failures,
             shown = entries.len(),
             "today prepared"
         );
@@ -713,6 +736,9 @@ pub struct FeedSummary {
     pub passed_eligibility: usize,
     /// Of those, strong fits and jobs worth reviewing.
     pub worth_reviewing: usize,
+    /// Of those, strong fits: what Today chooses from.
+    #[serde(default)]
+    pub strong_fits: usize,
     /// Of those, new to the person.
     pub new: usize,
     /// Reviewed before and changed materially since.
@@ -804,6 +830,11 @@ impl FeedView {
                     .rankings
                     .iter()
                     .filter(|r| r.tier >= Tier::WorthReviewing)
+                    .count(),
+                strong_fits: report
+                    .rankings
+                    .iter()
+                    .filter(|r| qualifies_for_today(r))
                     .count(),
                 new: feed.new_total,
                 changed: feed.changed_total,

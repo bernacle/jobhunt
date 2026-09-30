@@ -77,8 +77,12 @@ test("an unusually long peer title and reason keep the grid aligned and remain r
   await signIn(page, "e2e-long-peer");
   const peers = page.getByRole("list", { name: "Also worth a look" }).getByRole("article");
   await expect(peers.nth(1)).toBeVisible();
-  const stressIndex = await peers.evaluateAll((cards) => cards.slice(0, 2).findIndex((card) => Boolean(card.children[4]?.querySelector("li"))));
+  // A peer with a concern (strong fits rarely have one), and the peer
+  // beside it in the same row of the grid.
+  const stressIndex = await peers.evaluateAll((cards) => cards.findIndex((card) => Boolean(card.children[4]?.querySelector("li"))));
   expect(stressIndex).toBeGreaterThanOrEqual(0);
+  const pair: [number, number] = stressIndex % 2 === 0 ? [stressIndex, stressIndex + 1] : [stressIndex - 1, stressIndex];
+  await expect(peers.nth(pair[1])).toBeVisible();
   const stressed = peers.nth(stressIndex);
 
   const title = "Principal Staff Platform Engineer for Global Payments, Cross-Border Settlement, Identity, Risk, and Developer Infrastructure Across Multiple Regions";
@@ -91,13 +95,13 @@ test("an unusually long peer title and reason keep the grid aligned and remain r
   }, { title, reason, condition });
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  const desktop = await peers.evaluateAll((cards) => cards.slice(0, 2).map((card) => ({
+  const desktop = await peers.evaluateAll((cards, [a, b]) => cards.slice(a, b + 1).map((card) => ({
     facts: Math.round(card.children[2]!.getBoundingClientRect().top),
     reason: Math.round(card.children[3]!.getBoundingClientRect().top),
     concern: Math.round(card.children[4]!.getBoundingClientRect().top),
     verification: Math.round(card.children[5]!.getBoundingClientRect().top),
     actions: Math.round(card.children[6]!.getBoundingClientRect().top),
-  })));
+  })), pair);
   expect(desktop[0]).toEqual(desktop[1]);
   const desktopFlow = await stressed.evaluate((card) => ({
     conditionBottom: card.children[4]!.getBoundingClientRect().bottom,

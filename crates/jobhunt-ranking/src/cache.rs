@@ -20,6 +20,7 @@ use jobhunt_jobs::{JobId, OpportunityId, StorageError};
 
 use crate::feedback::FeedbackEvent;
 use crate::rank::{Candidate, Context, RANKING_VERSION, Ranking, rank};
+use crate::review::FitReview;
 
 const CACHE_NAMESPACE: &str = "jobhunt.ranking.v1";
 
@@ -95,6 +96,23 @@ pub trait RankingRepository: Send + Sync {
         &self,
         key: &RankKey,
         ranking: &Ranking,
+        at: DateTime<Utc>,
+    ) -> Result<(), StorageError>;
+
+    /// The semantic review stored under exactly this key
+    /// ([`crate::review::review_key`]), if any.
+    async fn cached_fit_review(
+        &self,
+        profile_id: &str,
+        key: &str,
+    ) -> Result<Option<FitReview>, StorageError>;
+
+    /// Stores a semantic review (replacing one under the same key).
+    async fn store_fit_review(
+        &self,
+        profile_id: &str,
+        key: &str,
+        review: &FitReview,
         at: DateTime<Utc>,
     ) -> Result<(), StorageError>;
 }

@@ -1482,6 +1482,9 @@ fn money(currency: &str, amount: f64, period: PayPeriod) -> String {
 
 /// The pay signals, and what they decide beyond the score.
 pub struct PayReading {
+    /// How the published pay reads against what the person wants (a
+    /// practical fact, never fit).
+    pub standing: crate::practicality::PayStanding,
     pub signals: Vec<Signal>,
     /// Verified pay below a required minimum: rules the job out.
     pub below_minimum: Option<String>,
@@ -1494,21 +1497,77 @@ pub struct PayReading {
     pub unresolved: bool,
 }
 
+/// Where a published range says it applies, when it says ("US base salary
+/// range", "Canada Annual Pay Range").
+fn range_areas(r: &PayRange) -> Vec<Area> {
+    r.label
+        .as_deref()
+        .map(jobhunt_eligibility::geo::places_in_text)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|a| *a != Area::Worldwide)
+        .collect()
+}
+
+/// "the United States", "Canada".
+fn the(place: &str) -> String {
+    let needs = [
+        "United ",
+        "Netherlands",
+        "Philippines",
+        "Czech Republic",
+        "Americas",
+    ];
+    if needs.iter().any(|n| place.starts_with(n)) {
+        format!("the {place}")
+    } else {
+        place.to_owned()
+    }
+}
+
+/// Whether a range certainly applies elsewhere than where the person lives.
+fn for_elsewhere(r: &PayRange, home: Option<Area>) -> bool {
+    let Some(country) = home.and_then(|h| h.country()) else {
+        return false;
+    };
+    let areas = range_areas(r);
+    !areas.is_empty() && areas.iter().all(|a| a.contains(country) == Membership::No)
+}
+
 /// The pay signals, and whether the job is ruled out (verified pay below a
-/// required minimum) or its pay is unknown.
+/// required minimum) or its pay is unknown. Pay is practical: its signals
+/// weigh nothing, and meeting a target is a fact, not a reason for fit.
 pub fn compensation(i: &Inputs<'_>) -> PayReading {
+    use crate::practicality::PayStanding;
     let group = SignalGroup::Compensation;
     let pay = i.compensation;
     let provenance = pay.provenance(i.now);
-    let salaries: Vec<&PayRange> = pay
+    let all_salaries: Vec<&PayRange> = pay
         .check
         .ranges
         .iter()
         .filter(|r| r.kind == "salary")
         .collect();
+    // A range published for another location says nothing about this
+    // person's pay ("US base salary range" for someone in Brazil).
+    let elsewhere: Vec<&PayRange> = all_salaries
+        .iter()
+        .copied()
+        .filter(|r| for_elsewhere(r, i.person.home))
+        .collect();
+    let salaries: Vec<&PayRange> = all_salaries
+        .iter()
+        .copied()
+        .filter(|r| !for_elsewhere(r, i.person.home))
+        .collect();
     let mut out = Vec::new();
     let mut blocked = None;
     let mut unknown = None;
+    let mut standing = if i.person.pay.is_empty() {
+        PayStanding::NoPreference
+    } else {
+        PayStanding::Unpublished
+    };
     let published = pay.check.status == CompensationStatus::Published;
     let applicable: Vec<&PayPreference> = i
         .person
@@ -1520,6 +1579,22 @@ pub fn compensation(i: &Inputs<'_>) -> PayReading {
     let mut unchecked: Vec<&PayPreference> = Vec::new();
     if !published || salaries.is_empty() {
         let summary = match (&pay.check.summary, published) {
+            _ if !elsewhere.is_empty() => {
+                if !i.person.pay.is_empty() {
+                    standing = PayStanding::ForAnotherLocation;
+                }
+                let areas: Vec<Area> = elsewhere.iter().flat_map(|r| range_areas(r)).collect();
+                let home = i
+                    .person
+                    .home
+                    .and_then(|h| h.country())
+                    .map(|c| the(&Area::Country(c).to_string()))
+                    .unwrap_or_else(|| "where you live".to_owned());
+                format!(
+                    "The published pay range is for {}; what it pays in {home} isn't stated",
+                    the(&areas_text(&areas))
+                )
+            }
             (Some(text), true) => format!("Pay isn't stated as a salary range: “{text}”"),
             _ => "Pay isn't published: unknown, not low".to_owned(),
         };
@@ -1613,6 +1688,9 @@ pub fn compensation(i: &Inputs<'_>) -> PayReading {
             if is_floor(p) {
                 unchecked.push(p);
             }
+            if standing == PayStanding::Unpublished {
+                standing = PayStanding::NotComparable;
+            }
             unknown.get_or_insert_with(|| why.clone());
             out.push(
                 Signal::new(group, Basis::Stated, 0.0, why)
@@ -1647,47 +1725,77 @@ pub fn compensation(i: &Inputs<'_>) -> PayReading {
                     "Pays at most {}, below your minimum of {want}",
                     money(currency, top, p.period)
                 );
+                standing = PayStanding::BelowMinimum;
                 if p.stance == Stance::Required && pay.verified_at.is_some() {
                     blocked = Some(summary.clone());
                     Signal::new(group, Basis::Stated, 0.0, summary).kind(SignalKind::Blocker)
                 } else {
-                    Signal::new(group, Basis::Stated, -3.0, summary)
+                    Signal::new(group, Basis::Stated, 0.0, summary).kind(SignalKind::Minus)
                 }
             }
-            CompensationBound::Minimum if bottom < amount => Signal::new(
-                group,
-                Basis::Stated,
-                -0.25,
-                format!("The range starts below your minimum of {want}; the top meets it"),
-            )
-            .kind(SignalKind::Condition),
-            CompensationBound::Minimum => Signal::new(
-                group,
-                Basis::Stated,
-                1.0,
-                format!("Meets your minimum of {want} across the range"),
-            ),
-            CompensationBound::Target if bottom >= amount => Signal::new(
-                group,
-                Basis::Stated,
-                1.5,
-                format!("Reaches your target of {want} across the range"),
-            ),
-            CompensationBound::Target if top >= amount => Signal::new(
-                group,
-                Basis::Stated,
-                0.75,
-                format!("Reaches your target of {want} at the top of the range"),
-            ),
-            CompensationBound::Target => Signal::new(
-                group,
-                Basis::Stated,
-                -0.75,
-                format!(
-                    "Below your target of {want} (tops out at {})",
-                    money(currency, top, p.period)
-                ),
-            ),
+            CompensationBound::Minimum if bottom < amount => {
+                if standing != PayStanding::BelowMinimum {
+                    standing = PayStanding::BelowTarget;
+                }
+                Signal::new(
+                    group,
+                    Basis::Stated,
+                    0.0,
+                    format!("The range starts below your minimum of {want}; the top meets it"),
+                )
+                .kind(SignalKind::Condition)
+            }
+            CompensationBound::Minimum => {
+                if standing == PayStanding::Unpublished {
+                    standing = PayStanding::Meets;
+                }
+                Signal::new(
+                    group,
+                    Basis::Stated,
+                    0.0,
+                    format!("Meets your minimum of {want} across the range"),
+                )
+                .kind(SignalKind::Context)
+            }
+            CompensationBound::Target if bottom >= amount => {
+                if standing == PayStanding::Unpublished {
+                    standing = PayStanding::Meets;
+                }
+                Signal::new(
+                    group,
+                    Basis::Stated,
+                    0.0,
+                    format!("Reaches your target of {want} across the range"),
+                )
+                .kind(SignalKind::Context)
+            }
+            CompensationBound::Target if top >= amount => {
+                if standing == PayStanding::Unpublished {
+                    standing = PayStanding::Meets;
+                }
+                Signal::new(
+                    group,
+                    Basis::Stated,
+                    0.0,
+                    format!("Reaches your target of {want} at the top of the range"),
+                )
+                .kind(SignalKind::Context)
+            }
+            CompensationBound::Target => {
+                if !matches!(standing, PayStanding::BelowMinimum) {
+                    standing = PayStanding::BelowTarget;
+                }
+                Signal::new(
+                    group,
+                    Basis::Stated,
+                    0.0,
+                    format!(
+                        "Below your target of {want} (tops out at {})",
+                        money(currency, top, p.period)
+                    ),
+                )
+                .kind(SignalKind::Minus)
+            }
         };
         out.push(signal.evidence(evidence));
     }
@@ -1728,18 +1836,22 @@ pub fn compensation(i: &Inputs<'_>) -> PayReading {
     if let Some(t) = objected
         && weak
     {
-        out.push(Signal::new(
-            group,
-            Basis::Learned,
-            -0.5,
-            format!(
-                "You've turned jobs down over {} before ({}); check the pay early",
-                t.key.value_label(),
-                t.basis()
-            ),
-        ));
+        out.push(
+            Signal::new(
+                group,
+                Basis::Learned,
+                0.0,
+                format!(
+                    "You've turned jobs down over {} before ({}); check the pay early",
+                    t.key.value_label(),
+                    t.basis()
+                ),
+            )
+            .kind(SignalKind::Unknown),
+        );
     }
     PayReading {
+        standing,
         signals: out,
         below_minimum: blocked,
         unknown,

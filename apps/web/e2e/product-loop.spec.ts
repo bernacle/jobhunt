@@ -46,8 +46,8 @@ test.describe.serial("the product loop", () => {
     expect(count).toBeGreaterThanOrEqual(3);
     expect(count).toBeLessThanOrEqual(5);
     await expect(page.getByText(/of the \d+ open jobs Narrow checked/)).toBeVisible();
-    // Only strong fits and jobs worth reviewing: no maybes, never the
-    // unwanted SRE role or the marketing job.
+    // Only strong fits: no maybes, never the unwanted SRE role or the
+    // marketing job.
     await expect(page.getByText("Maybe", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Site Reliability Engineer")).toHaveCount(0);
     await expect(page.getByText("Marketing Manager")).toHaveCount(0);
@@ -99,7 +99,7 @@ test.describe.serial("the product loop", () => {
     await first.getByRole("link", { name: title, exact: true }).click();
     await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
     // The conclusion first: the verdict, then each key fact once, then the description.
-    await expect(page.getByText(/^A strong fit|^Worth reviewing/).first()).toBeVisible();
+    await expect(page.getByText(/^Looks unusually aligned|^Worth a look/).first()).toBeVisible();
     for (const fact of ["Pay", "Location", "Eligibility", "Listing"]) {
       await expect(page.getByRole("group", { name: fact, exact: true })).toBeVisible();
     }
@@ -139,7 +139,7 @@ test.describe.serial("the product loop", () => {
     await expect(dialog).toBeHidden();
     await firstCard.getByRole("button", { name: "Not for me" }).click();
     await dialog.getByLabel(/What didn't fit/).fill("On-call heavy");
-    await dialog.getByRole("button", { name: "Too corporate" }).click();
+    await dialog.getByRole("button", { name: "Company too big" }).click();
     await dialog.getByRole("button", { name: "Mark not for me" }).click();
     await expect(cards.nth(0).getByRole("status")).toContainText("Won't be recommended again");
 
@@ -170,7 +170,7 @@ test.describe.serial("the product loop", () => {
     await page.getByRole("tab", { name: /^All/ }).click();
     await page.getByText(/Not for me \(1\)/).click();
     await expect(page.getByRole("link", { name: rejected, exact: true })).toBeVisible();
-    await expect(page.getByText("On-call heavy; too corporate")).toBeVisible();
+    await expect(page.getByText("On-call heavy; company too big")).toBeVisible();
     await expectAccessible(page);
   });
 

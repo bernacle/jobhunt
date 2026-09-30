@@ -1540,6 +1540,21 @@ fn normalize_remote(text: &str) -> String {
             out.replace_range(at..at + compound.len(), "Remote");
         }
     }
+    // "Remote in United States", "Remote within Canada" (how Stripe's jobs
+    // site and others list a remote scope) → "Remote - United States", so
+    // the place is read as the scope rather than "in United States".
+    for connective in [
+        "remote in the ",
+        "remote within the ",
+        "remote from the ",
+        "remote in ",
+        "remote within ",
+        "remote from ",
+    ] {
+        while let Some(at) = out.to_lowercase().find(connective) {
+            out.replace_range(at..at + connective.len(), "Remote - ");
+        }
+    }
     out
 }
 
@@ -1807,6 +1822,12 @@ pub fn places_in_text(text: &str) -> Vec<Area> {
     let words: Vec<&str> = text
         .split(|c: char| !(c.is_alphanumeric() || c == '.' || c == '-'))
         .map(|w| w.trim_matches(['.', '-']))
+        // "US-based", "Brazil-based": the place, not a word of its own.
+        .map(|w| {
+            w.strip_suffix("-based")
+                .or_else(|| w.strip_suffix("-Based"))
+                .unwrap_or(w)
+        })
         .filter(|w| !w.is_empty())
         .collect();
     let mut out: Vec<Area> = Vec::new();

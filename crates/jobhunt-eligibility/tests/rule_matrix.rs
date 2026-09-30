@@ -61,6 +61,12 @@ fn remote_scopes_for_a_brazil_profile() {
         ("Remote - Europe", Ineligible),
         ("Remote - EMEA", Ineligible),
         ("Remote - APAC", Ineligible),
+        // How Stripe's jobs site (and others) write a remote scope.
+        ("Remote in United States", Ineligible),
+        ("Remote in North America", Ineligible),
+        ("Remote within Canada", Ineligible),
+        ("Remote in Brazil", Eligible),
+        ("Remote in Latin America", Eligible),
         ("Remote", Uncertain),
     ] {
         let j = remote(location, "We build developer tools.");
@@ -180,6 +186,10 @@ fn description_restrictions() {
             Ineligible,
         ),
         ("Remote in the US.", Ineligible),
+        // "US-based" names where candidates must be.
+        ("This role is open to US-based candidates.", Ineligible),
+        ("We are only considering US-based applicants.", Ineligible),
+        ("This role is open to Brazil-based candidates.", Eligible),
     ] {
         let j = remote("Remote", description);
         assert_eq!(status(&j, &brazil), expected, "{description}");

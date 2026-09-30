@@ -207,7 +207,11 @@ async fn the_whole_loop_through_mcp() {
     assert!(!first.to_string().contains('%'), "no percentages");
     for title in [SECURITY, SYSTEMS] {
         let r = result(&first, title);
-        assert_eq!(r["tier"], "strong_fit");
+        // What they asked for is the work (infrastructure); nothing else
+        // is known to fit and pay adds nothing: worth reviewing, and search
+        // shows it (Today would not).
+        assert_eq!(r["tier"], "worth_reviewing", "{r:#}");
+        assert_eq!(r["fit"], "plausible");
         assert_eq!(r["recommendation"], "recommended");
         assert_eq!(r["verification"]["trusted"], true);
         assert_eq!(r["verification"]["state"], "verified_active");
@@ -215,17 +219,31 @@ async fn the_whole_loop_through_mcp() {
     }
     let security = result(&first, SECURITY)["id"].as_str().unwrap().to_owned();
     let systems = result(&first, SYSTEMS)["id"].as_str().unwrap().to_owned();
-    let forward = result(&first, FORWARD)["id"].as_str().unwrap().to_owned();
+    // Customer-facing ML work, not what they asked for: only among the
+    // lower tiers.
+    assert!(
+        !values(&first["results"], "title").contains(&FORWARD),
+        "{first:#}"
+    );
+    let lower = mcp
+        .call(
+            "search_jobs",
+            json!({"refresh": "never", "include_lower_tiers": true, "limit": 25}),
+        )
+        .await;
+    let forward = result(&lower, FORWARD)["id"].as_str().unwrap().to_owned();
 
     // 4. One opportunity in detail, with its sources.
     let job = mcp
         .call("get_job", json!({"id": security, "include_sources": true}))
         .await;
     assert_eq!(job["company"], "Ramp");
-    assert_eq!(job["decision"]["tier"], "strong_fit");
+    assert_eq!(job["decision"]["tier"], "worth_reviewing");
     assert!(
         strings(&job["decision"]["worth"])
-            .contains(&"Infrastructure roles: a role you want".to_owned())
+            .iter()
+            .any(|w| w.contains("close to the infrastructure work you want")),
+        "{job:#}"
     );
     assert_eq!(
         job["pipeline"]["stage"], "unseen",
@@ -331,7 +349,7 @@ async fn the_whole_loop_through_mcp() {
         .call("prepare_application_context", json!({"id": security}))
         .await;
     assert_eq!(context["job"]["title"], SECURITY);
-    assert_eq!(context["decision"]["tier"], "strong_fit");
+    assert_eq!(context["decision"]["tier"], "worth_reviewing");
     assert!(context.get("contact").is_none());
     assert!(!context.to_string().contains("marina.costa@example.com"));
     let asks: Vec<&str> = values(&context["job_asks"]["technologies"], "name");
@@ -392,7 +410,13 @@ async fn application_context_follows_the_evidence_policy() {
     env.with_profile();
     let mut mcp = env.mcp().await;
     mcp.initialize().await;
-    let found = mcp.call("search_jobs", json!({"refresh": "always"})).await;
+    // Without preferences nothing earns attention; the lower tiers list it.
+    let found = mcp
+        .call(
+            "search_jobs",
+            json!({"refresh": "always", "include_lower_tiers": true, "limit": 25}),
+        )
+        .await;
     let security = result(&found, SECURITY)["id"].as_str().unwrap().to_owned();
     let baseline = mcp
         .call("prepare_application_context", json!({"id": security}))
@@ -548,7 +572,9 @@ async fn search_keeps_the_ranking_rules() {
     assert_eq!(second["not_shown"]["rejected"], 2);
     let kept = result(&second, SECURITY);
     assert!(
-        strings(&kept["why"]).contains(&"Infrastructure roles: a role you want".to_owned()),
+        strings(&kept["why"])
+            .iter()
+            .any(|w| w.contains("close to the infrastructure work you want")),
         "what you said wins over what feedback suggests: {kept:#}"
     );
     mcp.call("mark_applied", json!({"id": security})).await;

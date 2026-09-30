@@ -60,6 +60,7 @@ contract!(
     structured_preference_values_round_trip,
     evidence_sources_round_trip,
     taste_profile_round_trips,
+    fit_reviews_round_trip,
 );
 
 async fn round_trips_and_classifies_the_lifecycle(store: &dyn Store) {
@@ -925,6 +926,57 @@ async fn feedback_rankings_and_eligibility_cache(store: &dyn Store) {
     ));
     let again = ranking.explain(&records[..1], at(8)).await.unwrap();
     assert!(again.reused, "a stored ranking is reused for equal inputs");
+}
+
+async fn fit_reviews_round_trip(store: &dyn Store) {
+    use jobhunt_ranking::FitLevel;
+    use jobhunt_ranking::review::{FitReview, ReviewPoint};
+    let review = FitReview {
+        fit: FitLevel::Poor,
+        role_fit: "mismatch".into(),
+        company_fit: "unknown".into(),
+        seniority: "match".into(),
+        specialization: "mismatch".into(),
+        affirmative: Vec::new(),
+        contradictions: vec![ReviewPoint {
+            aspect: "specialization".into(),
+            reason: "Storage-engine internals, beyond their work".into(),
+            quote: "Develop the storage engine".into(),
+        }],
+        uncertainties: vec!["The team's size isn't stated".into()],
+        reviewer: "model/anthropic:claude-opus-5-5".into(),
+        rejected: 1,
+        input_tokens: 2_400,
+        output_tokens: 350,
+    };
+    assert_eq!(
+        store.cached_fit_review("prof_a", "rev_1").await.unwrap(),
+        None
+    );
+    store
+        .store_fit_review("prof_a", "rev_1", &review, at(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        store.cached_fit_review("prof_a", "rev_1").await.unwrap(),
+        Some(review.clone())
+    );
+    assert_eq!(
+        store.cached_fit_review("prof_b", "rev_1").await.unwrap(),
+        None,
+        "a review is one profile's"
+    );
+    // Stored again under the same key: replaced, not duplicated.
+    let mut better = review.clone();
+    better.fit = FitLevel::Plausible;
+    store
+        .store_fit_review("prof_a", "rev_1", &better, at(2))
+        .await
+        .unwrap();
+    assert_eq!(
+        store.cached_fit_review("prof_a", "rev_1").await.unwrap(),
+        Some(better)
+    );
 }
 
 async fn state_import_is_atomic_and_idempotent(store: &dyn Store) {

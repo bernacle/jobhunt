@@ -213,11 +213,11 @@ describe("OpportunityLead", () => {
     expect(within(dialog).getByText(/Use Not now instead/)).toBeInTheDocument();
     const box = within(dialog).getByLabelText(/What didn't fit/);
     await userEvent.type(box, "on-call every other week");
-    await userEvent.click(within(dialog).getByRole("button", { name: "Too corporate" }));
-    expect(box).toHaveValue("on-call every other week; too corporate");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Company too big" }));
+    expect(box).toHaveValue("on-call every other week; company too big");
     expect(await violations(dialog)).toEqual([]);
     await userEvent.click(within(dialog).getByRole("button", { name: "Mark not for me" }));
-    expect(a.feedback).toHaveBeenCalledWith(expect.any(String), "reject", "on-call every other week; too corporate");
+    expect(a.feedback).toHaveBeenCalledWith(expect.any(String), "reject", "on-call every other week; company too big");
     expect(a.putAside).not.toHaveBeenCalled();
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Won't be recommended again. Narrow read your reason as: avoid company: large companies.",

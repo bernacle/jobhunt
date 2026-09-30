@@ -137,6 +137,48 @@ pub struct App {
     store: Arc<dyn Store>,
     discovery: DiscoveryMode,
     taste_model: TasteModel,
+    fit_review: FitReview,
+}
+
+/// The semantic fit reviewer of the ranking's shortlist, if one is
+/// configured (see `jobhunt_ranking::review`). Without it, the rules decide
+/// fit on their own.
+#[derive(Clone, Default)]
+pub struct FitReview {
+    pub reviewer: Option<Arc<dyn jobhunt_ranking::FitReviewer>>,
+    pub budget: jobhunt_ranking::ReviewBudget,
+    /// Why a configured reviewer can't be used.
+    pub problem: Option<String>,
+}
+
+impl std::fmt::Debug for FitReview {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FitReview")
+            .field("reviewer", &self.reviewer.as_ref().map(|r| r.name()))
+            .field("budget", &self.budget)
+            .field("problem", &self.problem)
+            .finish()
+    }
+}
+
+impl FitReview {
+    /// The reviewer a configuration names (see [`config::AiConfig`]).
+    pub fn from_config(config: &config::AiConfig) -> Self {
+        match config.fit_reviewer() {
+            Ok(Some(reviewer)) => Self {
+                reviewer: Some(Arc::new(reviewer)),
+                ..Self::default()
+            },
+            Ok(None) => Self::default(),
+            Err(problem) => {
+                tracing::warn!(%problem, "the fit reviewer is not usable; ranking relies on its rules");
+                Self {
+                    problem: Some(problem),
+                    ..Self::default()
+                }
+            }
+        }
+    }
 }
 
 /// The model that reads taste, if one is configured.
@@ -198,7 +240,10 @@ impl App {
             .await
             .map_err(|e| AppError::storage("opening it", e))?;
         let model = TasteModel::from_config(&loaded.config.ai);
-        Ok(Self::with_store(loaded, store).with_taste_model(model))
+        let review = FitReview::from_config(&loaded.config.ai);
+        Ok(Self::with_store(loaded, store)
+            .with_taste_model(model)
+            .with_fit_review(review))
     }
 
     /// An application over an already open store, discovering on demand.
@@ -218,7 +263,19 @@ impl App {
             store,
             discovery,
             taste_model: TasteModel::default(),
+            fit_review: FitReview::default(),
         }
+    }
+
+    /// Reviews the ranking's shortlist with this reviewer (the cloud shares
+    /// one between requests; tests give a fake).
+    pub fn with_fit_review(mut self, review: FitReview) -> Self {
+        self.fit_review = review;
+        self
+    }
+
+    pub fn fit_review(&self) -> &FitReview {
+        &self.fit_review
     }
 
     /// Reads taste with this model (the cloud shares one between
@@ -260,7 +317,11 @@ impl App {
 
     /// The ranking use cases, with the configured freshness policy.
     pub fn ranking(&self) -> RankingService<'_, dyn Store> {
-        RankingService::new(self.store(), &RuleReader).with_policy(self.policy())
+        let service = RankingService::new(self.store(), &RuleReader).with_policy(self.policy());
+        match &self.fit_review.reviewer {
+            Some(reviewer) => service.with_reviewer(reviewer.as_ref(), self.fit_review.budget),
+            None => service,
+        }
     }
 
     /// The profile use cases for the person's profile.

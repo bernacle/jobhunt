@@ -34,10 +34,13 @@ export interface DecisionInput {
 
 export type DecisionVariant = "lead" | "peer";
 
-/** Two reasons and one usual concern on the lead; one of each on a peer. */
-export const DECISION_LIMITS: Record<DecisionVariant, { reasons: number; concerns: number }> = {
-  lead: { reasons: 2, concerns: 1 },
-  peer: { reasons: 1, concerns: 1 },
+/**
+ * Up to three reasons, one usual concern and two more things to check on the
+ * lead; one reason and one concern on a peer.
+ */
+export const DECISION_LIMITS: Record<DecisionVariant, { reasons: number; concerns: number; checks: number }> = {
+  lead: { reasons: 3, concerns: 1, checks: 2 },
+  peer: { reasons: 1, concerns: 1, checks: 0 },
 };
 
 function same(a: string, b: string): boolean {
@@ -84,7 +87,10 @@ export function concernsOf(input: DecisionInput): Concern[] {
  * the usual single concern slot; otherwise that requirement would disappear
  * from the default view solely because the gate note came first.
  */
-export function selectDecision(input: DecisionInput, variant: DecisionVariant): { reasons: string[]; concerns: Concern[] } {
+export function selectDecision(
+  input: DecisionInput,
+  variant: DecisionVariant,
+): { reasons: string[]; concerns: Concern[]; checks: string[] } {
   const limit = DECISION_LIMITS[variant];
   const concerns = concernsOf(input);
   const selected = concerns.slice(0, limit.concerns);
@@ -92,8 +98,14 @@ export function selectDecision(input: DecisionInput, variant: DecisionVariant): 
     const unresolved = concerns.find((c) => c.kind === "unresolved");
     if (unresolved) selected.push(unresolved);
   }
+  // What the posting leaves open and isn't shown above: "Things to check".
+  const checks = concerns
+    .filter((c) => (c.kind === "unresolved" || c.kind === "missing") && !selected.some((s) => same(s.text, c.text)))
+    .map((c) => c.text)
+    .slice(0, limit.checks);
   return {
     reasons: distinct(input.why).slice(0, limit.reasons),
     concerns: selected,
+    checks,
   };
 }

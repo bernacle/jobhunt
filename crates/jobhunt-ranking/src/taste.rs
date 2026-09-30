@@ -368,15 +368,70 @@ fn resolve(reference: JobReference, facets: &JobFacets) -> Vec<(TasteKey, String
             crate::facets::company_key(&facets.company),
             format!("at {}", facets.company),
         )],
-        JobReference::Level => facets
-            .level
+        JobReference::Level => match &facets.level {
+            Some((level, words)) => vec![(
+                TasteKey::new(Dimension::Seniority, level.as_str()),
+                format!("“{words}” (title)"),
+            )],
+            // A level only the description states ("0-2 years").
+            None => facets
+                .work
+                .level
+                .iter()
+                .map(|l| {
+                    let level = match l.seniority {
+                        crate::facets::Seniority::EarlyCareer => "junior",
+                        crate::facets::Seniority::Mid => "mid",
+                        crate::facets::Seniority::Senior => "senior",
+                        crate::facets::Seniority::StaffPlus => "staff",
+                    };
+                    (
+                        TasteKey::new(Dimension::Seniority, level),
+                        format!("“{}” (description)", l.evidence),
+                    )
+                })
+                .collect(),
+        },
+        // The work's own shape (the title's, or a specialty): what "wrong
+        // kind of work" was about.
+        JobReference::Work => facets
+            .work
+            .shapes
             .iter()
-            .map(|(level, words)| {
-                (
-                    TasteKey::new(Dimension::Seniority, level.as_str()),
-                    format!("“{words}” (title)"),
+            .filter(|s| {
+                !matches!(
+                    s.basis,
+                    crate::facets::ShapeBasis::TitleArea | crate::facets::ShapeBasis::Included
                 )
             })
+            .map(|s| (TasteKey::role(&s.shape), format!("“{}”", s.evidence)))
+            .collect(),
+        JobReference::Specialty => facets
+            .work
+            .specialties
+            .iter()
+            .map(|s| {
+                (
+                    TasteKey::role(s.specialty.shape()),
+                    format!("{} (“{}”)", s.specialty.label(), s.evidence),
+                )
+            })
+            .collect(),
+        JobReference::Stage => facets
+            .company_traits
+            .iter()
+            .filter(|f| {
+                matches!(
+                    f.key.value.as_str(),
+                    "early_stage"
+                        | "startup"
+                        | "scaleup"
+                        | "public_company"
+                        | "large_company"
+                        | "small_company"
+                )
+            })
+            .map(|f| (f.key.clone(), f.cite()))
             .collect(),
     }
 }
@@ -625,6 +680,41 @@ fn conclude(
         against,
         last_reinforced,
     }
+}
+
+/// Learned patterns as taste statements (for [`fn@jobhunt_profile::taste::compose`]):
+/// only patterns ranking uses (active), never pay or particular employers.
+pub fn learned_signals(model: &TasteModel) -> Vec<jobhunt_profile::taste::LearnedSignal> {
+    use jobhunt_profile::taste::{LearnedSignal, vocab};
+    use jobhunt_profile::{Polarity, TasteConfidence};
+    model
+        .learned
+        .iter()
+        .filter_map(|l| {
+            let TasteStatus::Active { confidence } = &l.status else {
+                return None;
+            };
+            let (dimension, value) = vocab::from_learned(l.key.dimension.as_str(), &l.key.value)?;
+            if value.is_empty() {
+                return None;
+            }
+            Some(LearnedSignal {
+                dimension,
+                value,
+                polarity: match l.direction {
+                    Direction::Prefer => Polarity::Prefer,
+                    Direction::Avoid => Polarity::Avoid,
+                },
+                confidence: match confidence {
+                    Confidence::Tentative => TasteConfidence::Low,
+                    Confidence::Established => TasteConfidence::Medium,
+                    Confidence::Strong => TasteConfidence::High,
+                },
+                pattern: l.key.to_string(),
+                basis: l.basis(),
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]

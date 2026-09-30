@@ -5,7 +5,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use jobhunt_jobs::{JobId, StorageError};
 use jobhunt_ranking::{
-    FeedbackAction, FeedbackEvent, FeedbackRepository, RankKey, Ranking, RankingRepository,
+    FeedbackAction, FeedbackEvent, FeedbackRepository, FitReview, RankKey, Ranking,
+    RankingRepository,
 };
 use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection};
 
@@ -179,6 +180,54 @@ impl RankingRepository for SqliteJobStore {
         .execute(&self.pool)
         .await
         .map_err(query_error("storing a ranking"))?;
+        Ok(())
+    }
+
+    async fn cached_fit_review(
+        &self,
+        profile_id: &str,
+        key: &str,
+    ) -> Result<Option<FitReview>, StorageError> {
+        let row: Option<String> = sqlx::query_scalar(
+            "SELECT review FROM fit_reviews WHERE profile_id = ? AND review_key = ?",
+        )
+        .bind(profile_id)
+        .bind(key)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(query_error("loading a fit review"))?;
+        row.map(|json| {
+            serde_json::from_str(&json).map_err(|e| corrupt(key, format!("fit review: {e}")))
+        })
+        .transpose()
+    }
+
+    async fn store_fit_review(
+        &self,
+        profile_id: &str,
+        key: &str,
+        review: &FitReview,
+        at: DateTime<Utc>,
+    ) -> Result<(), StorageError> {
+        let json = serde_json::to_string(review).map_err(|e| StorageError::Query {
+            operation: "encoding a fit review",
+            source: Box::new(e),
+        })?;
+        sqlx::query(
+            "INSERT INTO fit_reviews (profile_id, review_key, reviewer, fit, reviewed_at, review) \
+             VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (profile_id, review_key) DO UPDATE SET \
+             reviewer = excluded.reviewer, fit = excluded.fit, \
+             reviewed_at = excluded.reviewed_at, review = excluded.review",
+        )
+        .bind(profile_id)
+        .bind(key)
+        .bind(&review.reviewer)
+        .bind(review.fit.as_str())
+        .bind(encode_timestamp(at))
+        .bind(json)
+        .execute(&self.pool)
+        .await
+        .map_err(query_error("storing a fit review"))?;
         Ok(())
     }
 }

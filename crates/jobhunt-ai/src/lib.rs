@@ -31,6 +31,7 @@ use jobhunt_profile::taste::reading::{
     InterpretError, SYSTEM_PROMPT, TasteInterpreter, TasteReading, TasteRequest, parse_reading,
     reading_schema, render,
 };
+use jobhunt_ranking::review::{self, FitReview, FitReviewRequest, FitReviewer, ReviewError};
 use serde_json::{Value, json};
 use url::Url;
 
@@ -227,16 +228,25 @@ impl ModelInterpreter {
     }
 
     fn body(&self, request: &TasteRequest) -> Value {
-        let user = render(request);
+        self.body_for(
+            SYSTEM_PROMPT,
+            &render(request),
+            reading_schema(),
+            "taste_reading",
+        )
+    }
+
+    /// A request for a JSON answer of `schema`, after `system`.
+    fn body_for(&self, system: &str, user: &str, schema: Value, name: &str) -> Value {
         match self.config.provider {
             Provider::Anthropic => {
                 let mut body = json!({
                     "model": self.config.model,
                     "max_tokens": MAX_TOKENS,
-                    "system": SYSTEM_PROMPT,
+                    "system": system,
                     "messages": [{"role": "user", "content": user}],
                     "output_config": {
-                        "format": {"type": "json_schema", "schema": reading_schema()}
+                        "format": {"type": "json_schema", "schema": schema}
                     },
                 });
                 if let Some(effort) = &self.config.effort {
@@ -252,18 +262,23 @@ impl ModelInterpreter {
             Provider::OpenAi => json!({
                 "model": self.config.model,
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": system},
                     {"role": "user", "content": user},
                 ],
                 "response_format": {
                     "type": "json_schema",
-                    "json_schema": {"name": "taste_reading", "strict": true, "schema": reading_schema()},
+                    "json_schema": {"name": name, "strict": true, "schema": schema},
                 },
             }),
         }
     }
 
     async fn attempt(&self, body: &Value) -> Result<String, InterpretError> {
+        self.answer(body).await.map(|a| a.text)
+    }
+
+    /// One call: the answer's text and the tokens it took.
+    async fn answer(&self, body: &Value) -> Result<Answer, InterpretError> {
         let mut request = self
             .http
             .post(self.config.endpoint())
@@ -306,11 +321,32 @@ impl ModelInterpreter {
             .map_err(|_| InterpretError::Transport("the answer could not be read".to_owned()))?;
         let answer: Value = serde_json::from_str(&text)
             .map_err(|_| InterpretError::Malformed("the response is not JSON".to_owned()))?;
-        match self.config.provider {
+        let usage = answer.get("usage");
+        let tokens = |names: [&str; 2]| {
+            names
+                .iter()
+                .find_map(|n| usage.and_then(|u| u.get(*n)).and_then(Value::as_u64))
+                .unwrap_or(0)
+        };
+        let input_tokens = tokens(["input_tokens", "prompt_tokens"]);
+        let output_tokens = tokens(["output_tokens", "completion_tokens"]);
+        let text = match self.config.provider {
             Provider::Anthropic => anthropic_text(&answer),
             Provider::OpenAi => openai_text(&answer),
-        }
+        }?;
+        Ok(Answer {
+            text,
+            input_tokens,
+            output_tokens,
+        })
     }
+}
+
+/// A model's answer.
+struct Answer {
+    text: String,
+    input_tokens: u64,
+    output_tokens: u64,
 }
 
 fn anthropic_text(answer: &Value) -> Result<String, InterpretError> {
@@ -466,5 +502,102 @@ mod tests {
         assert!(
             ModelConfig::new("anthropic", None, Some("ftp://x"), Some("k".into()), "X").is_err()
         );
+    }
+}
+
+/// Reviews job fit with a model (see [`jobhunt_ranking::review`]): the same
+/// providers, configuration, retries and logging as the taste reader. What
+/// is sent is exactly [`jobhunt_ranking::review::render`] of the request,
+/// after the fixed [`jobhunt_ranking::review::SYSTEM_PROMPT`]; prompts and
+/// answers are never logged.
+#[derive(Debug, Clone)]
+pub struct ModelFitReviewer {
+    model: ModelInterpreter,
+}
+
+impl ModelFitReviewer {
+    pub fn new(config: ModelConfig) -> Result<Self, InterpretError> {
+        Ok(Self {
+            model: ModelInterpreter::new(config)?,
+        })
+    }
+
+    pub fn config(&self) -> &ModelConfig {
+        self.model.config()
+    }
+}
+
+fn review_error(e: InterpretError) -> ReviewError {
+    match e {
+        InterpretError::Transport(why) => ReviewError::Transport(why),
+        InterpretError::Status { status, retryable } => ReviewError::Status { status, retryable },
+        InterpretError::Refused => ReviewError::Refused,
+        InterpretError::Truncated => ReviewError::Truncated,
+        other => ReviewError::Malformed(other.to_string()),
+    }
+}
+
+#[async_trait]
+impl FitReviewer for ModelFitReviewer {
+    fn name(&self) -> String {
+        self.model.name()
+    }
+
+    async fn review(&self, request: &FitReviewRequest) -> Result<FitReview, ReviewError> {
+        let config = self.model.config();
+        let body = self.model.body_for(
+            review::SYSTEM_PROMPT,
+            &review::render(request),
+            review::review_schema(),
+            "fit_review",
+        );
+        let name = self.name();
+        let mut attempt = 0;
+        loop {
+            let started = Instant::now();
+            let result = self
+                .model
+                .answer(&body)
+                .await
+                .map_err(review_error)
+                .and_then(|answer| {
+                    let mut review = review::parse_review(&answer.text, request, &name)?;
+                    review.input_tokens = answer.input_tokens;
+                    review.output_tokens = answer.output_tokens;
+                    Ok(review)
+                });
+            let elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            match result {
+                Ok(review) => {
+                    tracing::info!(
+                        provider = config.provider.as_str(),
+                        model = %config.model,
+                        attempt,
+                        elapsed_ms,
+                        fit = review.fit.as_str(),
+                        rejected = review.rejected,
+                        input_tokens = review.input_tokens,
+                        output_tokens = review.output_tokens,
+                        "fit reviewed"
+                    );
+                    return Ok(review);
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        provider = config.provider.as_str(),
+                        model = %config.model,
+                        attempt,
+                        elapsed_ms,
+                        %error,
+                        "fit review failed"
+                    );
+                    if !error.is_retryable() || attempt >= config.max_retries {
+                        return Err(error);
+                    }
+                    attempt += 1;
+                    tokio::time::sleep(config.backoff * 2u32.pow(attempt - 1)).await;
+                }
+            }
+        }
     }
 }

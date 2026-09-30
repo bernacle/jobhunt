@@ -27,6 +27,7 @@ use jobhunt_profile::{
 
 use jobhunt_eligibility::geo::Area;
 
+use crate::facets::work::{SpecialtyFact, specialties_in};
 use crate::facets::{Level, title_level, title_roles};
 use crate::key::{Dimension, Direction, TasteKey};
 
@@ -134,6 +135,12 @@ pub struct Person {
     pub level: Option<(Level, String)>,
     /// The resume shows engineering work.
     pub engineer: bool,
+    /// Specialized work the career evidence demonstrates (building storage
+    /// engines, Kubernetes controllers), with the words: what makes a
+    /// specialist role fit rather than a keyword overlap.
+    pub specialties: Vec<SpecialtyFact>,
+    /// Where they live, as they said it.
+    pub home: Option<Area>,
 }
 
 /// A stated region, normalized: "Worldwide" and "anywhere" are the whole
@@ -143,6 +150,41 @@ pub fn region_area(region: &str) -> Option<Area> {
         return Some(Area::Worldwide);
     }
     jobhunt_eligibility::profile::place_area(region)
+}
+
+/// Specialized work the person's career evidence shows: their headline and
+/// summary, and each visible experience's title, summary and the claims
+/// about it they haven't rejected.
+pub fn demonstrated_specialties(data: &ProfileData) -> Vec<SpecialtyFact> {
+    let mut texts: Vec<String> = Vec::new();
+    texts.extend(data.profile.headline.clone());
+    texts.extend(data.profile.summary.clone());
+    for e in data.visible_experiences() {
+        texts.extend(e.title.clone());
+        texts.extend(e.summary.clone());
+        for c in data.claims_about(
+            jobhunt_profile::Subject::Experience(e.id),
+            &[
+                ClaimKind::Responsibility,
+                ClaimKind::Accomplishment,
+                ClaimKind::Role,
+                ClaimKind::Ownership,
+                ClaimKind::Project,
+            ],
+        ) {
+            if !matches!(data.standing(c), jobhunt_profile::Standing::Rejected) {
+                texts.push(c.text.clone());
+            }
+        }
+    }
+    let sentences: Vec<(String, Vec<jobhunt_profile::words::Word>)> = texts
+        .into_iter()
+        .map(|t| {
+            let ws = jobhunt_profile::words::words(&t);
+            (t, ws)
+        })
+        .collect();
+    specialties_in("", &sentences)
 }
 
 /// The keys a role preference is about.
@@ -233,8 +275,10 @@ impl Person {
                 PreferenceValue::UnclearEligibility { show } => {
                     out.hides_unclear_eligibility = !show;
                 }
-                PreferenceValue::CurrentLocation { .. }
-                | PreferenceValue::Timezone { .. }
+                PreferenceValue::CurrentLocation { place } => {
+                    out.home = jobhunt_eligibility::profile::place_area(place);
+                }
+                PreferenceValue::Timezone { .. }
                 | PreferenceValue::Relocation { .. }
                 | PreferenceValue::Sponsorship { .. }
                 | PreferenceValue::WorkAuthorization { .. }
@@ -287,6 +331,14 @@ impl Person {
                 let key = search_key(t);
                 ENGINEERING_WORDS.iter().any(|w| key.contains(w))
             });
+        if out.home.is_none() {
+            out.home = data
+                .profile
+                .location
+                .as_deref()
+                .and_then(jobhunt_eligibility::profile::place_area);
+        }
+        out.specialties = demonstrated_specialties(data);
         out
     }
 

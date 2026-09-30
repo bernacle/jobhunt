@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { DecisionBrief } from "./decision-brief";
 
 describe("DecisionBrief", () => {
-  it("lists why, then every caution and unknown, each marked for what it is", () => {
+  it("lists why, then every caution, then the things to check, each marked for what it is", () => {
     render(
       <DecisionBrief
         why={["Platform roles: a role you want"]}
@@ -13,8 +13,11 @@ describe("DecisionBrief", () => {
       />,
     );
     expect(screen.getByText("Platform roles: a role you want")).toBeInTheDocument();
-    const caveats = screen.getAllByRole("list")[1]!;
-    expect(caveats.querySelectorAll("li")).toHaveLength(2);
+    const [, caveats, checks] = screen.getAllByRole("list");
+    expect(caveats!.querySelectorAll("li")).toHaveLength(1);
+    // The same line twice is said once.
+    expect(checks!.querySelectorAll("li")).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "Things to check" })).toBeInTheDocument();
     expect(screen.getByText("Timezone overlap required").closest("li")).toHaveTextContent(/^Caution:/);
     expect(screen.getByText("Pay isn't published: unknown, not low").closest("li")).toHaveTextContent(/^Not stated:/);
   });

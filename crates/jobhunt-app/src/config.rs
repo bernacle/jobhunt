@@ -32,9 +32,10 @@ pub struct AppConfig {
 }
 
 /// An optional model for reading the person's words into their taste
-/// profile. Without it (the default) Narrow reads them with its built-in
-/// rules, offline; nothing else uses a model. See `jobhunt_ai` for what is
-/// sent.
+/// profile and, when `review_fit` is on, for reviewing the fit of the
+/// ranking's shortlist. Without it (the default) Narrow reads words and
+/// ranks with its built-in rules, offline. See `jobhunt_ai` and
+/// `jobhunt_ranking::review` for what is sent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct AiConfig {
@@ -56,6 +57,13 @@ pub struct AiConfig {
     pub api_key_env: Option<String>,
     /// Per-request timeout, in seconds.
     pub timeout_secs: u64,
+    /// Also review the fit of each ranking's shortlist with the model (a
+    /// few calls per new job, each (profile, posting) reviewed once; see
+    /// `jobhunt_ranking::review`). Off by default: it costs model calls.
+    pub review_fit: bool,
+    /// The model that reviews fit, when not `model`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub review_model: Option<String>,
 }
 
 impl Default for AiConfig {
@@ -66,6 +74,8 @@ impl Default for AiConfig {
             base_url: None,
             api_key_env: None,
             timeout_secs: 40,
+            review_fit: false,
+            review_model: None,
         }
     }
 }
@@ -75,6 +85,30 @@ impl AiConfig {
     /// configuration can't be used (a missing key: Narrow then reads with
     /// its rules and says so).
     pub fn model(&self) -> Result<Option<jobhunt_ai::ModelInterpreter>, String> {
+        let Some(config) = self.model_config(self.model.as_deref())? else {
+            return Ok(None);
+        };
+        jobhunt_ai::ModelInterpreter::new(config)
+            .map(Some)
+            .map_err(|e| e.to_string())
+    }
+
+    /// The fit reviewer, when `review_fit` is on and a model is configured
+    /// (`Err`: why it can't be used; ranking then relies on its rules).
+    pub fn fit_reviewer(&self) -> Result<Option<jobhunt_ai::ModelFitReviewer>, String> {
+        if !self.review_fit {
+            return Ok(None);
+        }
+        let model = self.review_model.as_deref().or(self.model.as_deref());
+        let Some(config) = self.model_config(model)? else {
+            return Err("review_fit needs an [ai] provider".into());
+        };
+        jobhunt_ai::ModelFitReviewer::new(config)
+            .map(Some)
+            .map_err(|e| e.to_string())
+    }
+
+    fn model_config(&self, model: Option<&str>) -> Result<Option<jobhunt_ai::ModelConfig>, String> {
         let Some(provider) = self.provider.as_deref().filter(|p| !p.trim().is_empty()) else {
             return Ok(None);
         };
@@ -85,18 +119,11 @@ impl AiConfig {
             .clone()
             .unwrap_or_else(|| parsed.default_key_env().to_owned());
         let key = std::env::var(&env).ok().filter(|k| !k.trim().is_empty());
-        let mut config = jobhunt_ai::ModelConfig::new(
-            provider,
-            self.model.as_deref(),
-            self.base_url.as_deref(),
-            key,
-            &env,
-        )
-        .map_err(|e| e.to_string())?;
+        let mut config =
+            jobhunt_ai::ModelConfig::new(provider, model, self.base_url.as_deref(), key, &env)
+                .map_err(|e| e.to_string())?;
         config.timeout = Duration::from_secs(self.timeout_secs.max(1));
-        jobhunt_ai::ModelInterpreter::new(config)
-            .map(Some)
-            .map_err(|e| e.to_string())
+        Ok(Some(config))
     }
 }
 

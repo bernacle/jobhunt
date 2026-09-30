@@ -1,24 +1,29 @@
 //! The decision brief: what a person needs to decide whether a job is
-//! worth their time, in a few lines.
+//! worth their time, in a few lines, fit first and practicality after.
 //!
-//! * a one-line **verdict** (the tier, in words, and what to do first);
+//! * a one-line **verdict**: how well it fits what they want, and what
+//!   stands in the way;
 //! * a **summary** of what the job is (role, level, stack, domain, pay,
 //!   where);
-//! * **why it may be worth attention**: the strongest reasons, in terms of
-//!   what the person wants;
-//! * **caveats**: what counts against it, and conditions;
-//! * **unknowns**: what the posting doesn't say that matters to them;
+//! * **why it may be worth attention**: the fit's affirmative reasons,
+//!   specific to this job ("A startup of 15 people, the kind of company
+//!   you want"), never pay, remote work or freshness;
+//! * **caveats**: what goes against the fit, then practical concerns and
+//!   what rules it out;
+//! * **unknowns**: the things to check (pay not published, remote scope
+//!   unclear), the person's stated requirements first;
 //! * **your history** with it.
 //!
-//! Every line comes from a [`Signal`], so each one can be traced to its
-//! evidence (`narrow why --details`).
+//! Every line traces to the fit assessment, the practicality or a
+//! [`Signal`] with its evidence (`narrow why --details`).
 
 use serde::{Deserialize, Serialize};
 
 use crate::facets::{JobFacets, JobFunction};
-use crate::person::Person;
-use crate::rank::{Gate, Tier};
-use crate::signals::{Basis, PayEvidence, Signal, SignalKind};
+use crate::fit::{FitAssessment, FitLevel, Severity};
+use crate::practicality::Practicality;
+use crate::rank::Gate;
+use crate::signals::{Basis, PayEvidence, Signal};
 
 /// What someone needs to decide whether to spend time on a job.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,27 +41,40 @@ pub struct DecisionBrief {
 
 const MAX_LINES: usize = 5;
 
-fn verdict(gate: &Gate, tier: Tier, person: &Person) -> String {
-    let fit = match tier {
-        Tier::StrongFit => "A strong fit for what you want",
-        Tier::WorthReviewing => "Worth reviewing",
-        Tier::Maybe => "Maybe: mixed signals",
-        Tier::LowPriority => "Low priority: little points to it",
+fn verdict(gate: &Gate, fit: &FitAssessment, has_taste: bool) -> String {
+    let lead = match fit.level {
+        FitLevel::Strong => "Looks unusually aligned with what you want".to_owned(),
+        FitLevel::Plausible => match fit.main_contradiction() {
+            Some(c) => format!("Worth a look, not a strong fit: {}", lower_first(&c.text)),
+            None => {
+                "Worth a look: some of it fits what you want, not enough to recommend it".to_owned()
+            }
+        },
+        FitLevel::Insufficient => "Not enough points to what you want".to_owned(),
+        FitLevel::Poor => match fit.material().next() {
+            Some(c) => format!("Not a fit: {}", lower_first(&c.text)),
+            None => "Not a fit".to_owned(),
+        },
     };
-    let thin = if person.has_preferences() {
+    let thin = if has_taste {
         ""
     } else {
-        " (you haven't said what you want yet, so this rests on eligibility, experience and freshness)"
+        " (you haven't said what you want yet, so there is little to go on)"
     };
     match gate {
-        Gate::Recommended => format!("{fit}{thin}."),
-        Gate::VerifyFirst { why } => {
-            format!("{fit}{thin}, but verify it first: {why}.")
-        }
-        Gate::EligibilityUnclear { why } => {
-            format!("{fit}{thin}, if you can take it: {why}.")
-        }
+        Gate::Recommended => format!("{lead}{thin}."),
+        Gate::VerifyFirst { why } => format!("{lead}{thin}, but verify it first: {why}."),
+        Gate::EligibilityUnclear { why } => format!("{lead}{thin}, if you can take it: {why}."),
         Gate::Excluded { exclusion } => format!("Not recommended: {}.", exclusion.label()),
+    }
+}
+
+fn lower_first(text: &str) -> String {
+    let mut chars = text.chars();
+    match (chars.next(), chars.next()) {
+        (Some(a), Some(b)) if a.is_uppercase() && b.is_uppercase() => text.to_owned(),
+        (Some(a), _) => a.to_lowercase().chain(text.chars().skip(1)).collect(),
+        _ => String::new(),
     }
 }
 
@@ -114,62 +132,62 @@ fn summary(f: &JobFacets, pay: &PayEvidence) -> String {
     parts.join(" · ")
 }
 
-/// Builds the brief from the signals.
+/// Builds the brief: fit first, then practicality.
 pub fn brief(
     facets: &JobFacets,
     pay: &PayEvidence,
     gate: &Gate,
-    tier: Tier,
+    fit: &FitAssessment,
+    practicality: &Practicality,
     signals: &[Signal],
-    person: &Person,
+    has_taste: bool,
 ) -> DecisionBrief {
     let history: Vec<String> = signals
         .iter()
         .filter(|s| s.basis == Basis::Feedback)
         .map(|s| s.summary.clone())
         .collect();
-    let others = || signals.iter().filter(|s| s.basis != Basis::Feedback);
-    let mut worth: Vec<&Signal> = others().filter(|s| s.kind == SignalKind::Plus).collect();
-    worth.sort_by(|a, b| {
-        b.basis
-            .is_personal()
-            .cmp(&a.basis.is_personal())
-            .then(b.weight.total_cmp(&a.weight))
-    });
-    let mut caveats: Vec<&Signal> = others()
-        .filter(|s| {
-            matches!(
-                s.kind,
-                SignalKind::Minus | SignalKind::Condition | SignalKind::Blocker
-            )
-        })
-        .collect();
-    caveats.sort_by(|a, b| {
-        (b.kind == SignalKind::Blocker)
-            .cmp(&(a.kind == SignalKind::Blocker))
-            .then(a.weight.total_cmp(&b.weight))
-    });
-    // What the person stated comes first: a requirement the posting leaves
-    // unresolved ("Unresolved: you require at least USD 140,000 per year")
-    // matters more than a fact the posting simply omits, and a card may
-    // show only the first unknown.
-    let mut unknowns: Vec<&Signal> = others().filter(|s| s.kind == SignalKind::Unknown).collect();
-    unknowns.sort_by_key(|s| s.basis != Basis::Stated);
-    let unknowns: Vec<String> = unknowns.into_iter().map(|s| s.summary.clone()).collect();
-    DecisionBrief {
-        verdict: verdict(gate, tier, person),
+    let mut out = DecisionBrief {
+        verdict: String::new(),
         summary: summary(facets, pay),
-        worth: worth
-            .into_iter()
-            .take(MAX_LINES)
-            .map(|s| s.summary.clone())
-            .collect(),
-        caveats: caveats
-            .into_iter()
-            .take(MAX_LINES)
-            .map(|s| s.summary.clone())
-            .collect(),
-        unknowns,
+        worth: Vec::new(),
+        caveats: Vec::new(),
+        unknowns: practicality.checks.clone(),
         history,
+    };
+    refit(&mut out, gate, fit, practicality, has_taste);
+    out
+}
+
+/// Rewrites what a brief says about fit (the verdict, the reasons, the
+/// caveats) after the fit changed (a semantic review).
+pub fn refit(
+    brief: &mut DecisionBrief,
+    gate: &Gate,
+    fit: &FitAssessment,
+    practicality: &Practicality,
+    has_taste: bool,
+) {
+    let mut caveats: Vec<String> = Vec::new();
+    let mut push = |text: &str| {
+        if !caveats.iter().any(|c| c == text) {
+            caveats.push(text.to_owned());
+        }
+    };
+    // What goes against the fit (material first), then practical concerns
+    // and what rules it out.
+    for c in &fit.contradictions {
+        if c.severity >= Severity::Minor {
+            push(&c.text);
+        }
     }
+    for c in &practicality.concerns {
+        push(c);
+    }
+    for b in &practicality.blockers {
+        push(b);
+    }
+    brief.verdict = verdict(gate, fit, has_taste);
+    brief.worth = fit.reason_texts().into_iter().take(MAX_LINES).collect();
+    brief.caveats = caveats.into_iter().take(MAX_LINES).collect();
 }

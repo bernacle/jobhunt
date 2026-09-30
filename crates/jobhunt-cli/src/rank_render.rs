@@ -8,8 +8,8 @@ use chrono::{DateTime, Utc};
 use jobhunt_app::feedback::{FeedbackOutcome, describe_signal};
 use jobhunt_ranking::signals::{SignalKind, clip, describe_evidence};
 use jobhunt_ranking::{
-    Direction, FeedbackEvent, Gate, LearnedTaste, Person, PipelineEntry, Ranking, Stage,
-    TasteModel, TasteStatus, Tier,
+    Direction, FeedbackEvent, Gate, LearnedTaste, Person, PipelineEntry, Ranking, ReviewState,
+    Stage, TasteModel, TasteStatus, Tier,
 };
 
 use crate::render::{DIM, TITLE, plural};
@@ -89,22 +89,76 @@ pub fn brief(
         &b.worth,
     )?;
     block(out, "Caveats", SignalKind::Minus, &b.caveats)?;
-    block(out, "Unknown", SignalKind::Unknown, &b.unknowns)?;
+    block(out, "Things to check", SignalKind::Unknown, &b.unknowns)?;
     block(out, "Your history with it", SignalKind::Context, &b.history)?;
     if details {
+        let f = &ranking.fit;
+        writeln!(out)?;
+        heading(out, "How the fit was assessed")?;
+        writeln!(
+            out,
+            "  Fit {}: the work {:.2}, the rest {:.2} · {} · {}",
+            f.level.as_str(),
+            f.role_fit,
+            f.support,
+            f.assessor,
+            match &f.review {
+                ReviewState::NotReviewed => "not reviewed by a model".to_owned(),
+                ReviewState::Reviewed { by, changed: true } =>
+                    format!("reviewed by {by}, which changed it"),
+                ReviewState::Reviewed { by, changed: false } => format!("reviewed by {by}"),
+                ReviewState::Unavailable { why } => {
+                    format!("the model review was unavailable ({why}); the rules decided")
+                }
+            }
+        )?;
+        for r in &f.reasons {
+            writeln!(
+                out,
+                "  {GOOD}+{GOOD:#} {DIM}{:<14} {:<8} {:>4.2}{DIM:#} {}{}",
+                r.aspect.as_str(),
+                format!("{:?}", r.firmness).to_lowercase(),
+                r.weight,
+                r.text,
+                if r.folded {
+                    " (said with the role)"
+                } else {
+                    ""
+                }
+            )?;
+        }
+        for c in &f.contradictions {
+            writeln!(
+                out,
+                "  {BAD}-{BAD:#} {DIM}{:<14} {:<8} {:<8}{DIM:#} {}",
+                c.kind.as_str(),
+                format!("{:?}", c.firmness).to_lowercase(),
+                c.severity.as_str(),
+                c.text
+            )?;
+        }
+        for u in &f.uncertainties {
+            writeln!(out, "  {OPEN}?{OPEN:#} {u}")?;
+        }
+        let p = &ranking.practicality;
+        writeln!(out)?;
+        heading(out, "Practicality")?;
+        writeln!(out, "  {}", p.status.as_str())?;
+        for fact in &p.facts {
+            writeln!(out, "  • {fact}")?;
+        }
         writeln!(out)?;
         heading(out, "Every signal")?;
         for s in &ranking.signals {
             writeln!(
                 out,
-                "  {DIM}{:<12} {:>+6.2}  {:<26}{DIM:#} {}",
+                "  {DIM}{:<12} {:<26}{DIM:#} {}",
                 s.group.as_str(),
-                s.weight,
                 s.basis.as_str(),
                 s.summary
             )?;
             for e in &s.evidence {
-                writeln!(out, "  {DIM}{:<48}{}{DIM:#}", "", clip(e, 120))?;
+                writeln!(out, "  {DIM}{:<40}{}{DIM:#}", "", clip(e, 120))?;
             }
         }
         writeln!(

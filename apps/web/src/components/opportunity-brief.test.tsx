@@ -58,13 +58,14 @@ describe("the decision first", () => {
     expect(await violations(container)).toEqual([]);
   });
 
-  it("shows the two strongest distinct reasons and the most material concern; the rest is in the full reasoning", async () => {
+  it("shows the strongest distinct reasons, the most material concern and what to check; the rest is in the full reasoning", async () => {
     brief();
     expect(screen.getByText("Backend roles: a role you want")).toBeInTheDocument();
     expect(screen.getByText("Small teams: a kind of company or team you want")).toBeInTheDocument();
-    expect(screen.queryByText("Go: in your recent work")).not.toBeInTheDocument();
+    expect(screen.getByText("Go: in your recent work")).toBeInTheDocument();
+    expect(screen.queryByText("Payments: a domain you know")).not.toBeInTheDocument();
     expect(screen.getByText("Senior level, a step below your latest title").closest("li")).toHaveTextContent(/^Caution:/);
-    expect(screen.queryByText("The posting doesn't say whether it's product companies")).not.toBeInTheDocument();
+    expect(screen.getByText(/^To check:/).closest("li")).toHaveTextContent("The posting doesn't say whether it's product companies");
 
     await userEvent.click(screen.getByRole("button", { name: "Full reasoning" }));
     const panel = screen.getByRole("dialog", { name: "Why Narrow surfaced it" });
