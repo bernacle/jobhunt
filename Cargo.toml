@@ -5,6 +5,7 @@ members = [
     "crates/jobhunt-cloud",
     "crates/jobhunt-core",
     "crates/jobhunt-eligibility",
+    "crates/jobhunt-eval",
     "crates/jobhunt-jobs",
     "crates/jobhunt-profile",
     "crates/jobhunt-ranking",
@@ -28,6 +29,7 @@ jobhunt-app = { path = "crates/jobhunt-app" }
 jobhunt-cloud = { path = "crates/jobhunt-cloud" }
 jobhunt-core = { path = "crates/jobhunt-core" }
 jobhunt-eligibility = { path = "crates/jobhunt-eligibility" }
+jobhunt-eval = { path = "crates/jobhunt-eval" }
 jobhunt-jobs = { path = "crates/jobhunt-jobs" }
 jobhunt-profile = { path = "crates/jobhunt-profile" }
 jobhunt-mcp = { path = "crates/jobhunt-mcp" }

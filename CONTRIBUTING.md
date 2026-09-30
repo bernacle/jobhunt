@@ -262,7 +262,13 @@ the adapter (with a new fixture) in a PR.
    not reused: `RANKING_VERSION` (`rank.rs`) for signals, weights, gates
    and tiers, `TASTE_VERSION` (`taste.rs`) for how taste is learned, and
    `RULE_READER_REVISION` (`reason.rs`) for how reasons are read. Ranking
-   never changes an eligibility decision. Schema changes are new, additive
+   never changes an eligibility decision. A change that can change what
+   Today shows also regenerates the recommendation benchmark's baseline
+   (`JOBHUNT_UPDATE_BENCHMARK=1 cargo test -p jobhunt-eval --test
+   recommendation_benchmark`) and says in the PR what its diff shows; see
+   [docs/recommendation-benchmark.md](docs/recommendation-benchmark.md)
+   and the invariants in
+   [docs/ranking-invariants.md](docs/ranking-invariants.md). Schema changes are new, additive
    migrations; never edit an existing one.
 
    Keep the product's semantics: the tests encode what Narrow decides

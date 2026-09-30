@@ -1,0 +1,74 @@
+id = "early-career-generalist"
+summary = """
+A synthetic early-career generalist: a year of professional experience after a computer science degree, TypeScript and Node on the backend. Lives in Brazil, open to remote or hybrid work, wants a junior or new-grad role with mentorship. The Airbnb early-career posting that is a No for the senior is a Strong yes here.
+"""
+unexpressed = [
+    "A level ceiling: 'junior or new-grad roles'. Senior and staff roles are only read as 'a stretch', with no weight against them.",
+    "Mentorship and structured onboarding as something wanted.",
+]
+
+[[preference]]
+stance = "required"
+value = { type = "current_location", place = "Campinas, Brazil" }
+
+[[preference]]
+stance = "required"
+value = { type = "work_authorization", place = "Brazil" }
+
+[[preference]]
+stance = "wanted"
+value = { type = "work_mode", mode = "remote" }
+
+[[preference]]
+stance = "acceptable"
+value = { type = "work_mode", mode = "hybrid" }
+
+[[preference]]
+stance = "required"
+value = { type = "relocation", willing = false }
+
+[[preference]]
+stance = "wanted"
+value = { type = "role", role = "backend" }
+
+[[judgment]]
+job = "airbnb-early-career"
+fit = "strong_yes"
+practicality = "unknown"
+reasons = ["seniority_match", "engineering_work_match", "geography_valid", "compensation_unknown"]
+why = "An early-career backend role with mentorship, remote within Brazil: exactly what this candidate is looking for."
+
+[[judgment]]
+job = "orbitly-new-grad"
+fit = "strong_yes"
+practicality = "unknown"
+reasons = ["seniority_match", "engineering_work_match", "geography_valid", "compensation_unknown"]
+why = "A new-grad program on a small team using the candidate's stack, remote in Latin America."
+
+[[judgment]]
+job = "orbitly-senior-engineer"
+fit = "no"
+practicality = "valid"
+reasons = ["seniority_mismatch", "geography_valid", "compensation_good"]
+why = "Asks for six years of experience and mentoring others; the candidate has one."
+
+[[judgment]]
+job = "quarrybird-senior-backend"
+fit = "no"
+practicality = "valid"
+reasons = ["seniority_mismatch", "geography_valid", "compensation_good"]
+why = "A senior role owning services end to end with no one to learn from."
+
+[[judgment]]
+job = "supabase-orioledb"
+fit = "no"
+practicality = "unknown"
+reasons = ["seniority_mismatch", "specialization_too_deep", "geography_valid", "compensation_unknown"]
+why = "Database internals in C for someone a year into their career."
+
+[[judgment]]
+job = "stripe-payments-us-remote"
+fit = "no"
+practicality = "impossible"
+reasons = ["seniority_mismatch", "remote_scope_invalid", "work_authorization_invalid"]
+why = "Six years of experience required, and remote only within the US."

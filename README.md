@@ -1803,6 +1803,10 @@ crates/
   jobhunt-ranking   Feedback on opportunities, reason reading, job facets,
                     learned taste with its evidence, ranking signals, gates,
                     tiers, decision briefs, the rank cache, RankingService.
+  jobhunt-eval      The recommendation-quality benchmark: synthetic
+                    candidates, postings and expected judgments run against
+                    the production ranker (`narrow-eval`); see
+                    docs/recommendation-benchmark.md.
   jobhunt-sources   Adapters (Ashby, Greenhouse, Lever, YC), careers-page board
                     detection, the HTTP verifiers, and the shared HTTP client.
   jobhunt-storage   Storage backends behind the repository traits (bundled
@@ -1959,6 +1963,12 @@ with `JOBHUNT_REQUIRE_POSTGRES=1`, which turns a skip into a failure.
   currency-less pay never read as low, learned taste moving rankings with
   attribution, stated preferences outranking it, one rejection not
   blacklisting a domain, work mode and style, ordering and round trips).
+- `jobhunt-eval`: the recommendation benchmark's fixture integrity
+  (judgments consistent with their reasons, every job judged, pairs
+  complete, the golden, archetype, contrastive and compensation cases
+  encoded), the evaluator's verdicts and metrics, determinism, and the
+  recorded baseline being current (`JOBHUNT_UPDATE_BENCHMARK=1` regenerates
+  it). Cases the current ranker gets wrong are recorded, not failed.
 - `jobhunt-storage` (ranking): feedback round trips and per-record
   lookups, duplicates sharing state and feedback following a merge,
   ranking through `RankingService` over SQLite (gates, exclusions,

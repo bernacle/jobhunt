@@ -1,0 +1,258 @@
+id = "senior-startup-generalist"
+summary = """
+A synthetic senior engineer with about ten years of backend, platform and product-infrastructure work (TypeScript, Node, Go, AWS, Kubernetes as a user, PostgreSQL as an application database), mostly at small startups. Lives in Brazil, works remote only, won't relocate, authorized to work only in Brazil. Wants small technical teams, high ownership, startup or growth-stage companies; not early-career roles, and not roles far more specialized than their demonstrated work. The production failures were observed on a candidate like this one.
+"""
+unexpressed = [
+    "Seniority floor: 'not early-career or new-grad roles'. The model has no level preference; seniority is only compared with the latest resume title, and 'Early Career' is not a level it reads.",
+    "Specialization depth: 'not roles dramatically more specialized than my work'. Having used PostgreSQL or Kubernetes reads the same as building their internals.",
+    "Engineering shape: product and platform generalist work vs research, database internals, low-latency trading.",
+    "Ownership as a requirement rather than a keyword: a posting saying 'ownership' and a narrow maintenance role at a large enterprise are not told apart unless the posting states its size.",
+    "Company shape beyond stated keywords: Anthropic, Stripe and Airbnb read as companies of unknown size unless their postings say otherwise.",
+]
+
+[[preference]]
+stance = "required"
+value = { type = "current_location", place = "São Paulo, Brazil" }
+
+[[preference]]
+stance = "required"
+value = { type = "work_authorization", place = "Brazil" }
+
+[[preference]]
+stance = "required"
+value = { type = "work_mode", mode = "remote" }
+
+[[preference]]
+stance = "required"
+value = { type = "relocation", willing = false }
+
+[[preference]]
+stance = "wanted"
+value = { type = "region", region = "Latin America" }
+
+[[preference]]
+stance = "wanted"
+value = { type = "role", role = "backend" }
+
+[[preference]]
+stance = "wanted"
+value = { type = "role", role = "platform" }
+
+[[preference]]
+stance = "wanted"
+value = { type = "company", company = "small_team" }
+
+[[preference]]
+stance = "wanted"
+value = { type = "company", company = "startup" }
+
+[[preference]]
+stance = "wanted"
+value = { type = "work_style", aspect = "ownership" }
+
+[[preference]]
+stance = "required"
+value = { type = "compensation", bound = "minimum", amount = 120000, currency = "USD", period = "year" }
+
+[[preference]]
+stance = "wanted"
+value = { type = "compensation", bound = "target", amount = 180000, currency = "USD", period = "year" }
+
+# --- Golden: the production failures ---
+
+[[judgment]]
+job = "airbnb-early-career"
+fit = "no"
+practicality = "unknown"
+reasons = ["seniority_mismatch", "geography_valid", "compensation_unknown"]
+why = "An explicitly early-career role (0-2 years, new graduates) for an engineer with ten years of experience. Backend overlap is irrelevant once the level is wrong."
+
+[[judgment]]
+job = "stripe-payments-us-remote"
+fit = "maybe"
+practicality = "impossible"
+reasons = ["engineering_work_match", "seniority_match", "large_company_mismatch", "remote_scope_invalid", "work_authorization_invalid", "compensation_good"]
+why = "Plausible backend work at the right level, at a large company this candidate would weigh carefully; but remote only within the US for US-authorized candidates, and they live and are authorized only in Brazil."
+
+[[judgment]]
+job = "supabase-orioledb"
+fit = "no"
+practicality = "unknown"
+reasons = ["specialization_too_deep", "technical_depth_mismatch", "geography_valid", "compensation_unknown"]
+why = "Storage-engine development in C on PostgreSQL internals. Using PostgreSQL as an application database is not evidence of database-engine work."
+
+[[judgment]]
+job = "anthropic-staff-privacy"
+fit = "maybe"
+practicality = "unknown"
+reasons = ["insufficient_fit_evidence", "large_company_mismatch", "compensation_good", "geography_unclear", "travel_or_office_unclear"]
+why = "Exceptional pay, but nothing in the profile shows privacy engineering, and it is a cross-organizational Staff+ leadership role in a large organization. Worth a glance at most; not worth-your-attention on pay."
+
+# --- Positive: what Narrow should find ---
+
+[[judgment]]
+job = "quarrybird-senior-backend"
+fit = "strong_yes"
+practicality = "valid"
+reasons = ["seniority_match", "engineering_work_match", "startup_match", "team_shape_match", "ownership_match", "geography_valid", "compensation_good"]
+why = "Senior backend at a 15-person startup, a team of 6, end-to-end ownership, TypeScript/Node/PostgreSQL/AWS, remote in Latin America, pay reaching the target."
+
+[[judgment]]
+job = "lanternfish-platform-no-pay"
+fit = "strong_yes"
+practicality = "unknown"
+reasons = ["seniority_match", "engineering_work_match", "startup_match", "team_shape_match", "ownership_match", "geography_valid", "compensation_unknown"]
+why = "Senior platform work at a seed-stage startup of 9, owning Go/Kubernetes/AWS/Terraform infrastructure end to end, hiring worldwide. Pay isn't published: unknown, not a reason to hide it."
+
+[[judgment]]
+job = "brightmoss-senior-backend-midsize"
+fit = "strong_yes"
+practicality = "valid"
+reasons = ["seniority_match", "engineering_work_match", "team_shape_match", "ownership_match", "geography_valid", "compensation_below_target"]
+why = "A 400-person company, but a team of 5 that owns the ledger service outright, in Go and PostgreSQL, remote across the Americas. Pay meets the floor, not the target."
+
+[[judgment]]
+job = "parcelwise-fullstack-unscoped-remote"
+fit = "strong_yes"
+practicality = "unknown"
+reasons = ["seniority_match", "engineering_work_match", "startup_match", "ownership_match", "geography_unclear", "compensation_good"]
+why = "Senior product engineering at a 20-person startup with autonomy and customer contact, on the candidate's stack. 'Remote' with no scope: where it is open isn't known."
+
+[[judgment]]
+job = "tallgrass-founding-engineer"
+fit = "strong_yes"
+practicality = "valid"
+reasons = ["seniority_match", "engineering_work_match", "startup_match", "ownership_match", "geography_valid", "compensation_good"]
+why = "First engineering hire at a 5-person startup, owning backend and infrastructure, remote worldwide. Exactly the shape this candidate looks for."
+
+# --- Contrastive pairs ---
+
+[[judgment]]
+job = "ledgerline-backend-postgres"
+fit = "strong_yes"
+practicality = "valid"
+reasons = ["seniority_match", "engineering_work_match", "technical_depth_match", "startup_match", "ownership_match", "geography_valid", "compensation_good"]
+why = "Heavy application-level PostgreSQL (schema, indexing, tuning, replication of app data) plus Node services: the depth this candidate has actually shown."
+
+[[judgment]]
+job = "stratadb-storage-engine"
+fit = "no"
+practicality = "valid"
+reasons = ["specialization_too_deep", "technical_depth_mismatch", "geography_valid", "compensation_good"]
+why = "WAL, MVCC, buffer pool and compaction in C++ or Rust: database internals, a specialization the candidate hasn't demonstrated. Shares the word PostgreSQL with Ledgerline and nothing else."
+
+[[judgment]]
+job = "relaywise-backend-kubernetes"
+fit = "strong_yes"
+practicality = "valid"
+reasons = ["seniority_match", "engineering_work_match", "startup_match", "ownership_match", "geography_valid", "compensation_good"]
+why = "Go services running on Kubernetes, owned end to end at a 25-person startup: using Kubernetes, as the candidate has."
+
+[[judgment]]
+job = "helmsman-k8s-control-plane"
+fit = "no"
+practicality = "valid"
+reasons = ["specialization_too_deep", "technical_depth_mismatch", "geography_valid", "compensation_good"]
+why = "Controllers, API machinery, etcd and upstream SIG work: building Kubernetes rather than running services on it."
+
+[[judgment]]
+job = "copperleaf-product-engineer-llm"
+fit = "strong_yes"
+practicality = "valid"
+reasons = ["seniority_match", "engineering_work_match", "startup_match", "ownership_match", "geography_valid", "compensation_good"]
+why = "Product engineering that calls LLM APIs, in TypeScript, at a 20-person startup, remote worldwide. No ML background needed."
+
+[[judgment]]
+job = "northstar-research-pretraining"
+fit = "no"
+practicality = "valid"
+reasons = ["engineering_work_mismatch", "specialization_too_deep", "geography_valid", "compensation_good"]
+why = "Training frontier models with CUDA kernels and distributed training, research background preferred. 'AI' is the only overlap with the Copperleaf role."
+
+[[judgment]]
+job = "orbitly-senior-engineer"
+fit = "strong_yes"
+practicality = "valid"
+reasons = ["seniority_match", "engineering_work_match", "startup_match", "ownership_match", "geography_valid", "compensation_below_target"]
+why = "Senior backend ownership at a 30-person startup, on the candidate's stack, remote in Latin America; pay meets the floor."
+
+[[judgment]]
+job = "orbitly-new-grad"
+fit = "no"
+practicality = "unknown"
+reasons = ["seniority_mismatch", "geography_valid", "compensation_unknown"]
+why = "The same company and stack as the senior role, but a new-grad program: wrong level for someone with ten years of experience."
+
+[[judgment]]
+job = "pebblestack-backend-small"
+fit = "strong_yes"
+practicality = "valid"
+reasons = ["seniority_match", "engineering_work_match", "startup_match", "team_shape_match", "ownership_match", "geography_valid", "compensation_good"]
+why = "One of 5 engineers at a founder-led 15-person startup, owning billing, the API and infrastructure."
+
+[[judgment]]
+job = "consolidated-enterprise-backend"
+fit = "no"
+practicality = "valid"
+reasons = ["large_company_mismatch", "team_shape_mismatch", "ownership_mismatch", "geography_valid", "compensation_good"]
+why = "A narrow maintenance role in a 60-engineer organization at a Fortune 500 company, behind a change advisory board: the opposite of what this candidate wants, at the same pay as Pebblestack."
+
+# --- Compensation ---
+
+[[judgment]]
+job = "kestrel-staff-low-pay"
+fit = "strong_yes"
+practicality = "concern"
+reasons = ["seniority_match", "engineering_work_match", "startup_match", "ownership_match", "geography_valid", "compensation_below_floor"]
+why = "The role and company fit well; the published pay tops out below the candidate's required minimum. Low pay is a practical problem, not a fit problem."
+
+[[judgment]]
+job = "halcyon-low-latency-cpp"
+fit = "no"
+practicality = "valid"
+reasons = ["engineering_work_mismatch", "specialization_too_deep", "domain_mismatch", "geography_valid", "compensation_good"]
+why = "Nanosecond C++ trading systems with FPGA offload. Very high pay doesn't make it the candidate's kind of work."
+
+[[judgment]]
+job = "atlasfield-us-pay-range"
+fit = "strong_yes"
+practicality = "unknown"
+reasons = ["seniority_match", "engineering_work_match", "startup_match", "team_shape_match", "ownership_match", "geography_valid", "compensation_range_not_applicable"]
+why = "An excellent fit, open across the Americas. The published range is for US-based candidates only, so what it pays in Brazil is unknown: it shouldn't read as meeting the target."
+
+# --- Practicality ---
+
+[[judgment]]
+job = "nimbusly-onsite-sf"
+fit = "strong_yes"
+practicality = "impossible"
+reasons = ["seniority_match", "engineering_work_match", "startup_match", "ownership_match", "relocation_invalid"]
+why = "A good role at a small startup, but on site in San Francisco five days a week; the candidate works remote only and won't relocate."
+
+[[judgment]]
+job = "tempohaus-remote-europe"
+fit = "strong_yes"
+practicality = "impossible"
+reasons = ["seniority_match", "engineering_work_match", "startup_match", "ownership_match", "remote_scope_invalid", "work_authorization_invalid", "timezone_invalid"]
+why = "A good role, remote only within Europe, with EU work authorization and Central European hours required."
+
+[[judgment]]
+job = "crestline-remote-us-canada"
+fit = "strong_yes"
+practicality = "impossible"
+reasons = ["seniority_match", "engineering_work_match", "team_shape_match", "ownership_match", "remote_scope_invalid"]
+why = "Platform ownership on a team of 5, but remote only in the US or Canada."
+
+[[judgment]]
+job = "harborline-remote-us-in-description"
+fit = "strong_yes"
+practicality = "impossible"
+reasons = ["seniority_match", "engineering_work_match", "startup_match", "ownership_match", "remote_scope_invalid"]
+why = "A good role whose location field says only 'Remote'; the description says it can only hire people living in the US."
+
+[[judgment]]
+job = "stripe-payments-us-remote-explicit"
+fit = "maybe"
+practicality = "impossible"
+reasons = ["engineering_work_match", "seniority_match", "large_company_mismatch", "remote_scope_invalid", "work_authorization_invalid", "compensation_good"]
+why = "The golden Stripe posting with its US-only scope stated as 'US-Remote': the same judgment."

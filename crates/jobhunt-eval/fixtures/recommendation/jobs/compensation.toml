@@ -1,0 +1,87 @@
+# Pay is a practicality, never a reason for fit: unknown pay must not hold a
+# strong fit back, high pay must not rescue a weak one, pay below a floor
+# doesn't change fit, and a range published for another location is not
+# the candidate's. (The unknown-pay strong fit is `lanternfish-platform-no-pay`
+# among the positive jobs; the golden Anthropic case is high pay on thin fit.)
+
+[[job]]
+id = "kestrel-staff-low-pay"
+group = "compensation"
+source = "ashby:kestrel"
+company = "Kestrel"
+title = "Staff Software Engineer, Product Infrastructure"
+location = "Remote - Latin America"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 85000.0, max = 100000.0, interval = "year" }] }
+description = """
+About us
+Kestrel is a 12-person startup building inventory software for independent bookshops.
+
+About the role
+You'll own our product infrastructure end to end on a small team: the API, the PostgreSQL database, the deploy pipeline and observability. Real ownership and a lot of autonomy.
+
+What you'll need
+- Strong experience with Go or TypeScript
+- Experience with PostgreSQL and AWS
+
+This role is remote and open to candidates in Latin America.
+"""
+
+[[job]]
+id = "halcyon-low-latency-cpp"
+group = "compensation"
+source = "greenhouse:halcyon"
+company = "Halcyon Capital"
+title = "Senior C++ Engineer, Low-Latency Trading"
+location = "Remote - Americas"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 350000.0, max = 500000.0, interval = "year" }] }
+description = """
+About us
+Halcyon Capital is a quantitative trading firm.
+
+About the role
+You'll build our order-execution engine: nanosecond-sensitive C++ on kernel-bypass networking, with FPGA offload for the market-data path.
+
+What you'll need
+- Deep experience with modern C++ and low-latency systems
+- Experience with kernel-bypass networking and Linux performance tuning
+- Experience with market microstructure and exchange protocols
+
+This role is remote and open to candidates in North and South America.
+"""
+
+[[job]]
+id = "atlasfield-us-pay-range"
+group = "compensation"
+source = "greenhouse:atlasfield"
+company = "Atlasfield"
+title = "Senior Backend Engineer"
+location = "Remote - Americas"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { summary = "US base salary range: $190,000 - $230,000", components = [{ kind = "salary", label = "US base salary range", currency = "USD", min = 190000.0, max = 230000.0, interval = "year" }] }
+description = """
+About us
+Atlasfield is a 40-person startup building permitting software for solar installers.
+
+About the role
+You'll own backend services end to end on a team of 6 engineers: design, build and run them. High ownership, few meetings.
+
+What you'll need
+- Strong experience with Go or TypeScript
+- Experience with PostgreSQL
+
+This role is remote and open to candidates in North, Central and South America.
+
+Compensation
+The range above applies to candidates based in the United States. Compensation for candidates elsewhere is set for their location.
+"""

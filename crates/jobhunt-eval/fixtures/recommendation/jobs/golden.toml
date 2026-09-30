@@ -1,0 +1,159 @@
+# The four production failures BRU-320 exists for, as postings.
+#
+# Paraphrased from the companies' public job boards (shape, requirements,
+# location and pay as published), not copied verbatim. Each one surfaced as
+# "worth your attention" for a senior, Brazil-based backend/platform
+# engineer who wants remote work at small, high-ownership companies.
+
+[[job]]
+id = "airbnb-early-career"
+group = "golden"
+observed_for = "senior-startup-generalist"
+source = "greenhouse:airbnb"
+company = "Airbnb"
+title = "Software Engineer, Early Career"
+location = "Remote - Brazil"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "paraphrased from a public Airbnb posting"
+description = """
+Airbnb was born in 2007 when two hosts welcomed three guests to their San Francisco home, and has since grown to millions of hosts who have welcomed guests in almost every country.
+
+The Community You Will Join
+The Payments Platform team builds the systems that move money between guests and hosts in more than 190 countries.
+
+The Difference You Will Make
+This role is part of our Early Career program, for new graduates and engineers at the start of their careers. You will ramp up with a dedicated mentor and a structured onboarding curriculum, then ship backend features alongside senior engineers.
+
+A Typical Day
+- Build and maintain backend services in Java and Kotlin
+- Write well-tested code and take part in code reviews
+- Learn our service platform, data infrastructure and deployment tooling
+
+Your Expertise
+- A Bachelor's degree in Computer Science or a related field, completed or expected by 2027
+- 0-2 years of professional software engineering experience, internships included
+- Experience with Java, Kotlin or Python
+- Familiarity with SQL databases such as PostgreSQL or MySQL
+
+Your Location
+This position is remote-eligible within Brazil.
+
+Benefits
+Paid time off, health insurance and a travel credit.
+"""
+
+[[job]]
+id = "stripe-payments-us-remote"
+group = "golden"
+observed_for = "senior-startup-generalist"
+source = "greenhouse:stripe"
+company = "Stripe"
+title = "Backend Engineer, Payments Infrastructure"
+location = "Remote in United States"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "paraphrased from a public Stripe posting; the location is written the way Stripe's jobs site lists remote locations"
+compensation = { summary = "$184K - $276K", components = [{ kind = "salary", label = "US base salary range", currency = "USD", min = 184000.0, max = 276000.0, interval = "year" }] }
+description = """
+Who we are
+Stripe is a financial infrastructure platform for businesses. Millions of companies, from the world's largest enterprises to the most ambitious startups, use Stripe to accept payments and grow their revenue.
+
+About the team
+Payments Infrastructure builds the systems that authorize, route and settle every charge on Stripe, at a scale of billions of dollars a day.
+
+What you'll do
+- Design, build and operate highly available backend services in Go and Java
+- Own the reliability of the systems that route payments across card networks
+- Work with product and partner teams on API design
+
+Who you are
+Minimum requirements
+- 6+ years of experience building and operating backend systems
+- Strong experience with Go, Java or Ruby
+- Experience with distributed systems and relational databases such as PostgreSQL
+
+Preferred qualifications
+- Experience with payments or financial infrastructure
+
+This role is open to US-based candidates.
+
+Pay and benefits
+The annual US base salary range for this role is $184,000 - $276,000.
+"""
+
+[[job]]
+id = "supabase-orioledb"
+group = "golden"
+observed_for = "senior-startup-generalist"
+source = "ashby:supabase"
+company = "Supabase"
+title = "OrioleDB Developer"
+location = "Remote"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "paraphrased from a public Supabase posting"
+description = """
+About Supabase
+Supabase is the Postgres development platform. We are a fully remote company with team members in more than 40 countries, and have raised over $1B, including our Series F.
+
+About the role
+OrioleDB is a new storage engine for PostgreSQL, built on PostgreSQL's table access method and extensibility APIs to bring a modern, cloud-native storage architecture: undo logging instead of vacuum, copy-on-write checkpoints and row-level write-ahead logging.
+
+What you'll do
+- Develop the OrioleDB storage engine: page layout, B-tree indexes, the buffer manager, recovery and replication
+- Write PostgreSQL core patches and upstream them to the PostgreSQL community
+- Profile and optimize concurrency and I/O paths
+
+What you'll need
+- Deep experience with the internals of PostgreSQL or another database engine
+- Strong C programming skills and systems programming experience
+- Understanding of storage engines, MVCC, write-ahead logging and crash recovery
+
+Nice to have
+- Contributions to PostgreSQL or another open-source database
+- Experience with Rust
+
+This role is open to candidates anywhere in the world.
+"""
+
+[[job]]
+id = "anthropic-staff-privacy"
+group = "golden"
+observed_for = "senior-startup-generalist"
+source = "greenhouse:anthropic"
+company = "Anthropic"
+title = "Staff+ Software Engineer, Privacy"
+location = "Remote-Friendly (Travel-Required) | San Francisco, CA | Seattle, WA | New York City, NY"
+employment = "full_time"
+provenance = "paraphrased from a public Anthropic posting"
+compensation = { summary = "$405,000 - $485,000 USD", components = [{ kind = "salary", currency = "USD", min = 405000.0, max = 485000.0, interval = "year" }] }
+description = """
+About Anthropic
+Anthropic's mission is to create reliable, interpretable, and steerable AI systems. We want AI to be safe and beneficial for our users and for society as a whole.
+
+About the role
+We are looking for a Staff+ engineer to lead technical privacy efforts across Anthropic's products and research infrastructure. You will design privacy-preserving data systems, define how user data flows through training and serving pipelines, and partner with legal, policy and security teams on privacy requirements across jurisdictions.
+
+Responsibilities
+- Set the technical direction for privacy engineering across products and research
+- Design data retention, deletion and access-control systems for sensitive data
+- Build privacy review into the development lifecycle with policy, legal and security partners
+- Influence roadmaps across many teams
+
+You may be a good fit if you
+- Have 10+ years of software engineering experience, including significant time leading privacy or security engineering
+- Have deep expertise in privacy engineering: data minimization, anonymization, differential privacy, and regulatory frameworks such as GDPR and CCPA
+- Have led cross-organizational technical initiatives in a large engineering organization
+
+Strong candidates may also have
+- Experience with Python and large-scale data pipelines
+
+Annual Salary: $405,000 - $485,000 USD
+
+Logistics
+This role is remote-friendly with regular travel to one of our offices.
+"""

@@ -1817,6 +1817,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "jobhunt-eval"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "jobhunt-core",
+ "jobhunt-eligibility",
+ "jobhunt-jobs",
+ "jobhunt-profile",
+ "jobhunt-ranking",
+ "jobhunt-resume",
+ "serde",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
 name = "jobhunt-jobs"
 version = "0.1.0"
 dependencies = [
