@@ -18,8 +18,12 @@ use jobhunt_jobs::verification::{
 use jobhunt_jobs::{
     EmploymentType, JobPosting, JobRecord, JobStatus, OpportunityId, WorkplaceType,
 };
+use jobhunt_profile::taste::{
+    TasteAssertion, TasteBrief, TasteConfidence, TasteOrigin, TasteReview, TasteSource, vocab,
+};
 use jobhunt_profile::{
-    Certainty, Preference, PreferenceId, PreferenceOrigin, ProfileData, ProfileId, merge_resume,
+    Certainty, Preference, PreferenceId, PreferenceOrigin, ProfileData, ProfileId, TasteId,
+    merge_resume,
 };
 use jobhunt_resume::{DeterministicParser, ResumeFile, ResumeParser};
 
@@ -80,6 +84,40 @@ pub fn profile(candidate: &CandidateFixture) -> Result<ProfileData, BuildError> 
             created_at: at,
             updated_at: at,
         });
+    }
+    if let Some(taste) = &candidate.taste {
+        data.taste_brief = Some(TasteBrief {
+            id: TasteBrief::id_for(id),
+            text: taste.looking_for.clone(),
+            statement: None,
+            interpretation: None,
+            confirmed_at: Some(at),
+            created_at: at,
+            updated_at: at,
+        });
+        for s in &taste.statement {
+            let key = jobhunt_profile::taste::key(s.dimension, &s.value);
+            data.taste.push(TasteAssertion {
+                id: TasteId::derive(&[&id.to_string(), "benchmark", &key]),
+                dimension: s.dimension,
+                value: s.value.clone(),
+                polarity: s.polarity,
+                text: s
+                    .text
+                    .clone()
+                    .unwrap_or_else(|| vocab::sentence(s.dimension, &s.value, s.polarity)),
+                confidence: TasteConfidence::High,
+                origin: TasteOrigin::Stated,
+                review: TasteReview::Confirmed,
+                sources: vec![TasteSource::Person],
+                explanation: None,
+                interpreter: None,
+                original: None,
+                superseded_by: None,
+                created_at: at,
+                updated_at: at,
+            });
+        }
     }
     data.profile.revision = 1;
     Ok(data)

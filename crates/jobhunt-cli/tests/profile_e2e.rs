@@ -152,7 +152,7 @@ fn cli_flow_from_resume_to_export() {
     );
     let out = env.ok(&["profile"]);
     assert!(!out.contains("has no currency"), "{out}");
-    let out = env.ok(&["preferences"]);
+    let out = env.ok(&["preferences", "show", "--all"]);
     assert!(out.contains("“I want small product teams and at least $120k. Avoid pure SRE roles.”"));
     assert!(out.contains("from “Avoid pure SRE roles”"), "{out}");
     let out = env.ok(&[
@@ -339,6 +339,77 @@ fn cli_flow_from_resume_to_export() {
     ] {
         assert!(history.contains(kind), "missing {kind} in:\n{history}");
     }
+}
+
+/// The id (as printed, `taste_` + 8 hex) on the line showing `text`.
+fn taste_id_of(out: &str, text: &str) -> String {
+    let line = out
+        .lines()
+        .find(|l| l.contains(text) && l.contains("taste_"))
+        .unwrap_or_else(|| panic!("no line with {text:?} in:\n{out}"));
+    let at = line.find("taste_").unwrap();
+    line[at..at + 14].to_owned()
+}
+
+#[test]
+fn cli_taste_profile_from_one_sentence() {
+    let env = Env::new();
+    env.ok(&["init", fixture("marina_costa.pdf").to_str().unwrap()]);
+    let out = env.ok(&["preferences"]);
+    assert!(
+        out.contains("What kind of job are you looking for?"),
+        "{out}"
+    );
+
+    let out = env.ok(&[
+        "preferences",
+        "describe",
+        "Small technical teams where I can own things end to end, backend or platform work, \
+         startups. I don't want early-career roles or giant process-heavy companies. Remote only.",
+    ]);
+    for expected in [
+        "What you're looking for",
+        "What Narrow understands",
+        "Small technical teams",
+        "High ownership and autonomy",
+        "You tend to avoid",
+        "Early-career roles",
+        "Process-heavy organizations",
+        "Practical constraints",
+        "Remote only",
+        "Does this look right?",
+        "Read by rules/1",
+    ] {
+        assert!(out.contains(expected), "missing {expected:?} in:\n{out}");
+    }
+    // Practical constraints never show up as taste.
+    let understood = &out
+        [out.find("What Narrow understands").unwrap()..out.find("Practical constraints").unwrap()];
+    assert!(!understood.contains("Remote only"), "{understood}");
+
+    let startups = taste_id_of(&out, "Startups");
+    let out = env.ok(&["preferences", "correct", &startups, "--polarity", "neutral"]);
+    assert!(
+        out.contains("Startups: doesn't matter") || !out.contains("  Startups  "),
+        "{out}"
+    );
+    let early = taste_id_of(&out, "Early-career roles");
+    let out = env.ok(&["preferences", "remove", &early]);
+    assert!(out.contains("won't read it again"), "{out}");
+    assert!(!out.contains("Early-career roles"), "{out}");
+    let out = env.ok(&["preferences", "confirm"]);
+    assert!(!out.contains("Does this look right?"), "{out}");
+    assert!(out.contains("You confirmed"), "{out}");
+    // Reinterpreting keeps every decision.
+    let out = env.ok(&["preferences", "reinterpret"]);
+    assert!(!out.contains("Early-career roles"), "{out}");
+    let all = env.ok(&["preferences", "show", "--all"]);
+    assert!(
+        all.contains("Details") && all.contains("In your words"),
+        "{all}"
+    );
+    let err = env.fails(&["preferences", "correct", "taste_ffffffff"]);
+    assert!(err.contains("--polarity"), "{err}");
 }
 
 #[test]

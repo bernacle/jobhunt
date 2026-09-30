@@ -103,6 +103,15 @@ profile_id!(
     /// A preference statement, in the user's own words (`stmt_…`).
     StatementId, "stmt_", "jobhunt.profile.statement.v1"
 );
+profile_id!(
+    /// One statement of the candidate taste profile (`taste_…`).
+    TasteId, "taste_", "jobhunt.profile.taste.v1"
+);
+profile_id!(
+    /// The person's description of what they are looking for (`tbrief_…`):
+    /// one per profile.
+    TasteBriefId, "tbrief_", "jobhunt.profile.taste_brief.v1"
+);
 
 impl ProfileId {
     /// The single profile of a local install. The same on every machine, so

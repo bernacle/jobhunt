@@ -204,7 +204,11 @@ async fn cli_and_mcp_share_one_database() {
         json!({"set": [{"kind": "work_mode", "mode": "remote", "stance": "require"}]}),
     )
     .await;
-    assert!(env.ok(&["preferences"]).contains("remote"));
+    assert!(
+        env.ok(&["preferences"])
+            .to_lowercase()
+            .contains("remote only")
+    );
     mcp.close().await;
 }
 

@@ -37,12 +37,18 @@ pub enum ProfileEventKind {
     StatementRemoved,
     PreferenceSet,
     PreferenceRemoved,
+    /// The person described what they are looking for.
+    TasteDescribed,
+    /// Their words were read into taste statements.
+    TasteInterpreted,
+    /// They confirmed, corrected, added or removed taste statements.
+    TasteReviewed,
     /// Changes merged from another copy of the profile (cloud sync).
     Synced,
 }
 
 impl ProfileEventKind {
-    const ALL: [ProfileEventKind; 20] = [
+    const ALL: [ProfileEventKind; 23] = [
         Self::ResumeImported,
         Self::LinkedinImported,
         Self::GithubImported,
@@ -62,6 +68,9 @@ impl ProfileEventKind {
         Self::StatementRemoved,
         Self::PreferenceSet,
         Self::PreferenceRemoved,
+        Self::TasteDescribed,
+        Self::TasteInterpreted,
+        Self::TasteReviewed,
         Self::Synced,
     ];
 
@@ -86,6 +95,9 @@ impl ProfileEventKind {
             Self::StatementRemoved => "statement_removed",
             Self::PreferenceSet => "preference_set",
             Self::PreferenceRemoved => "preference_removed",
+            Self::TasteDescribed => "taste_described",
+            Self::TasteInterpreted => "taste_interpreted",
+            Self::TasteReviewed => "taste_reviewed",
             Self::Synced => "synced",
         }
     }

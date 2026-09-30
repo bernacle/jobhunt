@@ -59,6 +59,7 @@ contract!(
     write_lock_serializes_writers,
     structured_preference_values_round_trip,
     evidence_sources_round_trip,
+    taste_profile_round_trips,
 );
 
 async fn round_trips_and_classifies_the_lifecycle(store: &dyn Store) {
@@ -709,6 +710,93 @@ async fn structured_preference_values_round_trip(store: &dyn Store) {
         .collect();
     assert_eq!(relocation.len(), 2);
     assert_eq!(relocation.iter().filter(|p| p.active).count(), 1);
+}
+
+async fn taste_profile_round_trips(store: &dyn Store) {
+    use jobhunt_profile::taste::edit::{apply_reading, correct, remove, set_brief};
+    use jobhunt_profile::taste::reading::ReadAssertion;
+    use jobhunt_profile::taste::{
+        InterpretationOutcome, Polarity, TasteConfidence, TasteDimension, TasteOrigin,
+        TasteReading, TasteReview, TasteSource, compose,
+    };
+    let service = ProfileService::new(store);
+    let read = |d, v: &str, p| ReadAssertion {
+        dimension: d,
+        value: v.into(),
+        polarity: p,
+        confidence: TasteConfidence::High,
+        text: v.into(),
+        explanation: Some("Read from your words.".into()),
+        origin: TasteOrigin::Interpreted,
+        sources: vec![TasteSource::Words {
+            quote: "small teams".into(),
+            statement: None,
+        }],
+    };
+    let reading = TasteReading {
+        interpreter: "rules/1".into(),
+        assertions: vec![
+            read(TasteDimension::Team, "small_team", Polarity::Prefer),
+            read(TasteDimension::Company, "early_stage", Polarity::Prefer),
+            read(TasteDimension::WorkShape, "ml_research", Polarity::Avoid),
+        ],
+        ambiguities: vec!["Which team size?".into()],
+        ..TasteReading::default()
+    };
+    let (_, data) = service
+        .change_taste(ProfileEventKind::TasteInterpreted, "read", at(1), |d| {
+            set_brief(d, "small teams, early-stage, no ML research", None, at(1));
+            apply_reading(
+                d,
+                &reading,
+                InterpretationOutcome::Read,
+                None,
+                "digest".into(),
+                at(1),
+            );
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let p = compose(&data, &[]);
+    let id = |key: &str| p.assertions.iter().find(|a| a.key() == key).unwrap().id;
+    let (early, research) = (id("company:early_stage"), id("work_shape:ml_research"));
+    service
+        .change_taste(ProfileEventKind::TasteReviewed, "reviewed", at(2), |d| {
+            correct(d, &p, early, Some(Polarity::Open), None, None, at(2))
+                .map_err(|e| jobhunt_profile::ProfileError::Invalid(e.to_string()))?;
+            remove(d, &p, research, at(2))
+                .map_err(|e| jobhunt_profile::ProfileError::Invalid(e.to_string()))?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let stored = service.require().await.unwrap();
+    assert_eq!(stored.taste.len(), 3);
+    assert_eq!(
+        stored.taste_brief.as_ref().map(|b| b.text.as_str()),
+        Some("small teams, early-stage, no ML research")
+    );
+    let p = compose(&stored, &[]);
+    let early = p.find(early).unwrap();
+    assert_eq!(
+        (early.polarity, early.review),
+        (Polarity::Open, TasteReview::Corrected)
+    );
+    assert_eq!(p.removed.len(), 1);
+    let history = service.history(10).await.unwrap();
+    assert!(
+        history
+            .iter()
+            .any(|e| e.kind == ProfileEventKind::TasteReviewed)
+    );
+    // Everything is kept on a plain save of the same aggregate.
+    let (_, again) = service
+        .change_taste(ProfileEventKind::TasteReviewed, "noop", at(3), |_| Ok(()))
+        .await
+        .unwrap();
+    assert_eq!(again.taste, stored.taste);
+    assert_eq!(again.taste_brief, stored.taste_brief);
 }
 
 async fn feedback_rankings_and_eligibility_cache(store: &dyn Store) {

@@ -616,7 +616,7 @@ where
 /// between reading and writing it (the optimistic revision check failed).
 /// Every change re-reads the profile, so a retry applies it to what is
 /// stored now; after a few lost races the conflict is reported.
-async fn retry_conflicts<T, F, Fut>(mut change: F) -> Result<T, AppError>
+pub(crate) async fn retry_conflicts<T, F, Fut>(mut change: F) -> Result<T, AppError>
 where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = Result<T, jobhunt_profile::ProfileError>>,

@@ -16,7 +16,8 @@ use jobhunt_profile::{
     EmploymentKind, Experience, Origin, PartialDate, Preference, PreferenceOrigin,
     PreferenceStatement, PreferenceValue, Profile, ProfileData, ProfileEvent, ProfileEventKind,
     ProfileId, ProfileRepository, Project, Provenance, RecordMeta, Skill, SourceDocument,
-    SourceRef, SpokenLanguage, Stance, StatementReading, StorageError, Subject, Verification,
+    SourceRef, SpokenLanguage, Stance, StatementReading, StorageError, Subject, TasteAssertion,
+    TasteBrief, Verification,
 };
 use sqlx::sqlite::SqliteRow;
 use sqlx::{QueryBuilder, Row, Sqlite, SqliteConnection};
@@ -464,7 +465,26 @@ impl SqliteJobStore {
                     })
                 })
                 .collect::<Result<Vec<_>, StorageError>>()?;
+        let taste =
+            rows("SELECT id, body FROM profile_taste WHERE profile_id = ? ORDER BY created_at, id")
+                .fetch_all(&mut *conn)
+                .await
+                .map_err(query_error("loading the taste profile"))?
+                .iter()
+                .map(|row| {
+                    let c = Cols::new(row, "id");
+                    c.json::<TasteAssertion>("body")
+                })
+                .collect::<Result<Vec<_>, StorageError>>()?;
+        let taste_brief = rows("SELECT id, body FROM profile_taste_briefs WHERE profile_id = ?")
+            .fetch_optional(&mut *conn)
+            .await
+            .map_err(query_error("loading the taste brief"))?
+            .map(|row| Cols::new(&row, "id").json::<TasteBrief>("body"))
+            .transpose()?;
         Ok(Some(ProfileData {
+            taste,
+            taste_brief,
             profile,
             documents,
             experiences,
@@ -593,6 +613,20 @@ async fn write_profile(
     .map_err(query_error("storing a profile"))?;
 
     // Children first, so that nothing still points at a deleted row.
+    delete_missing(
+        conn,
+        "profile_taste",
+        &pid,
+        &ids(data.taste.iter().map(|x| x.id)),
+    )
+    .await?;
+    delete_missing(
+        conn,
+        "profile_taste_briefs",
+        &pid,
+        &ids(data.taste_brief.iter().map(|x| x.id)),
+    )
+    .await?;
     delete_missing(
         conn,
         "profile_preferences",
@@ -948,6 +982,49 @@ async fn write_profile(
             .execute(&mut *conn)
             .await
             .map_err(query_error("storing a preference"))?;
+    }
+
+    let sql = upsert_sql(
+        "profile_taste",
+        &[
+            "id",
+            "profile_id",
+            "dimension",
+            "value",
+            "polarity",
+            "review",
+            "body",
+            "created_at",
+            "updated_at",
+        ],
+    );
+    for t in &data.taste {
+        sqlx::query(&sql)
+            .bind(t.id.to_string())
+            .bind(&pid)
+            .bind(t.dimension.as_str())
+            .bind(&t.value)
+            .bind(t.polarity.as_str())
+            .bind(t.review.as_str())
+            .bind(serde_json::to_string(t).map_err(encode_error("encoding a taste statement"))?)
+            .bind(encode_timestamp(t.created_at))
+            .bind(encode_timestamp(t.updated_at))
+            .execute(&mut *conn)
+            .await
+            .map_err(query_error("storing a taste statement"))?;
+    }
+    if let Some(b) = &data.taste_brief {
+        sqlx::query(&upsert_sql(
+            "profile_taste_briefs",
+            &["id", "profile_id", "body", "updated_at"],
+        ))
+        .bind(b.id.to_string())
+        .bind(&pid)
+        .bind(serde_json::to_string(b).map_err(encode_error("encoding the taste brief"))?)
+        .bind(encode_timestamp(b.updated_at))
+        .execute(&mut *conn)
+        .await
+        .map_err(query_error("storing the taste brief"))?;
     }
 
     // Derived links: every technology or skill claim backs the skill with

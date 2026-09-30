@@ -906,6 +906,7 @@ async fn hosted_mcp_serves_the_same_tools_per_account() {
             "get_pipeline",
             "get_profile",
             "get_taste",
+            "get_taste_profile",
             "mark_applied",
             "prepare_application_context",
             "record_feedback",
@@ -913,6 +914,7 @@ async fn hosted_mcp_serves_the_same_tools_per_account() {
             "save_job",
             "search_jobs",
             "update_preferences",
+            "update_taste_profile",
             "verify_job"
         ]
     );

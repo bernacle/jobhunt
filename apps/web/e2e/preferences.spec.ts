@@ -3,6 +3,11 @@ import { type Page, expect, test } from "@playwright/test";
 import { expectAccessible, onboardViaApi, signIn } from "./helpers";
 
 /**
+ * BRU-321: Preferences is what Narrow understands about the person. One
+ * sentence becomes a short summary to confirm or correct; practical
+ * constraints are kept apart (their settings one tap away, under Edit
+ * constraints); every other structured setting is under Fine-tune.
+ *
  * BRU-308: the structured settings and the person's words are one set of
  * preferences. A sentence fills in the settings; a setting changed
  * directly replaces what the sentence set, and the sentence stays as
@@ -14,6 +19,12 @@ const WORDS = "remote from Brazil, at least USD 140k, prefer small teams";
 
 function row(page: Page, name: string) {
   return page.getByRole("group", { name, exact: true });
+}
+
+/** Opens the practical constraints' settings and the Fine-tune section. */
+async function openSettings(page: Page) {
+  await page.locator("summary").filter({ hasText: "Edit constraints" }).click();
+  await page.locator("summary").filter({ hasText: "Fine-tune" }).click();
 }
 
 /** Opens a row's editor (the one open sheet) and returns it. */
@@ -47,10 +58,18 @@ test.describe.serial("Preferences", () => {
     await expect(how.getByText("Learned", { exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
 
-    await page.getByRole("button", { name: "Add in your words" }).click();
-    await page.getByLabel("Describe what you're looking for").fill(WORDS);
-    await page.getByRole("button", { name: "Update preferences" }).click();
-    await expect(page.getByRole("heading", { name: "Understood" })).toBeVisible();
+    // The words onboarding stored are the starting point; describe anew.
+    await expect(page.getByText("What you told Narrow before:")).toBeVisible();
+    await page.getByRole("button", { name: "Describe it again" }).click();
+    await page.getByLabel("What kind of job are you looking for?").fill(WORDS);
+    await page.getByRole("button", { name: "Save" }).click();
+    const understood = page.getByRole("region", { name: "What Narrow understands" });
+    await expect(understood.getByRole("list", { name: "What you want" }).getByText("Small technical teams")).toBeVisible();
+    // Practical constraints are never taste.
+    await expect(page.getByRole("list", { name: "Your practical constraints" }).getByText("Remote only")).toBeVisible();
+    await expect(understood.getByRole("list", { name: "What you want" }).getByText(/remote/i)).toHaveCount(0);
+
+    await openSettings(page);
 
     await expect(row(page, "Work setup").getByText("Remote only")).toBeVisible();
     await expect(row(page, "Where you live").getByText("Brazil")).toBeVisible();
@@ -72,8 +91,35 @@ test.describe.serial("Preferences", () => {
     await expectAccessible(page);
   });
 
+  test("the summary is confirmed or corrected, and corrections stick", async ({ page }) => {
+    await signIn(page, name, "/preferences");
+    const understood = page.getByRole("region", { name: "What Narrow understands" });
+    await expect(understood.getByText("Narrow's reading · check it")).toBeVisible();
+    await understood.getByRole("button", { name: "Edit" }).click();
+    const sheet = page.getByRole("dialog", { name: "What Narrow understands" });
+    await sheet.getByRole("button", { name: "Doesn't matter (Small technical teams)" }).click();
+    await expect(sheet.getByText("Small technical teams: doesn't matter").first()).toBeVisible();
+    await sheet.getByLabel("Add one sentence").fill("I'd love developer tooling");
+    await sheet.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(sheet.getByText("I'd love developer tooling").first()).toBeVisible();
+    await expectAccessible(page);
+    await page.keyboard.press("Escape");
+    await understood.getByRole("button", { name: "Looks right" }).click();
+    await expect(understood.getByText("You confirmed this")).toBeVisible();
+    // Reading the same words again keeps every decision.
+    await understood.locator("summary").filter({ hasText: "How Narrow read this" }).click();
+    await Promise.all([
+      page.waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/preferences")),
+      understood.getByRole("button", { name: "Read my words again" }).click(),
+    ]);
+    await page.reload();
+    await expect(understood.getByRole("list", { name: "What you want" }).getByText(/I'd love developer tooling/)).toBeVisible();
+    await expect(understood.getByRole("list", { name: "What you want" }).getByText("Small technical teams")).toHaveCount(0);
+  });
+
   test("settings change directly, without rewriting the sentence", async ({ page }) => {
     await signIn(page, name, "/preferences");
+    await openSettings(page);
     await choose(page, "Work setup", "Prefer remote");
     await choose(page, "Relocation", "Not willing to relocate");
     await choose(page, "When pay isn't published", "Hide them");
@@ -100,6 +146,7 @@ test.describe.serial("Preferences", () => {
     await expect(row(page, "Target").getByRole("status")).toHaveText(/Saved|Already in effect/);
 
     await page.reload();
+    await openSettings(page);
     await expect(row(page, "Work setup").getByText("Prefer remote")).toBeVisible();
     await expect(row(page, "Relocation").getByText("Not willing to relocate")).toBeVisible();
     await expect(row(page, "When pay isn't published").getByText("Hide them")).toBeVisible();
@@ -115,6 +162,9 @@ test.describe.serial("Preferences", () => {
     test(`Preferences are accessible in the ${scheme} theme`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
       await signIn(page, name, "/preferences");
+      await expect(page.getByRole("region", { name: "What Narrow understands" })).toBeVisible();
+      await expectAccessible(page);
+      await openSettings(page);
       await expect(row(page, "Work setup")).toBeVisible();
       await expectAccessible(page);
       await edit(page, "Minimum");

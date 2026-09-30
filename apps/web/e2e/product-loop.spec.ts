@@ -23,12 +23,17 @@ test.describe.serial("the product loop", () => {
     // The step folds into one line once it's done.
     await expect(page.getByText(/ana_lima\.md · \d+ roles? found/)).toBeVisible();
 
-    await page.getByLabel("What are you looking for?").fill(STATEMENT);
-    await page.getByRole("button", { name: "Update preferences" }).click();
-    await expect(page.getByRole("heading", { name: "Understood" })).toBeVisible();
-    await expect(page.getByText("backend roles").first()).toBeVisible();
-    await expect(page.getByRole("heading", { name: "I couldn't interpret" })).toBeVisible();
-    await expect(page.getByText("Something about good vibes")).toBeVisible();
+    // One question; Narrow reads it into a short summary to confirm.
+    await page.getByLabel("What kind of job are you looking for?").fill(STATEMENT);
+    await page.getByRole("button", { name: "Continue" }).click();
+    const understood = page.getByRole("region", { name: "What Narrow understands" });
+    await expect(understood.getByRole("list", { name: "What you want" }).getByText(/Backend engineering/)).toBeVisible();
+    await expect(understood.getByRole("list", { name: "What you avoid" }).getByText(/SRE/)).toBeVisible();
+    // What it couldn't place is said, never dropped.
+    await expect(understood.getByText(/Something about good vibes/)).toBeVisible();
+    await expect(page.getByRole("list", { name: "Your practical constraints" }).getByText(/USD 120,000/)).toBeVisible();
+    await understood.getByRole("button", { name: "Looks right" }).click();
+    await expect(understood.getByText("You confirmed this")).toBeVisible();
     await page.getByRole("link", { name: "Go to Today" }).click();
     await expect(page).toHaveURL(/\/today$/);
   });
@@ -171,6 +176,11 @@ test.describe.serial("the product loop", () => {
 
   test("Preferences keep what was said apart from what was learned", async ({ page }) => {
     await signIn(page, name, "/preferences");
+    await expect(page.getByRole("region", { name: "What you're looking for" }).getByText(STATEMENT)).toBeVisible();
+    // What was learned from decisions is its own section, never "you said".
+    await expect(page.getByRole("region", { name: "Learned over time" }).getByText(/You tend to pass on large companies/)).toBeVisible();
+    await page.locator("summary").filter({ hasText: "Edit constraints" }).click();
+    await page.locator("summary").filter({ hasText: "Fine-tune" }).click();
     await expect(page.getByRole("group", { name: "Minimum", exact: true }).getByText("At least USD 120,000 per year")).toBeVisible();
     const more = page.getByRole("region", { name: "Roles, domains and more" });
     await expect(more.getByRole("group", { name: "Role" }).filter({ hasText: "backend roles" })).toContainText("Want");

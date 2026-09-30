@@ -74,6 +74,11 @@ test("Today's evidence is a full-height sheet on a phone, and peers keep 44px ac
 test("Preferences work on a phone: summary rows, one decision in a sheet, thumb-sized choices", async ({ page }) => {
   await onboardViaApi("e2e-mobile-prefs");
   await signIn(page, "e2e-mobile-prefs", "/preferences");
+  // Short by default: the words, the summary, the constraints. No overflow.
+  await expect(page.getByRole("region", { name: "What Narrow understands" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await expect(page.getByRole("group", { name: "Work setup", exact: true })).toBeHidden();
+  await page.locator("summary").filter({ hasText: "Edit constraints" }).click();
   const setup = page.getByRole("group", { name: "Work setup", exact: true });
   await expect(setup).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -103,6 +108,7 @@ test("Preferences work on a phone: summary rows, one decision in a sheet, thumb-
   await expect(sheet).toBeHidden();
   await expect(setup.getByRole("status")).toHaveText(/Saved|Already in effect/);
   await expect(setup.getByText("Remote only")).toBeVisible();
+  await page.locator("summary").filter({ hasText: "Fine-tune" }).click();
   const team = page.getByRole("group", { name: "Team", exact: true });
   await team.getByRole("button", { name: /^(Edit|Add) team$/ }).click();
   const small = page.getByRole("dialog").getByRole("group", { name: "Small team", exact: true });

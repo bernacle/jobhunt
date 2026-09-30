@@ -20,6 +20,10 @@
 //! * [`LocalApp::record_feedback`] ([`feedback`]): save, reject, applied, …
 //!   (repeats are not recorded twice);
 //! * [`LocalApp::update_preferences`] ([`preferences`]);
+//! * [`LocalApp::taste_profile`], [`LocalApp::describe_taste`] and
+//!   [`LocalApp::review_taste`] ([`taste_profile`]): the candidate taste
+//!   profile, read from the person's words (by a configured model or the
+//!   built-in rules), with their confirmations and corrections;
 //! * [`LocalApp::profile_view`] ([`profile_view`]): the profile, without
 //!   contact details;
 //! * [`LocalApp::import_linkedin`], [`LocalApp::import_github`] and
@@ -56,6 +60,7 @@ pub mod resolve;
 pub mod shortlist;
 pub mod state;
 pub mod sync;
+pub mod taste_profile;
 pub mod taste_view;
 pub mod verify;
 pub mod views;
@@ -131,6 +136,46 @@ pub struct App {
     loaded: Arc<LoadedConfig>,
     store: Arc<dyn Store>,
     discovery: DiscoveryMode,
+    taste_model: TasteModel,
+}
+
+/// The model that reads taste, if one is configured.
+#[derive(Clone, Default)]
+pub struct TasteModel {
+    /// Usable.
+    pub model: Option<Arc<dyn jobhunt_profile::taste::TasteInterpreter>>,
+    /// Why a configured model can't be used (the built-in rules read
+    /// instead).
+    pub problem: Option<String>,
+}
+
+impl std::fmt::Debug for TasteModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TasteModel")
+            .field("model", &self.model.as_ref().map(|m| m.name()))
+            .field("problem", &self.problem)
+            .finish()
+    }
+}
+
+impl TasteModel {
+    /// The model a configuration names (see [`config::AiConfig`]).
+    pub fn from_config(config: &config::AiConfig) -> Self {
+        match config.model() {
+            Ok(Some(model)) => Self {
+                model: Some(Arc::new(model)),
+                problem: None,
+            },
+            Ok(None) => Self::default(),
+            Err(problem) => {
+                tracing::warn!(%problem, "the taste model is not usable; using the built-in reader");
+                Self {
+                    model: None,
+                    problem: Some(problem),
+                }
+            }
+        }
+    }
 }
 
 /// The local application (the name the CLI and the stdio MCP server use).
@@ -152,7 +197,8 @@ impl App {
         let store = SqliteJobStore::open(&loaded.database)
             .await
             .map_err(|e| AppError::storage("opening it", e))?;
-        Ok(Self::with_store(loaded, store))
+        let model = TasteModel::from_config(&loaded.config.ai);
+        Ok(Self::with_store(loaded, store).with_taste_model(model))
     }
 
     /// An application over an already open store, discovering on demand.
@@ -171,7 +217,19 @@ impl App {
             loaded,
             store,
             discovery,
+            taste_model: TasteModel::default(),
         }
+    }
+
+    /// Reads taste with this model (the cloud shares one between
+    /// requests; tests give a fake).
+    pub fn with_taste_model(mut self, model: TasteModel) -> Self {
+        self.taste_model = model;
+        self
+    }
+
+    pub fn taste_model(&self) -> &TasteModel {
+        &self.taste_model
     }
 
     /// Closes the store (for SQLite, flushing the write-ahead log).

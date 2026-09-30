@@ -600,6 +600,117 @@ async fn an_ambiguous_onboarding_answer_stays_unresolved_until_confirmed() {
 }
 
 #[tokio::test]
+async fn the_taste_profile_reads_once_with_the_configured_model() {
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+    let model = MockServer::start().await;
+    let reading = json!({
+        "summary": "Small teams.",
+        "preferences": [
+            {"dimension": "team", "value": "small_team", "polarity": "prefer", "confidence": "high",
+             "statement": "Small technical teams", "explanation": "Said so.",
+             "sources": [{"kind": "words", "ref": "small technical teams"}]},
+            {"dimension": "seniority", "value": "staff_plus", "polarity": "prefer", "confidence": "high",
+             "statement": "Staff-plus roles", "explanation": "Latest title.",
+             "sources": [{"kind": "profile", "ref": "e1"}]}
+        ],
+        "ambiguities": [],
+        "constraints_noted": ["remote"]
+    });
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "choices": [{"index": 0, "finish_reason": "stop",
+                         "message": {"role": "assistant", "content": reading.to_string()}}]
+        })))
+        .mount(&model)
+        .await;
+    let Some(server) = Server::start_with(&[
+        ("JOBHUNT_AI_PROVIDER", "openai".to_owned()),
+        ("JOBHUNT_AI_MODEL", "test-model".to_owned()),
+        ("JOBHUNT_AI_BASE_URL", format!("{}/v1", model.uri())),
+    ])
+    .await
+    else {
+        return;
+    };
+    let token = server.token("taste").await;
+    let (status, body) = server.upload(&token, "ana_lima.md", "text/markdown").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let words = "Small technical teams, backend work. Remote.";
+    let (status, body) = server
+        .post(
+            "/api/v1/taste/profile",
+            &token,
+            json!({"action": "describe", "text": words}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["interpreted"], true);
+    let profile = &body["profile"];
+    assert_eq!(profile["reader"]["name"], "model/openai:test-model");
+    assert_eq!(
+        profile["interpretation"]["interpreter"],
+        "model/openai:test-model"
+    );
+    let understood = profile["understood"].to_string();
+    assert!(understood.contains("Small technical teams"), "{profile}");
+    assert!(
+        understood.contains("Inferred from your profile"),
+        "{profile}"
+    );
+    // Remote is a constraint, read deterministically from the same words.
+    assert!(
+        profile["constraints"].to_string().contains("remote")
+            || profile["constraints"].to_string().contains("Remote"),
+        "{profile}"
+    );
+    // What the model was sent: the words and a normalized career, nothing
+    // personal.
+    let sent = model.received_requests().await.unwrap();
+    assert_eq!(sent.len(), 1);
+    let prompt = String::from_utf8_lossy(&sent[0].body).to_string();
+    assert!(prompt.contains("Small technical teams, backend work"));
+    for private in [
+        "Ana Lima",
+        "ana@example.org",
+        "Acme Payments",
+        "Lisbon",
+        "analima",
+    ] {
+        assert!(!prompt.contains(private), "{private} was sent");
+    }
+    // Reading it never calls the model; confirming doesn't either.
+    let (status, view) = server.get("/api/v1/taste/profile", &token).await;
+    assert_eq!(status, StatusCode::OK, "{view}");
+    let (status, confirmed) = server
+        .post(
+            "/api/v1/taste/profile",
+            &token,
+            json!({"action": "confirm"}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{confirmed}");
+    assert_eq!(confirmed["profile"]["needs_confirmation"], false);
+    assert_eq!(model.received_requests().await.unwrap().len(), 1);
+    // Invalid actions are refused, with a reason the person can act on.
+    let (status, error) = server
+        .post(
+            "/api/v1/taste/profile",
+            &token,
+            json!({"action": "describe", "text": "  "}),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
+    assert_eq!(error["error"]["code"], "invalid_arguments");
+    // Another account sees nothing of it.
+    let other = server.token("someone-else").await;
+    let (status, _) = server.get("/api/v1/taste/profile", &other).await;
+    assert_ne!(status, StatusCode::OK);
+    server.finish().await;
+}
+
+#[tokio::test]
 async fn today_shows_one_role_per_company() {
     let Some(server) = Server::start().await else {
         return;

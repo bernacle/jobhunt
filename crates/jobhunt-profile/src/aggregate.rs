@@ -14,6 +14,7 @@ use crate::model::{
     Verification,
 };
 use crate::preferences::{Preference, PreferenceCategory, PreferenceStatement, PreferencesView};
+use crate::taste::{TasteAssertion, TasteBrief};
 
 /// A profile and all its records.
 #[derive(Debug, Clone, PartialEq)]
@@ -27,6 +28,11 @@ pub struct ProfileData {
     pub claims: Vec<Claim>,
     pub preferences: Vec<Preference>,
     pub statements: Vec<PreferenceStatement>,
+    /// The candidate taste profile's stored statements (see
+    /// [`crate::taste`]), tombstones included.
+    pub taste: Vec<TasteAssertion>,
+    /// What the person is looking for, in their words.
+    pub taste_brief: Option<TasteBrief>,
 }
 
 /// A skill with what backs it.
@@ -91,6 +97,8 @@ impl ProfileData {
             claims: Vec::new(),
             preferences: Vec::new(),
             statements: Vec::new(),
+            taste: Vec::new(),
+            taste_brief: None,
         }
     }
 
@@ -108,6 +116,8 @@ impl ProfileData {
             && self.claims.is_empty()
             && self.preferences.is_empty()
             && self.statements.is_empty()
+            && self.taste.is_empty()
+            && self.taste_brief.is_none()
     }
 
     /// The most recently imported document.

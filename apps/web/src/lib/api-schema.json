@@ -590,6 +590,37 @@
       ],
       "type": "object"
     },
+    "ConstraintView": {
+      "description": "A practical constraint: whether the person can take a job, not\nwhether they'd want it. Read from their preferences.",
+      "properties": {
+        "ids": {
+          "description": "The preferences behind it (`pref_…`); empty when read from the\nresume.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "description": "`work_setup`, `location`, `authorization`, `relocation`,\n`remote_geography`, `timezone`, `sponsorship`, `engagement`,\n`pay_floor`, `pay_target`, `policy`.",
+          "type": "string"
+        },
+        "layer": {
+          "description": "`requirement` (a posting that states otherwise is left out) or\n`preference`.",
+          "type": "string"
+        },
+        "text": {
+          "description": "\"Remote only\", \"Based in São Paulo, Brazil\".",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "layer",
+        "ids"
+      ],
+      "type": "object"
+    },
     "ContactDetails": {
       "description": "Contact details, included only when explicitly requested.",
       "properties": {
@@ -1931,6 +1962,62 @@
       ],
       "type": "object"
     },
+    "InterpretationView": {
+      "description": "How the description was last interpreted.",
+      "properties": {
+        "ambiguities": {
+          "description": "What was unclear, for the person to settle.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "at": {
+          "type": "string"
+        },
+        "constraints_noted": {
+          "description": "Practical constraints the words mentioned (never taste).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "interpreter": {
+          "type": "string"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outcome": {
+          "description": "`read`, or `fallback` when a model couldn't be used and the rules\nread instead.",
+          "type": "string"
+        },
+        "rejected": {
+          "description": "Statements the interpreter produced that failed validation.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "interpreter",
+        "outcome",
+        "at",
+        "ambiguities",
+        "constraints_noted",
+        "rejected"
+      ],
+      "type": "object"
+    },
     "JobAsks": {
       "description": "What the job asks for, as read from the posting.",
       "properties": {
@@ -2766,6 +2853,24 @@
       ],
       "type": "object"
     },
+    "PolarityInput": {
+      "description": "Which way a statement leans, as given.",
+      "oneOf": [
+        {
+          "enum": [
+            "prefer",
+            "open",
+            "avoid"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "neutral",
+          "description": "\"I don't care about this.\"",
+          "type": "string"
+        }
+      ]
+    },
     "PreferenceControls": {
       "description": "Every structured control, read from the preferences in effect.",
       "properties": {
@@ -3496,6 +3601,31 @@
         "name",
         "technologies",
         "stale"
+      ],
+      "type": "object"
+    },
+    "ReaderView": {
+      "description": "What reads the person's words.",
+      "properties": {
+        "kind": {
+          "description": "`model` or `rules`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "`rules/1`, `model/anthropic:claude-opus-5-5`.",
+          "type": "string"
+        },
+        "note": {
+          "description": "Why a configured model isn't used.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "name"
       ],
       "type": "object"
     },
@@ -4389,6 +4519,154 @@
       ],
       "type": "object"
     },
+    "TasteAction": {
+      "description": "A change to the taste profile.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "What kind of job the person is looking for, in their words. Replaces\nthe previous description and interprets it.",
+          "properties": {
+            "action": {
+              "const": "describe",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Reads the description again (for example after a model was\nconfigured), keeping every decision the person made.",
+          "properties": {
+            "action": {
+              "const": "reinterpret",
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "\"Looks right\": the given statements (`taste_…`), or with none every\nstatement of the summary Narrow read.",
+          "properties": {
+            "action": {
+              "const": "confirm",
+              "type": "string"
+            },
+            "ids": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Changes a statement: new words, another polarity, or both.",
+          "properties": {
+            "action": {
+              "const": "correct",
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "polarity": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PolarityInput"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "text": {
+              "default": null,
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "action",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "\"I don't care about this\": kept as not mattering, never inferred\nagain.",
+          "properties": {
+            "action": {
+              "const": "neutral",
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Removes a statement; it never comes back.",
+          "properties": {
+            "action": {
+              "const": "remove",
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Adds one sentence of the person's own.",
+          "properties": {
+            "action": {
+              "const": "add",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action",
+            "text"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "TasteEvidenceView": {
       "description": "One piece of feedback behind a learned pattern.",
       "properties": {
@@ -4438,6 +4716,282 @@
         "kind",
         "read_as",
         "summary"
+      ],
+      "type": "object"
+    },
+    "TasteItemView": {
+      "description": "One statement of the taste profile.",
+      "properties": {
+        "against": {
+          "description": "Sources that point the other way.",
+          "items": {
+            "$ref": "#/$defs/TasteSourceView"
+          },
+          "type": "array"
+        },
+        "basis": {
+          "description": "Where it comes from, in a few words: \"You said\", \"Narrow's reading\nof your words\", \"Inferred from your profile\", \"Learned from your\nfeedback\", \"From your earlier settings\".",
+          "type": "string"
+        },
+        "confidence": {
+          "description": "`low`, `medium` or `high`.",
+          "type": "string"
+        },
+        "dimension": {
+          "description": "`seniority`, `work_shape`, `specialization`, `ownership`,\n`company`, `team`, `culture`, `domain`, `technology`,\n`work_style`, `other`.",
+          "type": "string"
+        },
+        "explanation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "`taste_…`: pass it to confirm, correct or remove it.",
+          "type": "string"
+        },
+        "interpreter": {
+          "description": "`rules/1`, `model/anthropic:claude-opus-5-5`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "origin": {
+          "description": "`stated`, `interpreted`, `profile`, `learned` or `legacy`.",
+          "type": "string"
+        },
+        "original": {
+          "description": "What Narrow had read before the person corrected it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "polarity": {
+          "description": "`prefer`, `open`, `avoid` or `neutral`.",
+          "type": "string"
+        },
+        "review": {
+          "description": "`unreviewed`, `confirmed`, `corrected` or `removed`.",
+          "type": "string"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/TasteSourceView"
+          },
+          "type": "array"
+        },
+        "text": {
+          "description": "\"Small technical teams\".",
+          "type": "string"
+        },
+        "value": {
+          "description": "The canonical value (`small_team`) or the person's words\nnormalized.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "dimension",
+        "value",
+        "polarity",
+        "text",
+        "confidence",
+        "origin",
+        "review",
+        "basis",
+        "sources"
+      ],
+      "type": "object"
+    },
+    "TasteLineView": {
+      "description": "One line of the summary: statements about one dimension that lean the\nsame way (\"Backend engineering · Platform engineering\").",
+      "properties": {
+        "dimension": {
+          "type": "string"
+        },
+        "inferred": {
+          "description": "Every statement of the line is Narrow's inference (from the profile\nor feedback), not something the person said.",
+          "type": "boolean"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/TasteItemView"
+          },
+          "type": "array"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "dimension",
+        "inferred",
+        "items"
+      ],
+      "type": "object"
+    },
+    "TasteProfileView": {
+      "description": "The taste profile, as the Preferences page shows it.",
+      "properties": {
+        "avoid": {
+          "description": "What they tend to avoid.",
+          "items": {
+            "$ref": "#/$defs/TasteLineView"
+          },
+          "type": "array"
+        },
+        "confirmed_at": {
+          "description": "When they last said it looks right.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "constraints": {
+          "description": "Whether they can take a job: work setup, where they live and may\nwork, relocation, pay floor.",
+          "items": {
+            "$ref": "#/$defs/ConstraintView"
+          },
+          "type": "array"
+        },
+        "interpretation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InterpretationView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "learned": {
+          "description": "Patterns learned from feedback, kept apart from what they said.",
+          "items": {
+            "$ref": "#/$defs/TasteItemView"
+          },
+          "type": "array"
+        },
+        "looking_for": {
+          "description": "What the person is looking for, in their words.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "looking_for_source": {
+          "description": "`description` (what they described), `statements` (their earlier\nwords, not yet interpreted as a description), or absent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "needs_confirmation": {
+          "description": "The summary has statements Narrow read that they haven't reviewed.",
+          "type": "boolean"
+        },
+        "neutral": {
+          "description": "Said not to matter.",
+          "items": {
+            "$ref": "#/$defs/TasteItemView"
+          },
+          "type": "array"
+        },
+        "reader": {
+          "$ref": "#/$defs/ReaderView"
+        },
+        "removed": {
+          "description": "Statements they removed (never read again).",
+          "items": {
+            "$ref": "#/$defs/TasteItemView"
+          },
+          "type": "array"
+        },
+        "understood": {
+          "description": "What Narrow understands they want, one line per dimension.",
+          "items": {
+            "$ref": "#/$defs/TasteLineView"
+          },
+          "type": "array"
+        },
+        "unsure": {
+          "description": "Weak inferences, not part of the summary unless confirmed.",
+          "items": {
+            "$ref": "#/$defs/TasteItemView"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "understood",
+        "avoid",
+        "unsure",
+        "neutral",
+        "learned",
+        "removed",
+        "constraints",
+        "needs_confirmation",
+        "reader"
+      ],
+      "type": "object"
+    },
+    "TasteSourceView": {
+      "description": "Where one statement comes from, readable.",
+      "properties": {
+        "kind": {
+          "description": "`words`, `preference`, `evidence`, `feedback` or `person`.",
+          "type": "string"
+        },
+        "text": {
+          "description": "\"You wrote: “small technical teams”\".",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "type": "object"
+    },
+    "TasteUpdateResult": {
+      "description": "The answer of a change.",
+      "properties": {
+        "action": {
+          "description": "`describe`, `reinterpret`, `confirm`, `correct`, `neutral`,\n`remove`, `add`.",
+          "type": "string"
+        },
+        "changed": {
+          "description": "Something changed.",
+          "type": "boolean"
+        },
+        "interpreted": {
+          "description": "The words were interpreted by this call (false when the same input\nwas already interpreted).",
+          "type": "boolean"
+        },
+        "preferences": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreferenceUpdateResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For a description: the practical constraints and structured\npreferences read from the words."
+        },
+        "profile": {
+          "$ref": "#/$defs/TasteProfileView",
+          "description": "The profile afterwards."
+        }
+      },
+      "required": [
+        "action",
+        "changed",
+        "interpreted",
+        "profile"
       ],
       "type": "object"
     },
@@ -5207,6 +5761,15 @@
     },
     "SourceRemovalResult": {
       "$ref": "#/$defs/SourceRemovalResult"
+    },
+    "TasteAction": {
+      "$ref": "#/$defs/TasteAction"
+    },
+    "TasteProfileView": {
+      "$ref": "#/$defs/TasteProfileView"
+    },
+    "TasteUpdateResult": {
+      "$ref": "#/$defs/TasteUpdateResult"
     },
     "TasteView": {
       "$ref": "#/$defs/TasteView"

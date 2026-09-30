@@ -13,6 +13,11 @@
 //! * `1`: resume and user data in the original schema.
 //! * `2`: LinkedIn and GitHub sources, corroborations, and source-specific
 //!   field support. A profile that still has the original shape writes v1.
+//! * `3`: the candidate taste profile (`taste_brief`, `taste`), with every
+//!   statement's provenance and the person's corrections and removals. A
+//!   profile without one writes v2 (or v1) exactly as before, so older
+//!   versions of JobHunt still read it; a v3 file is refused by them with a
+//!   clear message rather than losing the corrections.
 
 use std::collections::HashSet;
 
@@ -24,9 +29,10 @@ use crate::evidence::{Claim, Subject};
 use crate::ids::{DocumentId, ProfileId};
 use crate::model::{Education, Experience, Profile, Project, Skill, SourceDocument};
 use crate::preferences::{Preference, PreferenceStatement};
+use crate::taste::{TasteAssertion, TasteBrief};
 
 pub const EXPORT_FORMAT: &str = "jobhunt.profile";
-pub const EXPORT_VERSION: u32 = 2;
+pub const EXPORT_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -54,6 +60,12 @@ pub struct ProfileExport {
     pub preferences: Vec<Preference>,
     #[serde(default)]
     pub statements: Vec<PreferenceStatement>,
+    /// What the person is looking for, in their words (v3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub taste_brief: Option<TasteBrief>,
+    /// The taste profile's statements, tombstones included (v3).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub taste: Vec<TasteAssertion>,
 }
 
 /// Why a profile file cannot be imported.
@@ -64,7 +76,7 @@ pub enum ExportError {
     #[error("not a JobHunt profile file (format is {found:?}, expected {EXPORT_FORMAT:?})")]
     Format { found: String },
     #[error(
-        "profile file version {found} is not supported (this JobHunt reads versions 1 and {EXPORT_VERSION}); update JobHunt"
+        "profile file version {found} is not supported (this JobHunt reads versions 1 to {EXPORT_VERSION}); update JobHunt"
     )]
     Version { found: String },
     #[error("invalid profile file: {0}")]
@@ -97,9 +109,16 @@ impl ProfileExport {
                         || !m.source_snapshots.is_empty()
                 })
             || data.claims.iter().any(|c| !c.corroborations.is_empty());
+        let tasteful = data.taste_brief.is_some() || !data.taste.is_empty();
         Self {
             format: EXPORT_FORMAT.to_owned(),
-            version: if modern { 2 } else { 1 },
+            version: if tasteful {
+                3
+            } else if modern {
+                2
+            } else {
+                1
+            },
             exported_at: now,
             generator,
             profile: data.profile.clone(),
@@ -111,6 +130,8 @@ impl ProfileExport {
             claims: data.claims.clone(),
             preferences: data.preferences.clone(),
             statements: data.statements.clone(),
+            taste_brief: data.taste_brief.clone(),
+            taste: data.taste.clone(),
         }
     }
 
@@ -130,7 +151,7 @@ impl ProfileExport {
             });
         }
         match value.get("version").and_then(serde_json::Value::as_u64) {
-            Some(1 | 2) => {}
+            Some(v) if (1..=u64::from(EXPORT_VERSION)).contains(&v) => {}
             other => {
                 return Err(ExportError::Version {
                     found: other.map_or_else(
@@ -194,6 +215,10 @@ impl ProfileExport {
         let statements = unique(
             "statement",
             self.statements.iter().map(|s| s.id.to_string()).collect(),
+        );
+        let taste = unique(
+            "taste statement",
+            self.taste.iter().map(|t| t.id.to_string()).collect(),
         );
 
         let doc_ok = |id: &DocumentId| documents.contains(&id.to_string());
@@ -292,6 +317,30 @@ impl ProfileExport {
                 problems.push(format!("statement {} has no text", s.id));
             }
         }
+        for t in &self.taste {
+            if t.text.trim().is_empty() || t.value.trim().is_empty() {
+                problems.push(format!("taste statement {} has no text or value", t.id));
+            }
+            if let Some(next) = t.superseded_by
+                && !taste.contains(&next.to_string())
+            {
+                problems.push(format!(
+                    "taste statement {} superseded by missing {next}",
+                    t.id
+                ));
+            }
+        }
+        if let Some(b) = &self.taste_brief {
+            if b.text.trim().is_empty() {
+                problems.push(format!("taste brief {} has no text", b.id));
+            }
+            if self.version < 3 {
+                problems.push("a taste profile needs profile file version 3".to_owned());
+            }
+        }
+        if !self.taste.is_empty() && self.version < 3 {
+            problems.push("a taste profile needs profile file version 3".to_owned());
+        }
         if problems.is_empty() {
             Ok(())
         } else {
@@ -313,6 +362,157 @@ impl ProfileExport {
             claims: self.claims,
             preferences: self.preferences,
             statements: self.statements,
+            taste: self.taste,
+            taste_brief: self.taste_brief.map(|mut b| {
+                b.id = TasteBrief::id_for(target);
+                b
+            }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+
+    use super::*;
+    use crate::taste::edit::{add, apply_reading, correct, remove, set_brief};
+    use crate::taste::reading::{ReadAssertion, TasteReading};
+    use crate::taste::{
+        InterpretationOutcome, Polarity, TasteConfidence, TasteDimension, TasteOrigin, TasteReview,
+        TasteSource, compose,
+    };
+
+    fn at(minute: u32) -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 9, 21, 9, minute, 0).unwrap()
+    }
+
+    fn tasteful() -> ProfileData {
+        let mut data = ProfileData::new(ProfileId::local(), at(0));
+        set_brief(
+            &mut data,
+            "Small teams, startups. No ML research.",
+            None,
+            at(0),
+        );
+        let read = |d, v: &str, p| ReadAssertion {
+            dimension: d,
+            value: v.into(),
+            polarity: p,
+            confidence: TasteConfidence::High,
+            text: crate::taste::vocab::sentence(d, v, p),
+            explanation: None,
+            origin: TasteOrigin::Interpreted,
+            sources: vec![TasteSource::Words {
+                quote: "Small teams".into(),
+                statement: None,
+            }],
+        };
+        let reading = TasteReading {
+            interpreter: "rules/1".into(),
+            assertions: vec![
+                read(TasteDimension::Team, "small_team", Polarity::Prefer),
+                read(TasteDimension::Company, "startup", Polarity::Prefer),
+                read(TasteDimension::WorkShape, "ml_research", Polarity::Avoid),
+            ],
+            ambiguities: vec!["Small team, or small company?".into()],
+            ..TasteReading::default()
+        };
+        apply_reading(
+            &mut data,
+            &reading,
+            InterpretationOutcome::Read,
+            None,
+            "digest".into(),
+            at(1),
+        );
+        let p = compose(&data, &[]);
+        let id = |key: &str| p.assertions.iter().find(|a| a.key() == key).unwrap().id;
+        let startup = id("company:startup");
+        let research = id("work_shape:ml_research");
+        correct(
+            &mut data,
+            &p,
+            startup,
+            Some(Polarity::Open),
+            None,
+            None,
+            at(2),
+        )
+        .unwrap();
+        remove(&mut data, &p, research, at(3)).unwrap();
+        add(&mut data, "Real users", &TasteReading::default(), at(4)).unwrap();
+        data
+    }
+
+    #[test]
+    fn profiles_without_taste_keep_their_version_and_shape() {
+        let data = ProfileData::new(ProfileId::local(), at(0));
+        let export = ProfileExport::from_data(&data, at(0), None);
+        assert_eq!(export.version, 1);
+        let json = export.to_json().unwrap();
+        assert!(!json.contains("taste"), "{json}");
+    }
+
+    #[test]
+    fn taste_round_trips_with_provenance_and_corrections() {
+        let data = tasteful();
+        let export = ProfileExport::from_data(&data, at(5), Some("test".into()));
+        assert_eq!(export.version, 3);
+        let back = ProfileExport::parse(&export.to_json().unwrap()).unwrap();
+        assert_eq!(back, export);
+        let restored = back.into_data(ProfileId::local());
+        assert_eq!(restored.taste, data.taste);
+        assert_eq!(restored.taste_brief, data.taste_brief);
+        let p = compose(&restored, &[]);
+        let startup = p
+            .assertions
+            .iter()
+            .find(|a| a.key() == "company:startup")
+            .unwrap();
+        assert_eq!(startup.review, TasteReview::Corrected);
+        assert_eq!(startup.polarity, Polarity::Open);
+        assert!(startup.original.is_some());
+        assert_eq!(p.removed.len(), 1, "the removal survives the round trip");
+        assert_eq!(
+            restored
+                .taste_brief
+                .as_ref()
+                .and_then(|b| b.interpretation.as_ref())
+                .map(|i| i.ambiguities.len()),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn a_taste_profile_needs_version_three() {
+        let mut export = ProfileExport::from_data(&tasteful(), at(5), None);
+        export.version = 2;
+        let json = export.to_json().unwrap();
+        assert!(matches!(
+            ProfileExport::parse(&json),
+            Err(ExportError::Invalid(problems)) if problems.iter().any(|p| p.contains("version 3"))
+        ));
+        let future = json.replace("\"version\": 2", "\"version\": 4");
+        assert!(matches!(
+            ProfileExport::parse(&future),
+            Err(ExportError::Version { .. })
+        ));
+    }
+
+    #[test]
+    fn taste_entities_round_trip() {
+        let data = tasteful();
+        let entities = crate::entities::decompose(&data).unwrap();
+        assert!(
+            entities
+                .iter()
+                .any(|e| e.key.kind == crate::entities::EntityKind::TasteBrief)
+        );
+        let back = crate::entities::compose(data.id(), 1, &entities, true).unwrap();
+        let mut expected = data.clone();
+        crate::entities::sort_like_storage(&mut expected);
+        assert_eq!(back.taste, expected.taste);
+        assert_eq!(back.taste_brief, expected.taste_brief);
     }
 }

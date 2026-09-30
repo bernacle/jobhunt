@@ -1286,6 +1286,12 @@ impl<'a, R: ProfileRepository + ?Sized> ProfileService<'a, R> {
             RecordId::Statement(x) => {
                 data.statements.retain(|s| s.id != x);
                 data.preferences.retain(|p| p.statement != Some(x));
+                // The brief's words stay (they are the brief's own copy).
+                if let Some(brief) = &mut data.taste_brief
+                    && brief.statement == Some(x)
+                {
+                    brief.statement = None;
+                }
                 // Preferences it had replaced become current again.
                 reactivate_latest(&mut data, now);
                 Removal::Deleted(id.clone())
@@ -1301,6 +1307,25 @@ impl<'a, R: ProfileRepository + ?Sized> ProfileService<'a, R> {
         let event = ProfileEvent::new(now, kind, Some(id), "removed by you");
         self.commit(&mut data, vec![event], now).await?;
         Ok(removal)
+    }
+
+    /// Applies a change to the taste profile (see [`crate::taste::edit`])
+    /// to the stored profile and saves it with one history entry. The
+    /// change runs on the profile as stored now, so a caller that read it
+    /// earlier (to ask an interpreter) never overwrites what changed
+    /// meanwhile; a lost race is a [`StorageError::Conflict`] to retry.
+    pub async fn change_taste<T>(
+        &self,
+        kind: ProfileEventKind,
+        detail: impl Into<String>,
+        now: DateTime<Utc>,
+        change: impl FnOnce(&mut ProfileData) -> Result<T, ProfileError>,
+    ) -> Result<(T, ProfileData), ProfileError> {
+        let mut data = self.load_or_new(now).await?;
+        let out = change(&mut data)?;
+        let event = ProfileEvent::new(now, kind, None, detail);
+        self.commit(&mut data, vec![event], now).await?;
+        Ok((out, data))
     }
 
     pub async fn export(

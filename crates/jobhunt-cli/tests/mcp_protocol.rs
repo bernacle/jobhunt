@@ -19,21 +19,25 @@ use serde_json::{Value, json};
 
 use common::{Env, McpClient};
 
-const READ_TOOLS: [&str; 5] = [
+const READ_TOOLS: [&str; 6] = [
     "get_job",
     "get_pipeline",
     "get_profile",
     "get_taste",
+    "get_taste_profile",
     "prepare_application_context",
 ];
-const MUTATING_TOOLS: [&str; 5] = [
+const MUTATING_TOOLS: [&str; 6] = [
     "mark_applied",
     "record_feedback",
     "reject_job",
     "save_job",
     "update_preferences",
+    "update_taste_profile",
 ];
 const NETWORK_TOOLS: [&str; 3] = ["get_feed", "search_jobs", "verify_job"];
+/// Changes state, and may ask a configured model to read the person's words.
+const MODEL_TOOLS: [&str; 1] = ["update_taste_profile"];
 
 #[tokio::test(flavor = "multi_thread")]
 async fn handshake_tools_errors_and_clean_shutdown_with_logs_on_stderr() {
@@ -99,7 +103,7 @@ async fn handshake_tools_errors_and_clean_shutdown_with_logs_on_stderr() {
         }
         assert_eq!(
             hints["openWorldHint"],
-            NETWORK_TOOLS.contains(&name),
+            NETWORK_TOOLS.contains(&name) || MODEL_TOOLS.contains(&name),
             "{name}"
         );
     }

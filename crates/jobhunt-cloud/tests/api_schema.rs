@@ -43,6 +43,8 @@ fn schema() -> Value {
         jobhunt_app::profile_view::ProfileView,
         jobhunt_app::preferences::PreferenceUpdateResult,
         jobhunt_app::taste_view::TasteView,
+        jobhunt_app::taste_profile::TasteProfileView,
+        jobhunt_app::taste_profile::TasteUpdateResult,
         jobhunt_app::profile_edit::ClaimReview,
         jobhunt_app::profile_edit::ClaimDecisionResult,
         jobhunt_app::profile_edit::ResumeImportResult,
@@ -64,6 +66,7 @@ fn schema() -> Value {
         jobhunt_cloud::api::types::ConfirmEmailRequest,
         jobhunt_cloud::api::types::CreateTokenRequest,
         jobhunt_mcp::UpdatePreferencesParams,
+        jobhunt_app::taste_profile::TasteAction,
         jobhunt_mcp::SearchJobsParams,
     );
     let definitions = generator.take_definitions(true);

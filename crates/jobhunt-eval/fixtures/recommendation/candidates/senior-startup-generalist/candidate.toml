@@ -60,6 +60,74 @@ value = { type = "compensation", bound = "target", amount = 180000, currency = "
 
 # --- Golden: the production failures ---
 
+# The candidate taste profile (BRU-321): what they said they're looking
+# for and the statements they confirmed. The current ranker doesn't read
+# it; BRU-322 will.
+[taste]
+looking_for = "I like small technical teams where I can own things end to end. Backend/platform work, startups or small growth companies, remote. I don't want early-career roles or giant process-heavy companies."
+
+[[taste.statement]]
+dimension = "seniority"
+value = "senior"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "seniority"
+value = "early_career"
+polarity = "avoid"
+
+[[taste.statement]]
+dimension = "work_shape"
+value = "backend"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "work_shape"
+value = "platform"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "specialization"
+value = "broad"
+polarity = "prefer"
+text = "Broad work across systems, not narrow specialist roles"
+
+[[taste.statement]]
+dimension = "specialization"
+value = "deep"
+polarity = "avoid"
+text = "Roles far more specialized than their work (database internals, research)"
+
+[[taste.statement]]
+dimension = "ownership"
+value = "high"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "team"
+value = "small_team"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "company"
+value = "startup"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "company"
+value = "growth"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "company"
+value = "large_company"
+polarity = "avoid"
+
+[[taste.statement]]
+dimension = "culture"
+value = "process_heavy"
+polarity = "avoid"
+
 [[judgment]]
 job = "airbnb-early-career"
 fit = "no"

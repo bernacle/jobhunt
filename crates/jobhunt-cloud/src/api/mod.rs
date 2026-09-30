@@ -32,6 +32,7 @@
 //! | GET | `/api/v1/feed` | the Today feed (`get_feed`) |
 //! | POST | `/api/v1/opportunities/{id}/dismiss` | put it aside ("not now") |
 //! | GET | `/api/v1/taste` | stated preferences and learned taste (`get_taste`) |
+//! | GET, POST | `/api/v1/taste/profile` | the candidate taste profile; describe, confirm, correct (`get_taste_profile`, `update_taste_profile`) |
 //! | GET, POST | `/api/v1/profile/claims` | claims needing review; confirm / reject them |
 //! | PUT | `/api/v1/profile/resume` | import or re-import a resume (the body is the file) |
 //! | PUT | `/api/v1/profile/linkedin` | import a LinkedIn data export (the body is the file) |
@@ -67,6 +68,7 @@ use jobhunt_app::profile_sources::{
 use jobhunt_app::profile_view::ProfileView;
 use jobhunt_app::shortlist::MAX_LIMIT;
 use jobhunt_app::state::StateExport;
+use jobhunt_app::taste_profile::{TasteAction, TasteProfileView, TasteUpdateResult};
 use jobhunt_app::taste_view::TasteView;
 use jobhunt_app::{App, AppError, DiscoveryMode, FindRequest, Quiet, RefreshMode, SearchResults};
 use jobhunt_jobs::verification::VerifyMode;
@@ -108,6 +110,8 @@ struct Inner {
     dev: Option<DevVerifier>,
     usage: UsageLog,
     email: Option<Arc<dyn EmailSender>>,
+    /// Shared by every request: one HTTP client, one configuration.
+    taste_model: jobhunt_app::TasteModel,
 }
 
 impl std::fmt::Debug for ApiState {
@@ -163,6 +167,26 @@ impl ApiState {
                 ]));
             }
         };
+        let taste_model = match &config.ai {
+            Ok(Some(model)) => match jobhunt_ai::ModelInterpreter::new(model.clone()) {
+                Ok(m) => jobhunt_app::TasteModel {
+                    model: Some(Arc::new(m)),
+                    problem: None,
+                },
+                Err(e) => jobhunt_app::TasteModel {
+                    model: None,
+                    problem: Some(e.to_string()),
+                },
+            },
+            Ok(None) => jobhunt_app::TasteModel::default(),
+            Err(problem) => {
+                tracing::warn!(%problem, "JOBHUNT_AI_* can't be used; the built-in taste reader is");
+                jobhunt_app::TasteModel {
+                    model: None,
+                    problem: Some(problem.clone()),
+                }
+            }
+        };
         Ok(Self {
             inner: Arc::new(Inner {
                 store,
@@ -172,6 +196,7 @@ impl ApiState {
                 dev,
                 usage,
                 email,
+                taste_model,
             }),
         })
     }
@@ -191,11 +216,14 @@ impl ApiState {
     /// The account's application: the shared configuration over a view of
     /// the store bound to this account. Built per request; cheap.
     pub fn app_for(&self, principal: &Principal) -> Arc<App> {
-        Arc::new(App::from_parts(
-            Arc::clone(&self.inner.config.app),
-            Arc::new(self.user_store(principal)),
-            DiscoveryMode::Background,
-        ))
+        Arc::new(
+            App::from_parts(
+                Arc::clone(&self.inner.config.app),
+                Arc::new(self.user_store(principal)),
+                DiscoveryMode::Background,
+            )
+            .with_taste_model(self.inner.taste_model.clone()),
+        )
     }
 
     fn user_store(&self, principal: &Principal) -> PgUserStore {
@@ -936,6 +964,41 @@ async fn taste(
     Ok(Json(view))
 }
 
+async fn taste_profile(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+) -> Result<Json<TasteProfileView>, ApiError> {
+    let view = run(state.app_for(&principal), |app| async move {
+        app.taste_profile().await
+    })
+    .await?;
+    Ok(Json(view))
+}
+
+async fn update_taste_profile(
+    State(state): State<ApiState>,
+    axum::Extension(principal): Auth,
+    Body(action): Body<TasteAction>,
+) -> Result<Json<TasteUpdateResult>, ApiError> {
+    let name = action.name();
+    let result = run(state.app_for(&principal), move |app| async move {
+        app.review_taste(&action, Utc::now()).await
+    })
+    .await?;
+    // Counts only: never the person's words.
+    state.usage().record(
+        Some(&principal.user),
+        "taste_profile",
+        serde_json::json!({
+            "action": name,
+            "interpreted": result.interpreted,
+            "reader": result.profile.reader.kind,
+            "outcome": result.profile.interpretation.as_ref().map(|i| i.outcome.clone()),
+        }),
+    );
+    Ok(Json(result))
+}
+
 async fn claims(
     State(state): State<ApiState>,
     axum::Extension(principal): Auth,
@@ -1370,6 +1433,10 @@ pub fn router(state: ApiState) -> Router {
         .route("/api/v1/feed", get(feed))
         .route("/api/v1/opportunities/{id}/dismiss", post(dismiss))
         .route("/api/v1/taste", get(taste))
+        .route(
+            "/api/v1/taste/profile",
+            get(taste_profile).post(update_taste_profile),
+        )
         .route("/api/v1/profile/claims", get(claims).post(decide_claims))
         .route("/api/v1/profile/resume", axum::routing::put(import_resume))
         .route(
