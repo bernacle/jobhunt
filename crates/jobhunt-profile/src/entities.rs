@@ -3,7 +3,7 @@
 //!
 //! [`decompose`] turns a [`ProfileData`] into one [`Entity`] per record: the
 //! basics, every document, experience, project, education entry, skill,
-//! claim, preference and statement, each with its stable id, its JSON body
+//! claim, preference, statement and taste statement, and the taste brief, each with its stable id, its JSON body
 //! and a digest of that body. [`compose`] is the inverse. Records keep the
 //! ids the profile domain gave them (derived from the profile and the
 //! resume's import keys, or from content and creation time), so the same
@@ -28,6 +28,7 @@ use crate::export::{ExportError, ProfileExport};
 use crate::ids::ProfileId;
 use crate::model::{Education, Experience, Profile, Project, Skill, SourceDocument};
 use crate::preferences::{Preference, PreferenceStatement};
+use crate::taste::{TasteAssertion, TasteBrief};
 
 /// What kind of record an entity is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -43,10 +44,14 @@ pub enum EntityKind {
     Claim,
     Preference,
     Statement,
+    /// A statement of the candidate taste profile.
+    Taste,
+    /// What the person is looking for, in their words (one per profile).
+    TasteBrief,
 }
 
 impl EntityKind {
-    pub const ALL: [EntityKind; 9] = [
+    pub const ALL: [EntityKind; 11] = [
         Self::Profile,
         Self::Document,
         Self::Experience,
@@ -56,6 +61,8 @@ impl EntityKind {
         Self::Claim,
         Self::Preference,
         Self::Statement,
+        Self::Taste,
+        Self::TasteBrief,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -69,6 +76,8 @@ impl EntityKind {
             Self::Claim => "claim",
             Self::Preference => "preference",
             Self::Statement => "statement",
+            Self::Taste => "taste",
+            Self::TasteBrief => "taste_brief",
         }
     }
 }
@@ -238,6 +247,12 @@ pub fn decompose(data: &ProfileData) -> Result<Vec<Entity>, EntityError> {
     for s in &data.statements {
         out.push(Entity::of(EntityKind::Statement, s.id.to_string(), s)?);
     }
+    for t in &data.taste {
+        out.push(Entity::of(EntityKind::Taste, t.id.to_string(), t)?);
+    }
+    if let Some(b) = &data.taste_brief {
+        out.push(Entity::of(EntityKind::TasteBrief, b.id.to_string(), b)?);
+    }
     out.sort_by(|a, b| a.key.cmp(&b.key));
     Ok(out)
 }
@@ -327,6 +342,16 @@ pub fn compose(
                 check_id(entity, s.id.to_string())?;
                 data.statements.push(s);
             }
+            EntityKind::Taste => {
+                let t: TasteAssertion = decode(entity)?;
+                check_id(entity, t.id.to_string())?;
+                data.taste.push(t);
+            }
+            EntityKind::TasteBrief => {
+                let b: TasteBrief = decode(entity)?;
+                check_id(entity, b.id.to_string())?;
+                data.taste_brief = Some(b);
+            }
         }
     }
     let mut profile = profile.ok_or(EntityError::NoBasics)?;
@@ -383,6 +408,11 @@ pub fn sort_like_storage(data: &mut ProfileData) {
             .then_with(|| a.id.to_string().cmp(&b.id.to_string()))
     });
     data.preferences.sort_by(|a, b| {
+        a.created_at
+            .cmp(&b.created_at)
+            .then_with(|| a.id.to_string().cmp(&b.id.to_string()))
+    });
+    data.taste.sort_by(|a, b| {
         a.created_at
             .cmp(&b.created_at)
             .then_with(|| a.id.to_string().cmp(&b.id.to_string()))

@@ -82,7 +82,7 @@ cargo build --release && ./target/release/narrow --help
 
 ```bash
 narrow init resume.pdf
-narrow preferences add "I want small product teams, backend/platform work, remote from Brazil, at least USD 120k."
+narrow preferences describe "Small product teams, backend/platform work, startups. Remote from Brazil, at least USD 120k. No early-career roles."
 narrow find
 ```
 
@@ -518,10 +518,14 @@ network.
 | `narrow claims review [--all]` | Claims needing review, each with why JobHunt believes it and the resume text |
 | `narrow claims show\|confirm\|reject\|reset <id>…` | Inspect or decide (`reject --reason …`) |
 | `narrow claims add "…" [--for <id>] [--kind K]` / `edit <id> "…"` | State or reword a claim yourself |
-| `narrow preferences` | Preferences by category, and your statements verbatim |
+| `narrow preferences` | What Narrow understands you want (your taste profile) and your practical constraints; `show --all` adds every structured preference and statement |
+| `narrow preferences describe "…"` | What kind of job you're looking for, in a few words: read into a short summary to confirm or correct |
+| `narrow preferences confirm [taste_…]` | "Looks right": the whole summary, or some statements |
+| `narrow preferences correct <taste_…> ["…"] [--polarity prefer\|open\|avoid\|neutral]` | Correct one statement; `neutral` is "doesn't matter". Your corrections always win |
+| `narrow preferences reinterpret` | Read your description again, keeping every correction |
 | `narrow preferences add "…"` | A preference statement in your own words |
 | `narrow preferences set role\|compensation\|work-mode\|work-setup\|location\|region\|timezone\|relocation\|sponsorship\|company\|domain\|work-style\|unknown-pay\|unclear-eligibility …` | One structured preference |
-| `narrow preferences remove <pref_…\|stmt_…>` | Remove a preference, or a statement and what was read from it |
+| `narrow preferences remove <pref_…\|stmt_…\|taste_…>` | Remove a preference, a statement and what was read from it, or a statement of the summary (never read again) |
 
 Ids are printed short (`clm_3fa2b1c4`); any unique prefix works. `claim`
 and `prefs` are accepted as aliases.
@@ -622,7 +626,23 @@ platform, full stack, …; senior, staff, technical leadership, mentorship,
 
 ### Preferences
 
-Preferences are structured values with a stance (`required`, `wanted`,
+Preferences start with one question: what kind of job are you looking
+for? `narrow preferences describe "…"` (or the web's Preferences and
+onboarding) keeps your words verbatim and reads them into a short **taste
+profile**: the level, kind of engineering work, specialization, ownership,
+company, team and culture you want, and what you avoid, each statement
+saying where it comes from (your words, your profile, earlier settings,
+feedback). You confirm it or correct it, and your corrections always win.
+Practical constraints (work setup, where you live and may work,
+relocation, time zones, a pay floor) are kept apart, deterministic and
+explicit. By default Narrow reads your words with built-in rules, offline;
+an optional model (`[ai]` in the config: the Anthropic API or any
+OpenAI-compatible server, Ollama included) reads more. See
+[docs/taste-profile.md](docs/taste-profile.md) for the model, what is sent
+to a model and when, and how it will feed ranking (BRU-322; ranking doesn't
+read it yet).
+
+Under the taste profile, preferences are structured values with a stance (`required`, `wanted`,
 `acceptable`, `unwanted`): roles; compensation (minimum and target, amount,
 ISO currency — never assumed from your country — period, employment or
 contract); location (where you live, remote/hybrid/on-site, regions, time
@@ -1522,6 +1542,8 @@ exits when the client disconnects (stdin closes).
 | `get_job` | read | One opportunity: locations, workplace, compensation facts, description summary (`full_description` for all of it), verification, eligibility with reasons, the decision brief, pipeline state; `include_sources` adds every source record with its provenance and latest attempt. Does not mark it seen |
 | `verify_job` | network | Asks the authoritative sources now (`force`, or reuse an attempt from the last few minutes): listing and application state, authority, last attempt and success, compensation facts, eligibility, what remains uncertain, per source |
 | `get_profile` | read | Professional profile: headline, location, experiences, technologies with evidence strength, domains, role and ownership signals, preferences and statements, claims awaiting review, gaps. Never names or contact details |
+| `get_taste_profile` | read | The taste profile: what the person wants and avoids (level, kind of work, specialization, ownership, company, team, culture, domains), each statement with its provenance and review; their practical constraints, apart; what was learned |
+| `update_taste_profile` | **writes**, may call a configured model | `action`: `describe` (their words about the job they want), `reinterpret`, `confirm`, `correct` (new words and/or polarity), `neutral`, `remove`, `add`. Their decisions always win over any later reading |
 | `update_preferences` | **writes** | `statement` (your words, kept verbatim), `set` (typed values: `role`, `compensation`, `work_mode`, `work_setup`, `location`, `region`, `timezone`, `relocation` (with `only_to`), `sponsorship`, `authorized_in`, `engagement`, `company`, `domain`, `work_style`, `unknown_pay`, `unclear_eligibility`), `remove` (`pref_…`/`stmt_…`). Returns what was understood, what is uncertain, what was not understood (verbatim), what was replaced, and every preference in effect |
 | `save_job` | **writes** | Save (a rejected opportunity comes back) |
 | `reject_job` | **writes** | Not interested, with the person's `reason` verbatim; returns how it was read and whether learned taste changed |

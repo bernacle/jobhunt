@@ -31,6 +31,45 @@ value = { type = "relocation", willing = false }
 stance = "wanted"
 value = { type = "role", role = "backend" }
 
+# The candidate taste profile (BRU-321). Not read by the current ranker.
+[taste]
+looking_for = "I'm early in my career and want a broad backend role where I can learn from a larger engineering team."
+
+[[taste.statement]]
+dimension = "seniority"
+value = "early_career"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "seniority"
+value = "senior"
+polarity = "avoid"
+
+[[taste.statement]]
+dimension = "seniority"
+value = "staff_plus"
+polarity = "avoid"
+
+[[taste.statement]]
+dimension = "work_shape"
+value = "backend"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "specialization"
+value = "broad"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "culture"
+value = "mentorship"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "team"
+value = "large_team"
+polarity = "open"
+
 [[judgment]]
 job = "airbnb-early-career"
 fit = "strong_yes"

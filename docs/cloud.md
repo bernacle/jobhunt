@@ -237,6 +237,7 @@ only tags usage events.
 | GET | `/api/v1/feed` | the Today feed (`get_feed`; `?limit` 1–10, default 5): `FeedView` |
 | POST | `/api/v1/opportunities/{id}/dismiss` | "not now": off the feed, recorded as looked at (no taste signal) |
 | GET | `/api/v1/taste` | stated preferences and learned taste (`get_taste`): `TasteView` |
+| GET, POST | `/api/v1/taste/profile` | the candidate taste profile (`get_taste_profile`): `TasteProfileView`; a `TasteAction` (describe, reinterpret, confirm, correct, neutral, remove, add) answered with `TasteUpdateResult` (`update_taste_profile`); see [taste-profile.md](taste-profile.md) |
 | GET / POST | `/api/v1/profile/claims` | claims needing review, with their source words / `{"ids", "decision": "confirm" \| "reject" \| "reset", "note"}` |
 | PUT | `/api/v1/profile/resume` | import or re-import a resume: the body is the file (`?file_name=resume.pdf`; PDF, text or Markdown, 10 MB) |
 | GET / PUT | `/api/v1/notifications` | email notification settings (`email_enabled`, `cadence`, `email`, `resend_confirmation`) |
@@ -715,6 +716,7 @@ startup with every problem listed.
 | `JOBHUNT_VERIFY_BATCH` | verification | no | 100 jobs per run |
 | `JOBHUNT_VERIFICATION_FRESH_HOURS` / `_STALE_HOURS` | all | no | from the config file (24 / 72) |
 | `JOBHUNT_USAGE_EVENTS` | server | no | `true` |
+| `JOBHUNT_AI_PROVIDER` | server | no | `anthropic` or `openai` (any OpenAI-compatible server): a model that reads people's descriptions of what they want into their taste profile; unset or `none` uses the built-in reader. Also `JOBHUNT_AI_MODEL` (Anthropic default `claude-opus-5-5`), `JOBHUNT_AI_BASE_URL`, `JOBHUNT_AI_API_KEY` (secret), `JOBHUNT_AI_TIMEOUT_SECS`. An unusable setting falls back to the built-in reader and never stops the server. What is sent: [taste-profile.md](taste-profile.md#exactly-what-is-sent) |
 | `JOBHUNT_GITHUB_TOKEN` | server | no | a GitHub token without scopes: GitHub evidence imports at the authenticated rate limit, with language statistics (secret; without it, imports share GitHub's 60 requests/hour and use each repository's primary language) |
 | `JOBHUNT_WEB_URL` | server, notify | for email | the web app's https URL (links in emails) |
 | `JOBHUNT_EMAIL_PROVIDER` | server, notify | for email | `resend`, `file` (development; refused in production) or `none` (default) |

@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-import { clarifyPreference, tellPreferences, uploadResume } from "@/app/actions";
+import { clarifyPreference, describeTaste, reviewTaste, uploadResume } from "@/app/actions";
 import { ClarifyPreference } from "@/components/clarify";
-import { StatementForm } from "@/components/preferences";
+import { Constraints, DescribeForm, TasteSummary } from "@/components/taste-profile";
 import { ResumeUpload } from "@/components/resume-upload";
 import { Disclosure } from "@/components/summary";
-import { LinkButton, PageHeader } from "@/components/ui";
+import { LinkButton, PageHeader, textLinkClass } from "@/components/ui";
 import { api, loadOrNoProfile } from "@/lib/api";
 import { clarifyTitle } from "@/lib/clarify";
 
@@ -42,20 +42,23 @@ function Step({ n, title, state, summary, change, children }: { n: number; title
 }
 
 /**
- * Onboarding, to value quickly: a resume, a sentence about what you want,
- * then Today. A finished step folds into one line; the rest can be refined
- * later in Profile and Preferences.
+ * Onboarding, to value quickly: a resume, one question about what you
+ * want (Narrow reads it into a short summary to confirm or correct), then
+ * Today. Nothing to configure; the rest can be refined later in Profile
+ * and Preferences.
  */
 export default async function Welcome() {
   const profile = await loadOrNoProfile(() => api.profile());
   const hasProfile = profile !== "no_profile";
-  const hasPreferences = hasProfile && profile.preferences.length > 0;
-  // Read from the person's words with an open question: not in effect the
-  // way they meant it until answered, so the step isn't done either.
-  const questions = hasProfile ? profile.preferences.filter((p) => p.active && p.clarify) : [];
+  const taste = hasProfile ? await api.tasteProfile() : undefined;
+  const described = taste?.looking_for_source === "description";
+  // A practical constraint read from the person's words with an open
+  // question (a pay without currency, remote: must or nice?) isn't in
+  // effect the way they meant it until answered.
+  const questions = hasProfile ? profile.preferences.filter((p) => p.active && p.clarify && (p.category === "location" || p.category === "compensation")) : [];
   const resume = hasProfile ? (profile.documents ?? []).find((d) => d.current) : undefined;
   const experiences = hasProfile ? profile.experiences.length : 0;
-  const wantsDone = hasPreferences && questions.length === 0;
+  const wantsDone = described && questions.length === 0;
   return (
     <div className="max-w-[560px]">
       <PageHeader title="Set up Narrow" />
@@ -82,9 +85,22 @@ export default async function Welcome() {
           {!hasProfile && <ResumeUpload action={uploadResume} hasResume={false} />}
         </Step>
         <Step n={2} title="What you want" state={!hasProfile ? "todo" : wantsDone ? "done" : "active"}>
-          {hasProfile && (
+          {hasProfile && taste && (
             <>
-              <StatementForm action={tellPreferences} />
+              {described ? (
+                <div className="flex flex-col gap-6">
+                  <p className="text-[14px] text-fg-body">
+                    <q>{taste.looking_for}</q>{" "}
+                    <a href="/preferences#looking-for" className={textLinkClass}>
+                      Change
+                    </a>
+                  </p>
+                  <TasteSummary profile={taste} review={reviewTaste} />
+                  <Constraints items={taste.constraints} noted={taste.interpretation?.constraints_noted ?? []} />
+                </div>
+              ) : (
+                <DescribeForm describe={describeTaste} submitLabel="Continue" />
+              )}
               {questions.length > 0 && (
                 <section aria-labelledby="questions" className="mt-6">
                   <h3 id="questions" className="text-[14px] font-semibold text-fg">

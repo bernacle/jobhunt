@@ -208,7 +208,37 @@ pub struct CloudConfig {
     pub github_api: Option<String>,
     /// The product configuration (sources, verification policy, …).
     pub app: Arc<LoadedConfig>,
+    /// The model that reads people's descriptions of what they want into
+    /// their taste profile (`JOBHUNT_AI_PROVIDER`, `_MODEL`, `_BASE_URL`,
+    /// `_API_KEY`, `_TIMEOUT_SECS`): `Ok(None)` when none is configured,
+    /// `Err` when the configuration can't be used. Either way the built-in
+    /// reader works; this never stops the server.
+    pub ai: Result<Option<jobhunt_ai::ModelConfig>, String>,
     problems: Vec<String>,
+}
+
+/// `JOBHUNT_AI_*`.
+fn ai_settings(env: Env<'_>) -> Result<Option<jobhunt_ai::ModelConfig>, String> {
+    let Some(provider) = env("JOBHUNT_AI_PROVIDER").filter(|p| !p.eq_ignore_ascii_case("none"))
+    else {
+        return Ok(None);
+    };
+    let mut config = jobhunt_ai::ModelConfig::new(
+        &provider,
+        env("JOBHUNT_AI_MODEL").as_deref(),
+        env("JOBHUNT_AI_BASE_URL").as_deref(),
+        env("JOBHUNT_AI_API_KEY"),
+        "JOBHUNT_AI_API_KEY",
+    )
+    .map_err(|e| e.to_string())?;
+    if let Some(raw) = env("JOBHUNT_AI_TIMEOUT_SECS") {
+        let secs: u64 = raw
+            .trim()
+            .parse()
+            .map_err(|_| "JOBHUNT_AI_TIMEOUT_SECS is not a number of seconds".to_owned())?;
+        config.timeout = std::time::Duration::from_secs(secs.max(1));
+    }
+    Ok(Some(config))
 }
 
 impl std::fmt::Debug for CloudConfig {
@@ -219,6 +249,7 @@ impl std::fmt::Debug for CloudConfig {
             .field("bind", &self.bind)
             .field("auth", &self.auth)
             .field("github_token", &self.github_token.as_ref().map(|_| "set"))
+            .field("ai", &self.ai)
             .finish_non_exhaustive()
     }
 }
@@ -532,6 +563,7 @@ impl CloudConfig {
             github_token: env("JOBHUNT_GITHUB_TOKEN"),
             github_api: env("JOBHUNT_GITHUB_ENDPOINT"),
             app: Arc::new(app),
+            ai: ai_settings(env),
             problems,
         }
     }
@@ -713,6 +745,24 @@ impl CloudConfig {
                     format!("{} ({})", e.provider(), path.display())
                 }
                 None => "none (email notifications unavailable)".into(),
+            },
+            required: false,
+        });
+        out.push(Setting {
+            name: "JOBHUNT_AI_PROVIDER",
+            status: match &self.ai {
+                Ok(Some(c)) => format!(
+                    "{} ({}{})",
+                    c.provider.as_str(),
+                    c.model,
+                    if c.api_key.is_some() {
+                        ", API key set"
+                    } else {
+                        ""
+                    }
+                ),
+                Ok(None) => "none (the built-in taste reader)".into(),
+                Err(problem) => format!("invalid: {problem} (the built-in taste reader is used)"),
             },
             required: false,
         });

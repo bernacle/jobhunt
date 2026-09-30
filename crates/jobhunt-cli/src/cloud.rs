@@ -363,6 +363,8 @@ fn parse_record(id: &str) -> anyhow::Result<EntityKey> {
         Some("stmt") => EntityKind::Statement,
         Some("doc") => EntityKind::Document,
         Some("prof") => EntityKind::Profile,
+        Some("taste") => EntityKind::Taste,
+        Some("tbrief") => EntityKind::TasteBrief,
         _ => anyhow::bail!("{id:?} is not a profile record id (clm_…, exp_…, pref_…, …)"),
     };
     Ok(EntityKey::new(kind, id))

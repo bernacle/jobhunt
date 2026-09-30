@@ -36,6 +36,7 @@ use jobhunt_app::inspect::{JobDetail, VerificationReport};
 use jobhunt_app::preferences::{PreferenceInput, PreferenceUpdate, PreferenceUpdateResult};
 use jobhunt_app::profile_view::ProfileView;
 use jobhunt_app::shortlist::MAX_LIMIT;
+use jobhunt_app::taste_profile::{TasteAction, TasteProfileView, TasteUpdateResult};
 use jobhunt_app::taste_view::TasteView;
 use jobhunt_app::{
     AppError, FindRequest, LocalApp, Progress, ProgressEvent, RefreshMode, SearchResults, now,
@@ -64,8 +65,10 @@ Typical flow: get_feed for what is new since the person last looked (\"find me n
 or search_jobs for the short list worth their time; get_job or verify_job to \
 look closer; save_job, reject_job (with the person's reason, verbatim) or mark_applied to record \
 what they decide; update_preferences when they say what they want (\"only small teams\"); \
-get_taste for what JobHunt believes they want and what it learned. Later searches reflect all \
-of it. prepare_application_context gathers the evidence the person has approved for an \
+get_taste for what JobHunt believes they want and what it learned. get_taste_profile is the \
+concise summary of the kind of role and company they want, kept apart from practical \
+constraints; update_taste_profile when they describe what they're looking for or correct that \
+summary (their corrections always win). Later searches reflect all of it. prepare_application_context gathers the evidence the person has approved for an \
 application: use only the facts it returns, as written.\n\
 Ids: opportunity ids look like opp_<32 hex>; job ids (job_…) and unique prefixes are accepted \
 too. Tiers are coarse on purpose (strong_fit, worth_reviewing, maybe, low_priority); there is no \
@@ -273,6 +276,17 @@ pub struct UpdatePreferencesParams {
     /// Preference (pref_…) or statement (stmt_…) ids to remove.
     #[serde(default)]
     pub remove: Vec<String>,
+}
+
+/// Arguments of `update_taste_profile`.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateTasteProfileParams {
+    /// What to do: `describe` (their words about the job they want),
+    /// `reinterpret`, `confirm` (ids, or none for the whole summary),
+    /// `correct` (an id, new words and/or a polarity), `neutral` ("doesn't
+    /// matter"), `remove`, or `add` (one sentence of theirs).
+    pub action: TasteAction,
 }
 
 /// Arguments of `get_feed`.
@@ -614,6 +628,52 @@ impl JobHuntServer {
     ) -> Result<Json<TasteView>, ToolError> {
         let app = self.app(&context, "get_taste")?;
         Ok(Json(app.taste_view().await?))
+    }
+
+    #[tool(
+        name = "get_taste_profile",
+        description = "What JobHunt understands about the kind of role and company the person \
+        wants (their taste profile: level, kind of engineering work, specialization, ownership, \
+        company, team and culture, domains) and what they avoid, each statement with where it \
+        comes from (their words, their profile, earlier settings, or feedback) and whether they \
+        confirmed it; plus their practical constraints (work setup, location, relocation, pay \
+        floor), kept apart. Reads only.",
+        annotations(
+            title = "Get the taste profile",
+            read_only_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn get_taste_profile(
+        &self,
+        context: RequestContext<RoleServer>,
+    ) -> Result<Json<TasteProfileView>, ToolError> {
+        let app = self.app(&context, "get_taste_profile")?;
+        Ok(Json(app.taste_profile().await?))
+    }
+
+    #[tool(
+        name = "update_taste_profile",
+        description = "Change the person's taste profile: `describe` stores their words about \
+        the job they want (verbatim) and interprets them into a concise summary; `confirm`, \
+        `correct`, `neutral`, `remove` and `add` record their decisions about that summary, \
+        which always win over any later interpretation. Use their own words; never invent \
+        preferences for them. Returns the profile afterwards.",
+        annotations(
+            title = "Update the taste profile",
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn update_taste_profile(
+        &self,
+        Parameters(p): Parameters<UpdateTasteProfileParams>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<Json<TasteUpdateResult>, ToolError> {
+        let app = self.app(&context, "update_taste_profile")?;
+        Ok(Json(app.review_taste(&p.action, now()).await?))
     }
 
     #[tool(

@@ -30,6 +30,9 @@ in the pipeline**. The resume parser (`DeterministicParser`), the
 preference statement parser (`RuleParser`) and the feedback reason reader
 (`RuleReader`) are rule-based; the `ResumeParser`, `StatementParser` and
 `ReasonReader` traits are seams for AI-assisted readers that don't exist.
+(BRU-321 added the candidate taste profile, which an optional model can
+read from a person's words; ranking doesn't read it yet, and the benchmark
+never calls a model. See [taste-profile.md](taste-profile.md).)
 
 1. **Discovery** (`jobhunt-sources`, `jobhunt-jobs`): Ashby, Greenhouse,
    Lever and YC boards into canonical `JobPosting`s, deduplicated into
@@ -110,7 +113,8 @@ crates/jobhunt-eval/fixtures/recommendation/
   jobs/compensation.toml    below the floor, high pay on weak fit, a range for another location
   jobs/practicality.toml    on-site, other regions, US-only (read and unread)
   candidates/<id>/resume.md       the candidate's resume
-  candidates/<id>/candidate.toml  preferences, what the model can't express, judgments
+  candidates/<id>/candidate.toml  preferences, what the model can't express, the
+                                  taste profile ([taste], BRU-321), judgments
 ```
 
 Jobs are a compact form of the canonical `JobPosting` (compensation is the

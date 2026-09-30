@@ -34,6 +34,47 @@ value = { type = "role", role = "infrastructure" }
 stance = "required"
 value = { type = "compensation", bound = "minimum", amount = 180000, currency = "USD", period = "year" }
 
+# The candidate taste profile (BRU-321). Not read by the current ranker.
+[taste]
+looking_for = "Senior platform and infrastructure work: Kubernetes operators and control planes, deep infrastructure specialization. Not product feature work."
+
+[[taste.statement]]
+dimension = "seniority"
+value = "senior"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "seniority"
+value = "staff_plus"
+polarity = "open"
+
+[[taste.statement]]
+dimension = "work_shape"
+value = "platform"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "work_shape"
+value = "infrastructure"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "specialization"
+value = "deep"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "technology"
+value = "kubernetes"
+polarity = "prefer"
+text = "Kubernetes control-plane work"
+
+[[taste.statement]]
+dimension = "work_shape"
+value = "product"
+polarity = "avoid"
+text = "Product feature work"
+
 [[judgment]]
 job = "helmsman-k8s-control-plane"
 fit = "strong_yes"

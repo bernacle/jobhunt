@@ -8,6 +8,9 @@
 //! * [`preferences`] and [`statement`]: what the user wants, structured,
 //!   plus preference statements kept in the user's own words and read by a
 //!   pluggable [`StatementParser`].
+//! * [`taste`]: the candidate taste profile (what kind of role and company
+//!   the person would genuinely want), with provenance and the person's
+//!   corrections, kept apart from practical constraints.
 //! * [`resume`] and [`import`]: the contract resume parsers fill in, and
 //!   the re-import rules that fold a resume into a profile without
 //!   duplicating records or losing the user's edits and decisions.
@@ -49,6 +52,7 @@ pub mod service;
 pub mod sources;
 pub mod statement;
 pub mod support;
+pub mod taste;
 pub mod words;
 
 pub use aggregate::{DomainEvidence, Gap, LastSeen, ProfileData, SkillEvidence};
@@ -61,7 +65,7 @@ pub use export::{EXPORT_FORMAT, EXPORT_VERSION, ExportError, ProfileExport};
 pub use github::{GithubAccount, GithubImport, GithubRepo, GithubSnapshot, RepoSelection};
 pub use ids::{
     ClaimId, DocumentId, EducationId, ExperienceId, PreferenceId, ProfileId, ProjectId, RecordId,
-    SkillId, StatementId,
+    SkillId, StatementId, TasteBriefId, TasteId,
 };
 pub use import::{ImportReport, Tally, document_id, merge_resume, source_document_id};
 pub use model::{
@@ -86,3 +90,7 @@ pub use service::{
 pub use sources::{SourceRemoval, merge_linkedin, remove_source};
 pub use statement::{ReadPreference, RuleParser, StatementParser, StatementReadout};
 pub use support::{ref_origin, supporting_origins};
+pub use taste::{
+    Polarity, TasteAssertion, TasteBrief, TasteConfidence, TasteDimension, TasteOrigin,
+    TasteReview, TasteSource,
+};

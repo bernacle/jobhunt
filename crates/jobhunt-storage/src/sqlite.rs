@@ -1451,6 +1451,8 @@ mod tests {
                 "profile_projects",
                 "profile_skill_evidence",
                 "profile_skills",
+                "profile_taste",
+                "profile_taste_briefs",
                 "profiles",
                 "source_scans",
                 "sync_account",

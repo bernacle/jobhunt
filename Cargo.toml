@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/jobhunt-ai",
     "crates/jobhunt-app",
     "crates/jobhunt-cloud",
     "crates/jobhunt-core",
@@ -25,6 +26,7 @@ publish = false
 
 [workspace.dependencies]
 # Internal crates
+jobhunt-ai = { path = "crates/jobhunt-ai" }
 jobhunt-app = { path = "crates/jobhunt-app" }
 jobhunt-cloud = { path = "crates/jobhunt-cloud" }
 jobhunt-core = { path = "crates/jobhunt-core" }

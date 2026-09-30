@@ -7,7 +7,9 @@
 //!                                  the canonical JobPosting
 //!   candidates/<id>/candidate.toml the candidate: preferences (the
 //!                                  canonical PreferenceValue), what the
-//!                                  current model can't express, and one
+//!                                  current model can't express, their
+//!                                  taste profile ([taste], the candidate
+//!                                  taste model of BRU-321), and one
 //!                                  [[judgment]] per job in their pool
 //!   candidates/<id>/resume.md      their resume, read by the production
 //!                                  resume parser
@@ -22,6 +24,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use jobhunt_jobs::Compensation;
+use jobhunt_profile::taste::{Polarity, TasteDimension, normalize_value};
 use jobhunt_profile::{PreferenceValue, Stance};
 use serde::Deserialize;
 
@@ -136,6 +139,32 @@ pub struct PreferenceFixture {
     pub value: PreferenceValue,
 }
 
+/// One statement of a candidate's taste profile, as they would confirm it.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TasteStatementFixture {
+    pub dimension: TasteDimension,
+    /// A canonical value (`small_team`, `database_internals`).
+    pub value: String,
+    pub polarity: Polarity,
+    /// As shown; the vocabulary's phrase when absent.
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+/// A candidate's taste profile: what they said they're looking for, and
+/// the statements they confirmed. Loaded into the profile the ranker is
+/// given; the current ranker doesn't read it (BRU-322 will), so it leaves
+/// the baseline unchanged.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TasteFixture {
+    /// Their answer to "What kind of job are you looking for?".
+    pub looking_for: String,
+    #[serde(default)]
+    pub statement: Vec<TasteStatementFixture>,
+}
+
 /// The benchmark's expectation for one candidate and one job.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -246,6 +275,9 @@ pub struct CandidateFixture {
     pub unexpressed: Vec<String>,
     #[serde(default)]
     pub preference: Vec<PreferenceFixture>,
+    /// The candidate taste profile, when the fixture has one.
+    #[serde(default)]
+    pub taste: Option<TasteFixture>,
     #[serde(default)]
     pub judgment: Vec<Judgment>,
     /// The resume, as the candidate would upload it.
@@ -378,6 +410,27 @@ impl Fixtures {
             }
             if !c.judgment.iter().any(|j| j.label().is_obvious_mismatch()) {
                 out.push(format!("{who}: no mismatch to avoid"));
+            }
+            if let Some(taste) = &c.taste {
+                if taste.looking_for.trim().is_empty() {
+                    out.push(format!("{who}: taste has no looking_for"));
+                }
+                let mut seen: BTreeSet<String> = BTreeSet::new();
+                for s in &taste.statement {
+                    if normalize_value(&s.value) != s.value {
+                        out.push(format!(
+                            "{who}: taste value {:?} is not a token ({:?})",
+                            s.value,
+                            normalize_value(&s.value)
+                        ));
+                    }
+                    if !seen.insert(format!("{}:{}", s.dimension, s.value)) {
+                        out.push(format!(
+                            "{who}: taste {}:{} is stated twice",
+                            s.dimension, s.value
+                        ));
+                    }
+                }
             }
             let mut keys: BTreeSet<String> = BTreeSet::new();
             for p in &c.preference {

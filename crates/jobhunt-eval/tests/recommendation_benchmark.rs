@@ -440,3 +440,115 @@ fn baseline_is_current() {
         );
     }
 }
+
+#[test]
+fn taste_fixtures_load_into_the_built_profile() {
+    use jobhunt_profile::taste::{TasteOrigin, TasteReview, compose};
+    let f = fixtures();
+    for c in &f.candidates {
+        let taste = c
+            .taste
+            .as_ref()
+            .unwrap_or_else(|| panic!("{}: every candidate has a taste profile", c.id));
+        let data = jobhunt_eval::build::profile(c).unwrap();
+        assert_eq!(
+            data.taste_brief.as_ref().map(|b| b.text.as_str()),
+            Some(taste.looking_for.as_str())
+        );
+        let profile = compose(&data, &[]);
+        for s in &taste.statement {
+            let key = jobhunt_profile::taste::key(s.dimension, &s.value);
+            let a = profile
+                .assertions
+                .iter()
+                .find(|a| a.key() == key)
+                .unwrap_or_else(|| panic!("{}: {key} missing", c.id));
+            assert_eq!(a.polarity, s.polarity, "{}: {key}", c.id);
+            assert!(
+                a.origin == TasteOrigin::Stated && a.review == TasteReview::Confirmed,
+                "{}: {key} is the candidate's",
+                c.id
+            );
+        }
+        // Seniority and engineering work shape are expressed for every
+        // archetype: what BRU-320 showed the old model couldn't.
+        for d in [
+            jobhunt_profile::TasteDimension::Seniority,
+            jobhunt_profile::TasteDimension::WorkShape,
+            jobhunt_profile::TasteDimension::Specialization,
+        ] {
+            assert!(profile.about(d).next().is_some(), "{}: {d}", c.id);
+        }
+    }
+    // The same job can fit one profile and not another: the specialist
+    // wants what the generalist avoids.
+    let senior = f.candidate(SENIOR).unwrap().taste.as_ref().unwrap();
+    let specialist = f
+        .candidate("database-internals-specialist")
+        .unwrap()
+        .taste
+        .as_ref()
+        .unwrap();
+    let polarity = |t: &jobhunt_eval::fixture::TasteFixture, value: &str| {
+        t.statement
+            .iter()
+            .find(|s| {
+                s.dimension == jobhunt_profile::TasteDimension::Specialization && s.value == value
+            })
+            .map(|s| s.polarity)
+    };
+    assert_eq!(
+        polarity(senior, "deep"),
+        Some(jobhunt_profile::Polarity::Avoid)
+    );
+    assert_eq!(
+        polarity(specialist, "deep"),
+        Some(jobhunt_profile::Polarity::Prefer)
+    );
+}
+
+#[test]
+fn the_built_in_reader_never_contradicts_the_confirmed_taste() {
+    use jobhunt_profile::Polarity;
+    use jobhunt_profile::taste::RulesInterpreter;
+    use jobhunt_profile::taste::reading::{TasteRequest, Words};
+    let f = fixtures();
+    for c in &f.candidates {
+        let taste = c.taste.as_ref().unwrap();
+        let data = jobhunt_eval::build::profile(c).unwrap();
+        let mut bare = data.clone();
+        bare.taste.clear();
+        let request = TasteRequest::build(
+            &bare,
+            vec![Words {
+                text: taste.looking_for.clone(),
+                statement: None,
+            }],
+            &[],
+            None,
+        );
+        let reading = RulesInterpreter.read(&request);
+        assert!(!reading.assertions.is_empty(), "{}: nothing read", c.id);
+        let lean = |p: Polarity| match p {
+            Polarity::Prefer | Polarity::Open => 1,
+            Polarity::Avoid => -1,
+            Polarity::Neutral => 0,
+        };
+        for s in &taste.statement {
+            if let Some(read) = reading
+                .assertions
+                .iter()
+                .find(|a| a.dimension == s.dimension && a.value == s.value)
+            {
+                assert_eq!(
+                    lean(read.polarity),
+                    lean(s.polarity),
+                    "{}: the reader reads {}:{} the other way",
+                    c.id,
+                    s.dimension,
+                    s.value
+                );
+            }
+        }
+    }
+}

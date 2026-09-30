@@ -14,6 +14,8 @@ import type {
   ResumeImportResult,
   SourceImportResult,
   SourceRemovalResult,
+  TasteAction,
+  TasteUpdateResult,
 } from "@/lib/api-types";
 import { describeError } from "@/lib/errors";
 import { clearSession } from "@/lib/session";
@@ -25,7 +27,7 @@ import { clearSession } from "@/lib/session";
  */
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; code: string; title: string; message: string };
 
-async function attempt<T>(work: () => Promise<T>): Promise<ActionResult<T>> {
+async function attempt<T>(work: () => Promise<T>, { explain = false }: { explain?: boolean } = {}): Promise<ActionResult<T>> {
   try {
     return { ok: true, data: await work() };
   } catch (error) {
@@ -34,7 +36,7 @@ async function attempt<T>(work: () => Promise<T>): Promise<ActionResult<T>> {
     const described = describeError(code);
     // A preference the domain refused says why in terms the person can act
     // on ("use one of: startup, …"); other messages are never shown raw.
-    if (error instanceof ApiError && code === "invalid_preference") {
+    if (error instanceof ApiError && (code === "invalid_preference" || (explain && code === "invalid_arguments"))) {
       described.message = error.message;
     }
     return { ok: false, ...described };
@@ -77,6 +79,33 @@ export async function tellPreferences(_: StatementState, form: FormData): Promis
   if (!result.ok) return { error: result, submitted: statement };
   refresh();
   return { result: result.data, submitted: statement };
+}
+
+export interface DescribeState {
+  result?: TasteUpdateResult;
+  error?: { title: string; message: string };
+  submitted?: string;
+}
+
+/**
+ * "What kind of job are you looking for?": the person's words, kept as
+ * written and read into a short summary (by the API: a model when one is
+ * configured, Narrow's built-in reader otherwise).
+ */
+export async function describeTaste(_: DescribeState, form: FormData): Promise<DescribeState> {
+  const text = String(form.get("text") ?? "").trim();
+  if (!text) return { error: { title: "Say what you're looking for", message: "A sentence or two is enough." } };
+  const result = await attempt(() => api.updateTasteProfile({ action: "describe", text }), { explain: true });
+  if (!result.ok) return { error: result, submitted: text };
+  refresh();
+  return { result: result.data, submitted: text };
+}
+
+/** Confirm, correct, "doesn't matter", remove, add, or read again. */
+export async function reviewTaste(action: TasteAction): Promise<ActionResult<TasteUpdateResult>> {
+  const result = await attempt(() => api.updateTasteProfile(action), { explain: true });
+  if (result.ok) refresh();
+  return result;
 }
 
 export async function setPreference(input: PreferenceInput): Promise<ActionResult<PreferenceUpdateResult>> {

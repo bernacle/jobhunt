@@ -6,6 +6,8 @@ import type {
   LearnedView,
   PreferenceControls,
   PreferenceView,
+  TasteItemView,
+  TasteProfileView,
   TasteView,
 } from "@/lib/api-types";
 
@@ -270,6 +272,63 @@ export function jobDetail(overrides: Partial<JobDetail> = {}): JobDetail {
       history: [],
     },
     pipeline: { stage: "unseen", furthest: "unseen", feedback: [] },
+    ...overrides,
+  };
+}
+
+/** A taste profile as the API returns it after "describe" (rules reader). */
+export function tasteProfile(overrides: Partial<TasteProfileView> = {}): TasteProfileView {
+  const item = (id: string, dimension: string, value: string, text: string, extra: Partial<TasteItemView> = {}): TasteItemView => ({
+    id,
+    dimension,
+    value,
+    polarity: "prefer",
+    text,
+    confidence: "high",
+    origin: "interpreted",
+    review: "unreviewed",
+    basis: "Narrow's reading of your words",
+    sources: [{ kind: "words", text: "You wrote: “small technical teams”" }],
+    interpreter: "rules/1",
+    ...extra,
+  });
+  const senior = item("taste_senior", "seniority", "senior", "Senior roles", {
+    origin: "profile",
+    confidence: "medium",
+    basis: "Inferred from your profile",
+    sources: [{ kind: "evidence", text: "Your profile: latest title “Senior Software Engineer”" }],
+  });
+  const team = item("taste_team", "team", "small_team", "Small technical teams");
+  const backend = item("taste_backend", "work_shape", "backend", "Backend engineering");
+  const platform = item("taste_platform", "work_shape", "platform", "Platform engineering");
+  const early = item("taste_early", "seniority", "early_career", "Early-career roles", { polarity: "avoid" });
+  return {
+    looking_for: "I like small technical teams. Backend/platform work, remote. I don't want early-career roles.",
+    looking_for_source: "description",
+    understood: [
+      { text: "Senior roles", dimension: "seniority", inferred: true, items: [senior] },
+      { text: "Backend engineering · Platform engineering", dimension: "work_shape", inferred: false, items: [backend, platform] },
+      { text: "Small technical teams", dimension: "team", inferred: false, items: [team] },
+    ],
+    avoid: [{ text: "Early-career roles", dimension: "seniority", inferred: false, items: [early] }],
+    unsure: [],
+    neutral: [],
+    learned: [],
+    removed: [],
+    constraints: [
+      { kind: "work_setup", text: "Remote only", layer: "requirement", ids: ["pref_remote"] },
+      { kind: "location", text: "Based in São Paulo, Brazil (from your resume)", layer: "requirement", ids: [] },
+    ],
+    needs_confirmation: true,
+    interpretation: {
+      interpreter: "rules/1",
+      outcome: "read",
+      at: "2026-09-29T12:00:00Z",
+      ambiguities: [],
+      constraints_noted: ["remote"],
+      rejected: 0,
+    },
+    reader: { kind: "rules", name: "rules/1" },
     ...overrides,
   };
 }

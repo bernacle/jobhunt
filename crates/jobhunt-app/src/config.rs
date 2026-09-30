@@ -28,6 +28,76 @@ pub struct AppConfig {
     pub verification: VerificationConfig,
     pub sources: SourcesConfig,
     pub cloud: CloudClientConfig,
+    pub ai: AiConfig,
+}
+
+/// An optional model for reading the person's words into their taste
+/// profile. Without it (the default) Narrow reads them with its built-in
+/// rules, offline; nothing else uses a model. See `jobhunt_ai` for what is
+/// sent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AiConfig {
+    /// `anthropic` (the Anthropic API) or `openai` (any OpenAI-compatible
+    /// server: OpenAI, Ollama, vLLM, LM Studio…). Unset: no model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// The model (Anthropic default: `claude-opus-5-5`; OpenAI-compatible
+    /// servers must name one).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// Where the API is, for a proxy or a self-hosted server.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    /// The environment variable holding the API key (default
+    /// `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`). Keys never go in this
+    /// file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key_env: Option<String>,
+    /// Per-request timeout, in seconds.
+    pub timeout_secs: u64,
+}
+
+impl Default for AiConfig {
+    fn default() -> Self {
+        Self {
+            provider: None,
+            model: None,
+            base_url: None,
+            api_key_env: None,
+            timeout_secs: 40,
+        }
+    }
+}
+
+impl AiConfig {
+    /// The configured model, `None` when none is configured, or why the
+    /// configuration can't be used (a missing key: Narrow then reads with
+    /// its rules and says so).
+    pub fn model(&self) -> Result<Option<jobhunt_ai::ModelInterpreter>, String> {
+        let Some(provider) = self.provider.as_deref().filter(|p| !p.trim().is_empty()) else {
+            return Ok(None);
+        };
+        let parsed = jobhunt_ai::Provider::parse(provider)
+            .ok_or_else(|| format!("unknown [ai] provider {provider:?} (anthropic or openai)"))?;
+        let env = self
+            .api_key_env
+            .clone()
+            .unwrap_or_else(|| parsed.default_key_env().to_owned());
+        let key = std::env::var(&env).ok().filter(|k| !k.trim().is_empty());
+        let mut config = jobhunt_ai::ModelConfig::new(
+            provider,
+            self.model.as_deref(),
+            self.base_url.as_deref(),
+            key,
+            &env,
+        )
+        .map_err(|e| e.to_string())?;
+        config.timeout = Duration::from_secs(self.timeout_secs.max(1));
+        jobhunt_ai::ModelInterpreter::new(config)
+            .map(Some)
+            .map_err(|e| e.to_string())
+    }
 }
 
 /// JobHunt Cloud, as this machine's client (`narrow login`, `jobhunt

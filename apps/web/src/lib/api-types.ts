@@ -295,6 +295,49 @@ export type WorkSetupInput =
  */
 export type EngagementInput = "employee" | "contractor";
 /**
+ * A change to the taste profile.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "TasteAction".
+ */
+export type TasteAction =
+  | {
+      action: "describe";
+      text: string;
+    }
+  | {
+      action: "reinterpret";
+    }
+  | {
+      action: "confirm";
+      ids?: string[];
+    }
+  | {
+      action: "correct";
+      id: string;
+      polarity?: PolarityInput | null;
+      text?: string | null;
+    }
+  | {
+      action: "neutral";
+      id: string;
+    }
+  | {
+      action: "remove";
+      id: string;
+    }
+  | {
+      action: "add";
+      text: string;
+    };
+/**
+ * Which way a statement leans, as given.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "PolarityInput".
+ */
+export type PolarityInput = ("prefer" | "open" | "avoid") | "neutral";
+/**
  * One precise preference.
  *
  * This interface was referenced by `JobHuntApi`'s JSON-Schema
@@ -469,6 +512,9 @@ export interface JobHuntApi {
   SearchResults?: SearchResults;
   SourceImportResult?: SourceImportResult;
   SourceRemovalResult?: SourceRemovalResult;
+  TasteAction?: TasteAction;
+  TasteProfileView?: TasteProfileView;
+  TasteUpdateResult?: TasteUpdateResult;
   TasteView?: TasteView;
   TokenList?: TokenList;
   UpdateNotificationsRequest?: UpdateNotificationsRequest;
@@ -2662,6 +2708,317 @@ export interface SourceRemovalResult {
    * `linkedin` or `github`.
    */
   source: string;
+}
+/**
+ * The taste profile, as the Preferences page shows it.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "TasteProfileView".
+ */
+export interface TasteProfileView {
+  /**
+   * What they tend to avoid.
+   */
+  avoid: TasteLineView[];
+  /**
+   * When they last said it looks right.
+   */
+  confirmed_at?: string | null;
+  /**
+   * Whether they can take a job: work setup, where they live and may
+   * work, relocation, pay floor.
+   */
+  constraints: ConstraintView[];
+  interpretation?: InterpretationView | null;
+  /**
+   * Patterns learned from feedback, kept apart from what they said.
+   */
+  learned: TasteItemView[];
+  /**
+   * What the person is looking for, in their words.
+   */
+  looking_for?: string | null;
+  /**
+   * `description` (what they described), `statements` (their earlier
+   * words, not yet interpreted as a description), or absent.
+   */
+  looking_for_source?: string | null;
+  /**
+   * The summary has statements Narrow read that they haven't reviewed.
+   */
+  needs_confirmation: boolean;
+  /**
+   * Said not to matter.
+   */
+  neutral: TasteItemView[];
+  reader: ReaderView;
+  /**
+   * Statements they removed (never read again).
+   */
+  removed: TasteItemView[];
+  /**
+   * What Narrow understands they want, one line per dimension.
+   */
+  understood: TasteLineView[];
+  /**
+   * Weak inferences, not part of the summary unless confirmed.
+   */
+  unsure: TasteItemView[];
+}
+/**
+ * One line of the summary: statements about one dimension that lean the
+ * same way ("Backend engineering · Platform engineering").
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "TasteLineView".
+ */
+export interface TasteLineView {
+  dimension: string;
+  /**
+   * Every statement of the line is Narrow's inference (from the profile
+   * or feedback), not something the person said.
+   */
+  inferred: boolean;
+  items: TasteItemView[];
+  text: string;
+}
+/**
+ * One statement of the taste profile.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "TasteItemView".
+ */
+export interface TasteItemView {
+  /**
+   * Sources that point the other way.
+   */
+  against?: TasteSourceView[];
+  /**
+   * Where it comes from, in a few words: "You said", "Narrow's reading
+   * of your words", "Inferred from your profile", "Learned from your
+   * feedback", "From your earlier settings".
+   */
+  basis: string;
+  /**
+   * `low`, `medium` or `high`.
+   */
+  confidence: string;
+  /**
+   * `seniority`, `work_shape`, `specialization`, `ownership`,
+   * `company`, `team`, `culture`, `domain`, `technology`,
+   * `work_style`, `other`.
+   */
+  dimension: string;
+  explanation?: string | null;
+  /**
+   * `taste_…`: pass it to confirm, correct or remove it.
+   */
+  id: string;
+  /**
+   * `rules/1`, `model/anthropic:claude-opus-5-5`.
+   */
+  interpreter?: string | null;
+  /**
+   * `stated`, `interpreted`, `profile`, `learned` or `legacy`.
+   */
+  origin: string;
+  /**
+   * What Narrow had read before the person corrected it.
+   */
+  original?: string | null;
+  /**
+   * `prefer`, `open`, `avoid` or `neutral`.
+   */
+  polarity: string;
+  /**
+   * `unreviewed`, `confirmed`, `corrected` or `removed`.
+   */
+  review: string;
+  sources: TasteSourceView[];
+  /**
+   * "Small technical teams".
+   */
+  text: string;
+  /**
+   * The canonical value (`small_team`) or the person's words
+   * normalized.
+   */
+  value: string;
+}
+/**
+ * Where one statement comes from, readable.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "TasteSourceView".
+ */
+export interface TasteSourceView {
+  /**
+   * `words`, `preference`, `evidence`, `feedback` or `person`.
+   */
+  kind: string;
+  /**
+   * "You wrote: “small technical teams”".
+   */
+  text: string;
+}
+/**
+ * A practical constraint: whether the person can take a job, not
+ * whether they'd want it. Read from their preferences.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "ConstraintView".
+ */
+export interface ConstraintView {
+  /**
+   * The preferences behind it (`pref_…`); empty when read from the
+   * resume.
+   */
+  ids: string[];
+  /**
+   * `work_setup`, `location`, `authorization`, `relocation`,
+   * `remote_geography`, `timezone`, `sponsorship`, `engagement`,
+   * `pay_floor`, `pay_target`, `policy`.
+   */
+  kind: string;
+  /**
+   * `requirement` (a posting that states otherwise is left out) or
+   * `preference`.
+   */
+  layer: string;
+  /**
+   * "Remote only", "Based in São Paulo, Brazil".
+   */
+  text: string;
+}
+/**
+ * How the description was last interpreted.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "InterpretationView".
+ */
+export interface InterpretationView {
+  /**
+   * What was unclear, for the person to settle.
+   */
+  ambiguities: string[];
+  at: string;
+  /**
+   * Practical constraints the words mentioned (never taste).
+   */
+  constraints_noted: string[];
+  interpreter: string;
+  note?: string | null;
+  /**
+   * `read`, or `fallback` when a model couldn't be used and the rules
+   * read instead.
+   */
+  outcome: string;
+  /**
+   * Statements the interpreter produced that failed validation.
+   */
+  rejected: number;
+  summary?: string | null;
+}
+/**
+ * What reads the person's words.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "ReaderView".
+ */
+export interface ReaderView {
+  /**
+   * `model` or `rules`.
+   */
+  kind: string;
+  /**
+   * `rules/1`, `model/anthropic:claude-opus-5-5`.
+   */
+  name: string;
+  /**
+   * Why a configured model isn't used.
+   */
+  note?: string | null;
+}
+/**
+ * The answer of a change.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "TasteUpdateResult".
+ */
+export interface TasteUpdateResult {
+  /**
+   * `describe`, `reinterpret`, `confirm`, `correct`, `neutral`,
+   * `remove`, `add`.
+   */
+  action: string;
+  /**
+   * Something changed.
+   */
+  changed: boolean;
+  /**
+   * The words were interpreted by this call (false when the same input
+   * was already interpreted).
+   */
+  interpreted: boolean;
+  /**
+   * For a description: the practical constraints and structured
+   * preferences read from the words.
+   */
+  preferences?: PreferenceUpdateResult | null;
+  profile: TasteProfileView1;
+}
+/**
+ * The profile afterwards.
+ */
+export interface TasteProfileView1 {
+  /**
+   * What they tend to avoid.
+   */
+  avoid: TasteLineView[];
+  /**
+   * When they last said it looks right.
+   */
+  confirmed_at?: string | null;
+  /**
+   * Whether they can take a job: work setup, where they live and may
+   * work, relocation, pay floor.
+   */
+  constraints: ConstraintView[];
+  interpretation?: InterpretationView | null;
+  /**
+   * Patterns learned from feedback, kept apart from what they said.
+   */
+  learned: TasteItemView[];
+  /**
+   * What the person is looking for, in their words.
+   */
+  looking_for?: string | null;
+  /**
+   * `description` (what they described), `statements` (their earlier
+   * words, not yet interpreted as a description), or absent.
+   */
+  looking_for_source?: string | null;
+  /**
+   * The summary has statements Narrow read that they haven't reviewed.
+   */
+  needs_confirmation: boolean;
+  /**
+   * Said not to matter.
+   */
+  neutral: TasteItemView[];
+  reader: ReaderView;
+  /**
+   * Statements they removed (never read again).
+   */
+  removed: TasteItemView[];
+  /**
+   * What Narrow understands they want, one line per dimension.
+   */
+  understood: TasteLineView[];
+  /**
+   * Weak inferences, not part of the summary unless confirmed.
+   */
+  unsure: TasteItemView[];
 }
 /**
  * The answer of `get_taste`.

@@ -27,6 +27,31 @@ value = { type = "relocation", willing = false }
 stance = "wanted"
 value = { type = "role", role = "storage engine" }
 
+# The candidate taste profile (BRU-321). Not read by the current ranker.
+[taste]
+looking_for = "I want to work on database internals, query engines and storage systems. Deep specialization is a plus."
+
+[[taste.statement]]
+dimension = "seniority"
+value = "senior"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "work_shape"
+value = "database_internals"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "specialization"
+value = "deep"
+polarity = "prefer"
+
+[[taste.statement]]
+dimension = "work_shape"
+value = "backend"
+polarity = "avoid"
+text = "Application work that only uses a database"
+
 [[judgment]]
 job = "supabase-orioledb"
 fit = "strong_yes"

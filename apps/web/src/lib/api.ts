@@ -20,6 +20,9 @@ import type {
   ResumeImportResult,
   SourceImportResult,
   SourceRemovalResult,
+  TasteAction,
+  TasteProfileView,
+  TasteUpdateResult,
   TasteView,
   TokenList,
   UpdateNotificationsRequest,
@@ -122,6 +125,9 @@ export const api = {
   preferences: (update: UpdatePreferencesParams) =>
     call<PreferenceUpdateResult>("POST", "/api/v1/preferences", { json: update }),
   taste: () => call<TasteView>("GET", "/api/v1/taste"),
+  tasteProfile: () => call<TasteProfileView>("GET", "/api/v1/taste/profile"),
+  updateTasteProfile: (action: TasteAction) =>
+    call<TasteUpdateResult>("POST", "/api/v1/taste/profile", { json: action }),
   account: () => call<AccountView>("GET", "/api/v1/account"),
   logoutEverywhere: () => call<void>("POST", "/api/v1/account/logout", { json: {} }),
   notifications: () => call<NotificationSettingsView>("GET", "/api/v1/notifications"),

@@ -1,4 +1,12 @@
 //! `narrow preferences`: what the user wants next.
+//!
+//! `show` (the default) leads with the taste profile: what Narrow
+//! understands about the kind of role and company the person wants, and
+//! their practical constraints, kept apart. `describe` is the one question
+//! that fills it ("What kind of job are you looking for?"); `confirm`,
+//! `correct` and `remove` are the person's decisions about it. `add`,
+//! `set` and `remove` keep working on the structured preferences as
+//! before.
 
 use std::io::Write;
 use std::process::ExitCode;
@@ -10,6 +18,9 @@ use clap::Subcommand;
 use jobhunt_app::preferences::{
     ArrangementInput, EngagementInput, PeriodInput, PreferenceInput, PreferenceUpdate, StanceInput,
     WorkModeInput, WorkSetupInput,
+};
+use jobhunt_app::taste_profile::{
+    PolarityInput, TasteAction, TasteItemView, TasteProfileView, TasteUpdateResult,
 };
 
 use crate::config::LoadedConfig;
@@ -24,8 +35,35 @@ pub struct PreferencesArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum PreferencesCommand {
-    /// Show your preferences and statements (the default).
-    Show,
+    /// What Narrow understands you want, and your practical constraints
+    /// (the default).
+    Show {
+        /// Also every structured preference and statement, with ids.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Say what kind of job you're looking for, in a few words. Replaces
+    /// your previous description; Narrow reads it into a short summary for
+    /// you to confirm or correct.
+    Describe {
+        #[arg(required = true, value_name = "WORDS")]
+        words: Vec<String>,
+    },
+    /// Confirm the summary ("looks right"), or the given statements
+    /// (taste_…).
+    Confirm { ids: Vec<String> },
+    /// Correct one statement of the summary: new words, and/or
+    /// `--polarity avoid` (or prefer, open, neutral for "doesn't matter").
+    Correct {
+        id: String,
+        #[arg(value_name = "WORDS")]
+        words: Vec<String>,
+        #[arg(long, value_enum)]
+        polarity: Option<PolarityArg>,
+    },
+    /// Read your description again (after configuring a model, say),
+    /// keeping every correction.
+    Reinterpret,
     /// Say what you want in your own words. The statement is kept as
     /// written; what Narrow understands from it is saved as preferences.
     Add {
@@ -35,7 +73,8 @@ pub enum PreferencesCommand {
     /// Set one preference precisely.
     #[command(subcommand)]
     Set(SetCommand),
-    /// Remove a preference (pref_…) or a statement and what was read from it (stmt_…).
+    /// Remove a preference (pref_…), a statement and what was read from it
+    /// (stmt_…), or a statement of the summary (taste_…).
     Remove { id: String },
 }
 
@@ -159,6 +198,15 @@ pub enum SetCommand {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum PolarityArg {
+    Prefer,
+    Open,
+    Avoid,
+    /// It doesn't matter to you.
+    Neutral,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum PeriodArg {
     Year,
     Month,
@@ -239,10 +287,75 @@ pub async fn run(args: PreferencesArgs, loaded: &LoadedConfig) -> anyhow::Result
 async fn execute(args: PreferencesArgs, app: &jobhunt_app::LocalApp) -> anyhow::Result<ExitCode> {
     let now = Utc::now();
     let mut out = anstream::stdout().lock();
-    match args.command.unwrap_or(PreferencesCommand::Show) {
-        PreferencesCommand::Show => {
+    match args
+        .command
+        .unwrap_or(PreferencesCommand::Show { all: false })
+    {
+        PreferencesCommand::Show { all } => {
             let data = app.profiles().load_or_new(now).await?;
-            finish(profile_render::preferences(&mut out, &data))
+            let result = match app.taste_profile().await {
+                Ok(view) => taste(&mut out, &view, !all),
+                Err(jobhunt_app::AppError::NoProfile) => Ok(()),
+                Err(e) => return Err(e.into()),
+            };
+            finish(result.and_then(|()| {
+                if all {
+                    let title = crate::render::TITLE;
+                    writeln!(out, "{title}Details{title:#}")?;
+                    profile_render::preferences(&mut out, &data)
+                } else {
+                    Ok(())
+                }
+            }))
+        }
+        PreferencesCommand::Describe { words } => {
+            let result = app
+                .review_taste(
+                    &TasteAction::Describe {
+                        text: words.join(" "),
+                    },
+                    now,
+                )
+                .await?;
+            finish(update(&mut out, &result))
+        }
+        PreferencesCommand::Confirm { ids } => {
+            let result = app.review_taste(&TasteAction::Confirm { ids }, now).await?;
+            finish(update(&mut out, &result))
+        }
+        PreferencesCommand::Correct {
+            id,
+            words,
+            polarity,
+        } => {
+            if words.is_empty() && polarity.is_none() {
+                bail!("give new words, --polarity, or both");
+            }
+            let action = TasteAction::Correct {
+                id,
+                text: Some(words.join(" ")).filter(|w| !w.trim().is_empty()),
+                polarity: polarity.map(|p| match p {
+                    PolarityArg::Prefer => PolarityInput::Prefer,
+                    PolarityArg::Open => PolarityInput::Open,
+                    PolarityArg::Avoid => PolarityInput::Avoid,
+                    PolarityArg::Neutral => PolarityInput::Neutral,
+                }),
+            };
+            let result = app.review_taste(&action, now).await?;
+            finish(update(&mut out, &result))
+        }
+        PreferencesCommand::Reinterpret => {
+            let result = app.review_taste(&TasteAction::Reinterpret, now).await?;
+            finish(update(&mut out, &result))
+        }
+        PreferencesCommand::Remove { id } if id.trim().starts_with("taste_") => {
+            let result = app
+                .review_taste(&TasteAction::Remove { id: id.clone() }, now)
+                .await?;
+            finish(
+                writeln!(out, "Removed {}; Narrow won't read it again.", short(&id))
+                    .and_then(|()| taste(&mut out, &result.profile, true)),
+            )
         }
         PreferencesCommand::Add { words } => {
             let update = PreferenceUpdate {
@@ -290,6 +403,138 @@ async fn execute(args: PreferencesArgs, app: &jobhunt_app::LocalApp) -> anyhow::
             finish(result)
         }
     }
+}
+
+/// The answer of a change: what happened, then the profile.
+fn update(out: &mut impl Write, result: &TasteUpdateResult) -> std::io::Result<()> {
+    // Doubts about practical constraints matter (must have, or nice to
+    // have?); the rest is the summary's to settle.
+    let doubts: Vec<&str> = result
+        .preferences
+        .iter()
+        .flat_map(|p| &p.uncertain)
+        .filter(|u| matches!(u.category.as_str(), "location" | "compensation"))
+        .map(|u| u.value.as_str())
+        .collect();
+    if !doubts.is_empty() {
+        writeln!(
+            out,
+            "Check these constraints (must have, or nice to have?): {}. See narrow preferences show --all\n",
+            doubts.join("; ")
+        )?;
+    }
+    if !result.changed {
+        writeln!(out, "Nothing changed.")?;
+    }
+    taste(out, &result.profile, true)
+}
+
+fn item(out: &mut impl Write, i: &TasteItemView) -> std::io::Result<()> {
+    use crate::render::DIM;
+    writeln!(
+        out,
+        "  {}  {DIM}{} · {}{DIM:#}",
+        i.text,
+        short(&i.id),
+        i.basis
+    )
+}
+
+/// The taste profile: what Narrow understands, what the person avoids,
+/// their practical constraints, what was learned. `hint` adds what to do
+/// next.
+fn taste(out: &mut impl Write, v: &TasteProfileView, hint: bool) -> std::io::Result<()> {
+    use crate::render::{DIM, TITLE};
+    match (&v.looking_for, v.looking_for_source.as_deref()) {
+        (Some(words), Some("description")) => {
+            writeln!(out, "{TITLE}What you're looking for{TITLE:#}")?;
+            writeln!(out, "  “{words}”\n")?;
+        }
+        (Some(words), _) => {
+            writeln!(out, "{TITLE}What you told Narrow before{TITLE:#}")?;
+            writeln!(out, "  “{words}”")?;
+            writeln!(
+                out,
+                "  {DIM}Describe what you're looking for: narrow preferences describe \"…\"{DIM:#}\n"
+            )?;
+        }
+        (None, _) => {
+            writeln!(
+                out,
+                "What kind of job are you looking for? Say it in a few words:\n  narrow preferences describe \"Small technical teams, backend or platform work, startups. No early-career roles.\"\n"
+            )?;
+        }
+    }
+    let items: Vec<&TasteItemView> = v.understood.iter().flat_map(|l| &l.items).collect();
+    if !items.is_empty() {
+        writeln!(out, "{TITLE}What Narrow understands{TITLE:#}")?;
+        for i in items {
+            item(out, i)?;
+        }
+        writeln!(out)?;
+    }
+    let avoided: Vec<&TasteItemView> = v.avoid.iter().flat_map(|l| &l.items).collect();
+    if !avoided.is_empty() {
+        writeln!(out, "{TITLE}You tend to avoid{TITLE:#}")?;
+        for i in avoided {
+            item(out, i)?;
+        }
+        writeln!(out)?;
+    }
+    if !v.unsure.is_empty() {
+        writeln!(out, "{TITLE}Not sure yet{TITLE:#}")?;
+        for i in &v.unsure {
+            item(out, i)?;
+        }
+        writeln!(out)?;
+    }
+    if !v.constraints.is_empty() {
+        writeln!(out, "{TITLE}Practical constraints{TITLE:#}")?;
+        for c in &v.constraints {
+            writeln!(out, "  {}  {DIM}{}{DIM:#}", c.text, c.layer)?;
+        }
+        writeln!(out)?;
+    }
+    if !v.learned.is_empty() {
+        writeln!(out, "{TITLE}Learned over time{TITLE:#}")?;
+        for i in &v.learned {
+            let direction = if i.polarity == "avoid" {
+                "less of"
+            } else {
+                "more of"
+            };
+            writeln!(
+                out,
+                "  {direction} {}  {DIM}{} · {} confidence{DIM:#}",
+                i.text.to_lowercase(),
+                short(&i.id),
+                i.confidence
+            )?;
+        }
+        writeln!(out)?;
+    }
+    if let Some(i) = &v.interpretation {
+        for a in &i.ambiguities {
+            writeln!(out, "  ? {a}")?;
+        }
+        if let Some(note) = &i.note {
+            writeln!(out, "  {DIM}{note}{DIM:#}")?;
+        }
+    }
+    if hint {
+        if v.needs_confirmation {
+            writeln!(
+                out,
+                "{DIM}Does this look right? narrow preferences confirm · correct a line: narrow preferences correct <id> \"…\" (or --polarity neutral) · remove: narrow preferences remove <id>{DIM:#}"
+            )?;
+        }
+        writeln!(
+            out,
+            "{DIM}Read by {}. Every setting: narrow preferences show --all{DIM:#}",
+            v.reader.name
+        )?;
+    }
+    Ok(())
 }
 
 /// The structured preference a `set` command gives (validated by the

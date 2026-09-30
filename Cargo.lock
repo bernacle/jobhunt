@@ -1686,6 +1686,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "jobhunt-ai"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "jobhunt-profile",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+ "wiremock",
+]
+
+[[package]]
 name = "jobhunt-app"
 version = "0.1.0"
 dependencies = [
@@ -1693,6 +1710,7 @@ dependencies = [
  "chrono",
  "directories",
  "futures",
+ "jobhunt-ai",
  "jobhunt-core",
  "jobhunt-eligibility",
  "jobhunt-jobs",
@@ -1759,6 +1777,7 @@ dependencies = [
  "chrono",
  "futures",
  "http",
+ "jobhunt-ai",
  "jobhunt-app",
  "jobhunt-core",
  "jobhunt-jobs",

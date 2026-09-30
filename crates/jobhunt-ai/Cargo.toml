@@ -1,0 +1,26 @@
+[package]
+name = "jobhunt-ai"
+description = "Optional model providers for JobHunt's interpretation seams (the taste profile reader): the Anthropic Messages API or any OpenAI-compatible server, over plain HTTP."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+jobhunt-profile.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+chrono.workspace = true
+wiremock.workspace = true
+
+[lints]
+workspace = true

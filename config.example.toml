@@ -47,6 +47,20 @@ concurrency = 4
 # JobHunt works fully offline without it). JOBHUNT_CLOUD_URL overrides it.
 # server = "https://jobhunt.example.com"
 
+[ai]
+# Optional: a model that reads what you say you're looking for into your
+# taste profile. Without it Narrow uses its built-in reader, offline, and
+# everything still works. Only your words about what you want, a normalized
+# summary of your career (titles, years, kinds of work, domains,
+# technologies; no name, contact details, employers or location) and the
+# patterns learned from your feedback are sent, and only when you describe
+# or reinterpret what you want (never when ranking). See the README.
+# provider = "anthropic"          # or "openai": any OpenAI-compatible server
+# model = "claude-opus-5-5"       # OpenAI-compatible servers must name one
+# base_url = "http://localhost:11434/v1"   # e.g. Ollama
+# api_key_env = "ANTHROPIC_API_KEY"        # the variable holding the key
+# timeout_secs = 40
+
 # Sources to search. Listing any source here replaces all built-in defaults,
 # so this file fully controls what is searched. Each source can set `company`
 # to control the displayed company name.

@@ -14,6 +14,7 @@ base64.workspace = true
 chrono.workspace = true
 futures.workspace = true
 http.workspace = true
+jobhunt-ai.workspace = true
 jobhunt-app.workspace = true
 jobhunt-core.workspace = true
 jobhunt-jobs.workspace = true
