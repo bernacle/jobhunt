@@ -817,12 +817,33 @@
     "DecisionView": {
       "description": "The decision brief: what someone needs to decide whether a job is\nworth their time.",
       "properties": {
+        "against": {
+          "description": "What goes against the fit, most material first (why a job that\nlooks relevant is held back).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "caveats": {
           "description": "What counts against it, and conditions.",
           "items": {
             "type": "string"
           },
           "type": "array"
+        },
+        "facts": {
+          "description": "Useful practical facts (pay reaching the person's target). Never\nreasons for fit.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "fit": {
+          "description": "How well it fits what they want: `strong`, `plausible`,\n`insufficient` or `poor`.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "history": {
           "description": "The person's history with it.",
@@ -849,7 +870,7 @@
           "$ref": "#/$defs/FitTier"
         },
         "unknowns": {
-          "description": "What the posting doesn't say that matters to the person.",
+          "description": "What the posting doesn't say that matters to the person: the\nthings to check.",
           "items": {
             "type": "string"
           },
@@ -1459,8 +1480,22 @@
         "eligibility": {
           "$ref": "#/$defs/EligibilityBrief"
         },
+        "facts": {
+          "description": "Useful practical facts (pay reaching the person's target, remote\nfrom where they want). Never reasons for fit.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "first_shown_at": {
           "description": "When a feed or shortlist first showed it to the person.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fit": {
+          "description": "How well it fits what the person wants: `strong`, `plausible`,\n`insufficient` or `poor` (the tier, in fit's words).",
           "type": [
             "string",
             "null"
@@ -1531,6 +1566,13 @@
         },
         "title": {
           "type": "string"
+        },
+        "to_check": {
+          "description": "Things to check before spending time on it (pay not published,\nremote scope unclear, travel expected): the person's own\nrequirements first, up to 3.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "unknowns": {
           "description": "The lines of `consider` about what the posting doesn't say\n(unknowns, not cautions); the others are caveats.",
@@ -1621,6 +1663,13 @@
         },
         "shown": {
           "description": "On the feed now.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "strong_fits": {
+          "default": 0,
+          "description": "Of those, strong fits: what Today chooses from.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -4030,6 +4079,20 @@
         "eligibility": {
           "$ref": "#/$defs/EligibilityBrief"
         },
+        "facts": {
+          "description": "Useful practical facts (pay reaching the person's target, remote\nfrom where they want). Never reasons for fit.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "fit": {
+          "description": "How well it fits what the person wants: `strong`, `plausible`,\n`insufficient` or `poor` (the tier, in fit's words).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "description": "`opp_…`: the logical opportunity (one job, however many sources\nlist it). Use it with every other tool.",
           "type": "string"
@@ -4087,6 +4150,13 @@
         },
         "title": {
           "type": "string"
+        },
+        "to_check": {
+          "description": "Things to check before spending time on it (pay not published,\nremote scope unclear, travel expected): the person's own\nrequirements first, up to 3.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "unknowns": {
           "description": "The lines of `consider` about what the posting doesn't say\n(unknowns, not cautions); the others are caveats.",

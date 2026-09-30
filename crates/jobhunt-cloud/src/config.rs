@@ -214,18 +214,75 @@ pub struct CloudConfig {
     /// `Err` when the configuration can't be used. Either way the built-in
     /// reader works; this never stops the server.
     pub ai: Result<Option<jobhunt_ai::ModelConfig>, String>,
+    /// The model that reviews the fit of each ranking's shortlist
+    /// (`JOBHUNT_AI_REVIEW_FIT=true`, optionally `JOBHUNT_AI_REVIEW_MODEL`;
+    /// the rest as `JOBHUNT_AI_*`): `Ok(None)` when off (the default). A
+    /// configuration that can't be used never stops the server: ranking
+    /// relies on its rules.
+    pub fit_review: Result<Option<jobhunt_ai::ModelConfig>, String>,
     problems: Vec<String>,
+}
+
+/// The fit reviewer a configuration names, ready to share between
+/// requests (see [`CloudConfig::fit_review`]).
+pub fn fit_review(config: &CloudConfig) -> jobhunt_app::FitReview {
+    match &config.fit_review {
+        Ok(Some(model)) => match jobhunt_ai::ModelFitReviewer::new(model.clone()) {
+            Ok(reviewer) => jobhunt_app::FitReview {
+                reviewer: Some(std::sync::Arc::new(reviewer)),
+                ..jobhunt_app::FitReview::default()
+            },
+            Err(e) => jobhunt_app::FitReview {
+                problem: Some(e.to_string()),
+                ..jobhunt_app::FitReview::default()
+            },
+        },
+        Ok(None) => jobhunt_app::FitReview::default(),
+        Err(problem) => {
+            tracing::warn!(%problem, "JOBHUNT_AI_REVIEW_FIT can't be used; ranking relies on its rules");
+            jobhunt_app::FitReview {
+                problem: Some(problem.clone()),
+                ..jobhunt_app::FitReview::default()
+            }
+        }
+    }
+}
+
+/// `JOBHUNT_AI_REVIEW_FIT` and `JOBHUNT_AI_REVIEW_MODEL`, over
+/// `JOBHUNT_AI_*`.
+fn fit_review_settings(env: Env<'_>) -> Result<Option<jobhunt_ai::ModelConfig>, String> {
+    let on = match env("JOBHUNT_AI_REVIEW_FIT").map(|v| v.trim().to_ascii_lowercase()) {
+        None => false,
+        Some(v) if matches!(v.as_str(), "" | "0" | "false" | "no" | "off") => false,
+        Some(v) if matches!(v.as_str(), "1" | "true" | "yes" | "on") => true,
+        Some(v) => return Err(format!("JOBHUNT_AI_REVIEW_FIT is {v:?} (true or false)")),
+    };
+    if !on {
+        return Ok(None);
+    }
+    let model = env("JOBHUNT_AI_REVIEW_MODEL").or_else(|| env("JOBHUNT_AI_MODEL"));
+    match model_settings(env, model.as_deref())? {
+        Some(config) => Ok(Some(config)),
+        None => Err("JOBHUNT_AI_REVIEW_FIT needs JOBHUNT_AI_PROVIDER".into()),
+    }
 }
 
 /// `JOBHUNT_AI_*`.
 fn ai_settings(env: Env<'_>) -> Result<Option<jobhunt_ai::ModelConfig>, String> {
+    model_settings(env, env("JOBHUNT_AI_MODEL").as_deref())
+}
+
+fn model_settings(
+    env: Env<'_>,
+    model: Option<&str>,
+) -> Result<Option<jobhunt_ai::ModelConfig>, String> {
     let Some(provider) = env("JOBHUNT_AI_PROVIDER").filter(|p| !p.eq_ignore_ascii_case("none"))
     else {
         return Ok(None);
     };
     let mut config = jobhunt_ai::ModelConfig::new(
         &provider,
-        env("JOBHUNT_AI_MODEL").as_deref(),
+        model,
         env("JOBHUNT_AI_BASE_URL").as_deref(),
         env("JOBHUNT_AI_API_KEY"),
         "JOBHUNT_AI_API_KEY",
@@ -564,6 +621,7 @@ impl CloudConfig {
             github_api: env("JOBHUNT_GITHUB_ENDPOINT"),
             app: Arc::new(app),
             ai: ai_settings(env),
+            fit_review: fit_review_settings(env),
             problems,
         }
     }
@@ -763,6 +821,15 @@ impl CloudConfig {
                 ),
                 Ok(None) => "none (the built-in taste reader)".into(),
                 Err(problem) => format!("invalid: {problem} (the built-in taste reader is used)"),
+            },
+            required: false,
+        });
+        out.push(Setting {
+            name: "JOBHUNT_AI_REVIEW_FIT",
+            status: match &self.fit_review {
+                Ok(Some(c)) => format!("on ({}:{})", c.provider.as_str(), c.model),
+                Ok(None) => "off (ranking relies on its rules)".into(),
+                Err(problem) => format!("invalid: {problem} (ranking relies on its rules)"),
             },
             required: false,
         });

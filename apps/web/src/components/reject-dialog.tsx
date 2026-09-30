@@ -4,14 +4,20 @@ import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 
 import { Button, helpClass, labelClass, textareaClass } from "./ui";
 
-/** Starting points, not categories: the text stays the person's own. */
+/**
+ * Starting points, not categories: one click adds the words, the text stays
+ * the person's own (anything else goes in the box). Each is read into what
+ * Narrow learns from this job ("Too specialized" is the job's specialty).
+ */
 export const REASON_SUGGESTIONS = [
-  "Too corporate",
-  "Too frontend-heavy",
+  "Wrong seniority",
+  "Too specialized",
+  "Wrong kind of work",
+  "Company too big",
+  "Company stage",
+  "Domain",
+  "Location",
   "Compensation",
-  "Wrong domain",
-  "Too much SRE",
-  "Company too large",
 ];
 
 /**

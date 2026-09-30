@@ -152,3 +152,121 @@ pub fn event_on(
         now() + Duration::minutes(minutes),
     )
 }
+
+/// The taste profile `compose` would give a person whose only taste is
+/// their structured preferences (read as earlier settings, entered by them).
+pub fn taste_of(person: &crate::person::Person) -> jobhunt_profile::taste::TasteProfile {
+    taste_with(person, &crate::taste::TasteModel::empty("rules/1"))
+}
+
+/// [`taste_of`], with the patterns learned in `learned` composed as
+/// [`fn@jobhunt_profile::taste::compose`] composes them (a structured
+/// preference about the same key wins).
+pub fn taste_with(
+    person: &crate::person::Person,
+    learned: &crate::taste::TasteModel,
+) -> jobhunt_profile::taste::TasteProfile {
+    use jobhunt_profile::TasteId;
+    use jobhunt_profile::taste::{ComposedAssertion, TasteOrigin, TasteReview, vocab};
+    let mut out = stated_taste(person);
+    for s in crate::taste::learned_signals(learned) {
+        let key = jobhunt_profile::taste::key(s.dimension, &s.value);
+        if out.assertions.iter().any(|a| a.key() == key) {
+            continue;
+        }
+        out.assertions.push(ComposedAssertion {
+            id: TasteId::derive(&["learned", &key]),
+            dimension: s.dimension,
+            text: vocab::sentence(s.dimension, &s.value, s.polarity),
+            value: s.value,
+            polarity: s.polarity,
+            confidence: s.confidence,
+            origin: TasteOrigin::Learned,
+            review: TasteReview::Unreviewed,
+            sources: Vec::new(),
+            against: Vec::new(),
+            explanation: None,
+            interpreter: None,
+            original: None,
+            stored: false,
+        });
+    }
+    out
+}
+
+fn stated_taste(person: &crate::person::Person) -> jobhunt_profile::taste::TasteProfile {
+    use jobhunt_profile::taste::{
+        ComposedAssertion, TasteConfidence, TasteOrigin, TasteProfile, TasteReview, vocab,
+    };
+    use jobhunt_profile::{CompanyTrait, TasteDimension, TasteId, WorkAspect};
+
+    use crate::key::Dimension;
+    use crate::person::Matcher;
+
+    let mut out = TasteProfile::default();
+    for p in &person.stated {
+        let targets: Vec<(TasteDimension, String)> = match (&p.matcher, p.dimension) {
+            (Matcher::Keys(keys), Dimension::Role) => keys
+                .iter()
+                .filter_map(|k| match k.dimension {
+                    Dimension::Role => Some((
+                        TasteDimension::WorkShape,
+                        match k.value.as_str() {
+                            "full stack" => "full_stack".to_owned(),
+                            "machine learning" => "ml_product".to_owned(),
+                            other => other.to_owned(),
+                        },
+                    )),
+                    Dimension::Seniority => vocab::from_learned("seniority", &k.value),
+                    _ => None,
+                })
+                .collect(),
+            (Matcher::TitleWords(words), Dimension::Role) => vocab::role(words),
+            (Matcher::Keys(keys), Dimension::CompanyTrait) => keys
+                .iter()
+                .filter_map(|k| CompanyTrait::from_canonical(&k.value))
+                .map(|t| {
+                    let (d, v) = vocab::company_trait(t);
+                    (d, v.to_owned())
+                })
+                .collect(),
+            (Matcher::Keys(keys), Dimension::WorkStyle) => keys
+                .iter()
+                .filter_map(|k| WorkAspect::from_canonical(&k.value))
+                .map(|a| {
+                    let (d, v) = vocab::work_aspect(a);
+                    (d, v.to_owned())
+                })
+                .collect(),
+            (Matcher::Keys(keys), Dimension::Domain) => keys
+                .iter()
+                .map(|k| (TasteDimension::Domain, k.value.clone()))
+                .collect(),
+            _ => Vec::new(),
+        };
+        for (dimension, value) in targets {
+            let polarity = vocab::polarity_of(p.stance);
+            out.assertions.push(ComposedAssertion {
+                id: TasteId::derive(&[&p.id, &value]),
+                dimension,
+                text: vocab::sentence(dimension, &value, polarity),
+                value,
+                polarity,
+                confidence: if p.uncertain {
+                    TasteConfidence::Medium
+                } else {
+                    TasteConfidence::High
+                },
+                origin: TasteOrigin::Legacy,
+                review: TasteReview::Unreviewed,
+                sources: Vec::new(),
+                against: Vec::new(),
+                explanation: None,
+                interpreter: None,
+                original: None,
+                stored: false,
+            });
+        }
+    }
+    out
+}

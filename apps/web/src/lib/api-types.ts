@@ -652,9 +652,24 @@ export interface ContactView {
  */
 export interface DecisionView {
   /**
+   * What goes against the fit, most material first (why a job that
+   * looks relevant is held back).
+   */
+  against?: string[];
+  /**
    * What counts against it, and conditions.
    */
   caveats: string[];
+  /**
+   * Useful practical facts (pay reaching the person's target). Never
+   * reasons for fit.
+   */
+  facts?: string[];
+  /**
+   * How well it fits what they want: `strong`, `plausible`,
+   * `insufficient` or `poor`.
+   */
+  fit?: string | null;
   /**
    * The person's history with it.
    */
@@ -670,7 +685,8 @@ export interface DecisionView {
   summary: string;
   tier: FitTier;
   /**
-   * What the posting doesn't say that matters to the person.
+   * What the posting doesn't say that matters to the person: the
+   * things to check.
    */
   unknowns: string[];
   /**
@@ -1239,9 +1255,19 @@ export interface FeedItem {
   department?: string | null;
   eligibility: EligibilityBrief;
   /**
+   * Useful practical facts (pay reaching the person's target, remote
+   * from where they want). Never reasons for fit.
+   */
+  facts?: string[];
+  /**
    * When a feed or shortlist first showed it to the person.
    */
   first_shown_at?: string | null;
+  /**
+   * How well it fits what the person wants: `strong`, `plausible`,
+   * `insufficient` or `poor` (the tier, in fit's words).
+   */
+  fit?: string | null;
   /**
    * `opp_…`: the logical opportunity (one job, however many sources
    * list it). Use it with every other tool.
@@ -1284,6 +1310,12 @@ export interface FeedItem {
   team?: string | null;
   tier: FitTier;
   title: string;
+  /**
+   * Things to check before spending time on it (pay not published,
+   * remote scope unclear, travel expected): the person's own
+   * requirements first, up to 3.
+   */
+  to_check?: string[];
   /**
    * The lines of `consider` about what the posting doesn't say
    * (unknowns, not cautions); the others are caveats.
@@ -1426,6 +1458,10 @@ export interface FeedSummary {
    * On the feed now.
    */
   shown: number;
+  /**
+   * Of those, strong fits: what Today chooses from.
+   */
+  strong_fits?: number;
   /**
    * Of those, strong fits and jobs worth reviewing.
    */
@@ -2470,6 +2506,16 @@ export interface ShortlistItem {
   department?: string | null;
   eligibility: EligibilityBrief;
   /**
+   * Useful practical facts (pay reaching the person's target, remote
+   * from where they want). Never reasons for fit.
+   */
+  facts?: string[];
+  /**
+   * How well it fits what the person wants: `strong`, `plausible`,
+   * `insufficient` or `poor` (the tier, in fit's words).
+   */
+  fit?: string | null;
+  /**
    * `opp_…`: the logical opportunity (one job, however many sources
    * list it). Use it with every other tool.
    */
@@ -2503,6 +2549,12 @@ export interface ShortlistItem {
   team?: string | null;
   tier: FitTier;
   title: string;
+  /**
+   * Things to check before spending time on it (pay not published,
+   * remote scope unclear, travel expected): the person's own
+   * requirements first, up to 3.
+   */
+  to_check?: string[];
   /**
    * The lines of `consider` about what the posting doesn't say
    * (unknowns, not cautions); the others are caveats.

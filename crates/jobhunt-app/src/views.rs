@@ -400,15 +400,36 @@ pub struct DecisionView {
     pub worth: Vec<String>,
     /// What counts against it, and conditions.
     pub caveats: Vec<String>,
-    /// What the posting doesn't say that matters to the person.
+    /// What the posting doesn't say that matters to the person: the
+    /// things to check.
     pub unknowns: Vec<String>,
     /// The person's history with it.
     pub history: Vec<String>,
+    /// How well it fits what they want: `strong`, `plausible`,
+    /// `insufficient` or `poor`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fit: Option<String>,
+    /// What goes against the fit, most material first (why a job that
+    /// looks relevant is held back).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub against: Vec<String>,
+    /// Useful practical facts (pay reaching the person's target). Never
+    /// reasons for fit.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub facts: Vec<String>,
 }
 
 impl DecisionView {
     pub fn of(r: &Ranking) -> Self {
         Self {
+            fit: Some(r.fit.level.as_str().to_owned()),
+            against: r
+                .fit
+                .contradictions
+                .iter()
+                .map(|c| c.text.clone())
+                .collect(),
+            facts: r.practicality.facts.clone(),
             tier: r.tier.into(),
             recommendation: (&r.gate).into(),
             recommendation_note: gate_note(&r.gate),

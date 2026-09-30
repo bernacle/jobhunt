@@ -112,6 +112,7 @@ struct Inner {
     email: Option<Arc<dyn EmailSender>>,
     /// Shared by every request: one HTTP client, one configuration.
     taste_model: jobhunt_app::TasteModel,
+    fit_review: jobhunt_app::FitReview,
 }
 
 impl std::fmt::Debug for ApiState {
@@ -187,6 +188,7 @@ impl ApiState {
                 }
             }
         };
+        let fit_review = crate::config::fit_review(&config);
         Ok(Self {
             inner: Arc::new(Inner {
                 store,
@@ -197,6 +199,7 @@ impl ApiState {
                 usage,
                 email,
                 taste_model,
+                fit_review,
             }),
         })
     }
@@ -222,7 +225,8 @@ impl ApiState {
                 Arc::new(self.user_store(principal)),
                 DiscoveryMode::Background,
             )
-            .with_taste_model(self.inner.taste_model.clone()),
+            .with_taste_model(self.inner.taste_model.clone())
+            .with_fit_review(self.inner.fit_review.clone()),
         )
     }
 

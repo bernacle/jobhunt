@@ -30,6 +30,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::key::{Dimension, TasteKey};
 
+pub mod work;
+
+pub use work::{Seniority, ShapeBasis, Specialty, WorkReading};
+
 /// Where a fact was read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -147,11 +151,13 @@ impl Level {
 }
 
 /// Levels titles state, first match wins (so "Senior / Staff" is senior).
-const LEVEL_TERMS: [(&str, Level); 22] = [
+const LEVEL_TERMS: [(&str, Level); 24] = [
     ("co founder", Level::Founding),
     ("cofounder", Level::Founding),
     ("founding", Level::Founding),
     ("intern*", Level::Intern),
+    ("early career", Level::Junior),
+    ("new graduate*", Level::Junior),
     ("new grad*", Level::Junior),
     ("graduate", Level::Junior),
     ("junior", Level::Junior),
@@ -185,6 +191,9 @@ const ROLE_TITLE_TERMS: &[(&str, &str)] = &[
     ("dev ops", "sre"),
     ("solutions engineer*", "solutions"),
     ("solutions architect*", "solutions"),
+    ("solution architect*", "solutions"),
+    ("customer solution*", "solutions"),
+    ("support engineer*", "solutions"),
     ("forward deployed", "solutions"),
     ("sales engineer*", "solutions"),
     ("customer engineer*", "solutions"),
@@ -227,10 +236,19 @@ const ROLE_TITLE_TERMS: &[(&str, &str)] = &[
     ("partnership*", "sales"),
     ("product manag*", "product management"),
     ("product owner*", "product management"),
+    ("product lead", "product management"),
+    ("platform manager*", "product management"),
+    ("program manag*", "product management"),
+    ("programs manag*", "product management"),
     ("product designer*", "design"),
     ("designer*", "design"),
     ("=UX", "design"),
 ];
+
+/// Leadership words that, without an engineering word, make a title about
+/// managing something rather than engineering it.
+static NON_ENGINEERING_LEAD: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&["manager*", "lead", "director*", "head of"]));
 
 /// Title words that make a job engineering even without a role shape.
 const ENGINEERING_TITLE: [&str; 9] = [
@@ -579,6 +597,9 @@ pub struct JobFacets {
     pub listed_at: DateTime<Utc>,
     /// Whether `listed_at` is the source's own publish date.
     pub posted: bool,
+    /// The work itself, read for fit: level, shape, depth, company shape.
+    #[serde(default)]
+    pub work: WorkReading,
 }
 
 impl JobFacets {
@@ -681,6 +702,8 @@ fn starts_with_any(ws: &[Word], vocabulary: &Vocabulary) -> bool {
 
 /// The level a title states.
 pub fn title_level(title: &str) -> Option<(Level, String)> {
+    // "Staff+ Engineer" is staff ("+" otherwise stays part of a word).
+    let title = &title.replace('+', " ");
     let ws = words(title);
     let masked: Vec<std::ops::Range<usize>> = NOT_A_LEVEL
         .iter()
@@ -714,10 +737,35 @@ pub fn title_roles(title: &str) -> Vec<(&'static str, String)> {
     found
 }
 
+/// Title words of work that isn't engineering, whatever else the title
+/// says ("Event Programs Manager, Developer Community").
+static NOT_ENGINEERING: LazyLock<Vocabulary> = LazyLock::new(|| {
+    Vocabulary::compile(&[
+        "developer community",
+        "developer relations",
+        "developer advocate*",
+        "devrel",
+        "developer marketing",
+        "developer education",
+        "community manag*",
+        "event*",
+        "recruit*",
+        "marketing",
+        "evangelist*",
+    ])
+});
+
 fn function_of(title: &str, roles: &[(&str, String)]) -> JobFunction {
     let ws = words(title);
     let is = |v: &str| roles.iter().any(|(r, _)| *r == v);
-    if is("solutions") {
+    if has(&ws, &NOT_ENGINEERING) {
+        // "Developer Relations Engineer": customer-facing engineering.
+        if has(&ws, &ENGINEERING_TITLE_PATTERNS) {
+            JobFunction::CustomerEngineering
+        } else {
+            JobFunction::Other
+        }
+    } else if is("solutions") {
         JobFunction::CustomerEngineering
     } else if has(&ws, &ENGINEERING_TITLE_PATTERNS) || is("sre") {
         JobFunction::Engineering
@@ -725,10 +773,17 @@ fn function_of(title: &str, roles: &[(&str, String)]) -> JobFunction {
         JobFunction::Sales
     } else if is("product management") {
         JobFunction::ProductManagement
+    } else if (is("platform") || is("infrastructure") || is("data"))
+        && has(&ws, &NON_ENGINEERING_LEAD)
+    {
+        // "Staff Platform Manager, Payments": a manager of a platform, not
+        // an engineer on one.
+        JobFunction::ProductManagement
     } else if is("design") {
         JobFunction::Design
-    } else if !roles.is_empty() {
-        // "Backend (Rust)" without the word "engineer".
+    } else if !title_roles(work::split_title(title).0).is_empty() {
+        // "Backend (Rust)" without the word "engineer" (the title's own
+        // words: "Product Quality Analyst - AI Voice" isn't engineering).
         JobFunction::Engineering
     } else {
         JobFunction::Other
@@ -991,6 +1046,7 @@ static JOINING: LazyLock<Vocabulary> = LazyLock::new(|| {
         "sit on",
         "sit in",
         "your team",
+        "one of",
     ])
 });
 /// Team size said in words.
@@ -1042,6 +1098,19 @@ fn team_mentions(ws: &[Word], clause: &Range<usize>) -> Vec<(usize, usize, &'sta
             }
         }
     }
+    // "You'll be one of 5 engineers": the team someone joins.
+    for (i, w) in words.iter().enumerate() {
+        if w.lower == "one"
+            && words.get(i + 1).is_some_and(|x| x.lower == "of")
+            && let Some(n) = words.get(i + 2).and_then(|x| x.lower.parse::<u32>().ok())
+            && words
+                .get(i + 3)
+                .is_some_and(|x| PEOPLE.contains(&x.lower.as_str()))
+            && let Some(size) = size_of(n + 1)
+        {
+            out.push((clause.start + i, clause.start + i, size));
+        }
+    }
     out.sort_by_key(|m| m.0);
     out
 }
@@ -1069,14 +1138,19 @@ fn team_size(sentences: &[Sentence]) -> Option<Fact> {
     for sentence in sentences {
         for clause in &sentence.clauses {
             let words = &sentence.words[clause.clone()];
-            if words
+            // A company word before the team makes the size the company's
+            // ("our company is a team of 200"); after it, it only says where
+            // the team sits ("a team of 60 engineers in the Billing
+            // organization").
+            let company_at = words
                 .iter()
-                .any(|w| COMPANY_WORDS.contains(&w.lower.as_str()))
-            {
-                continue;
-            }
+                .position(|w| COMPANY_WORDS.contains(&w.lower.as_str()))
+                .map(|i| clause.start + i);
             let joining = JOINING.any(words);
             for (start, team, size) in team_mentions(&sentence.words, clause) {
+                if company_at.is_some_and(|at| at < team.min(start)) {
+                    continue;
+                }
                 let everyone = sentence.words[team.saturating_sub(2).max(clause.start)..team]
                     .iter()
                     .any(|w| WHOLE.contains(&w.lower.as_str()));
@@ -1174,8 +1248,11 @@ pub fn facets(record: &JobRecord) -> JobFacets {
             .filter(|t| t.requirement >= Requirement::Preferred)
             .map(|t| t.name.as_str())
             .collect();
+        // What the company does ("we provide a complete backend
+        // solution") says nothing about this role's work.
         let texts: Vec<(&str, &[Word])> = sentences
             .iter()
+            .filter(|s| !work::about_company(s, &job.company))
             .map(|s| (s.text.as_str(), s.words.as_slice()))
             .collect();
         for signal in role_signals_in(None, &techs, &texts) {
@@ -1237,7 +1314,7 @@ pub fn facets(record: &JobRecord) -> JobFacets {
         Some(EmploymentType::FullTime | EmploymentType::PartTime) => Some(false),
         Some(EmploymentType::Internship | EmploymentType::Other(_)) | None => None,
     };
-    JobFacets {
+    let mut facets = JobFacets {
         company: job.company.trim().to_owned(),
         function,
         roles,
@@ -1251,7 +1328,10 @@ pub fn facets(record: &JobRecord) -> JobFacets {
         listed_at: job.posted_at.unwrap_or(record.first_seen_at),
         posted: job.posted_at.is_some(),
         title,
-    }
+        work: WorkReading::default(),
+    };
+    facets.work = work::read(&facets, &sentences);
+    facets
 }
 
 #[cfg(test)]

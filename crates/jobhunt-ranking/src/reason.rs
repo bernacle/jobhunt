@@ -43,8 +43,14 @@ pub enum JobReference {
     Stack,
     /// "this company".
     Company,
-    /// "too senior", "too junior": the job's level.
+    /// "too senior", "too junior", "wrong seniority": the job's level.
     Level,
+    /// "wrong kind of work": the shape of the job's work.
+    Work,
+    /// "too specialized": the specialized depth the job asks for.
+    Specialty,
+    /// "company stage": the company's stage or size, as the posting says.
+    Stage,
 }
 
 impl JobReference {
@@ -54,6 +60,9 @@ impl JobReference {
             Self::Stack => "the job's stack",
             Self::Company => "the employer",
             Self::Level => "the job's level",
+            Self::Work => "the job's kind of work",
+            Self::Specialty => "the job's specialization",
+            Self::Stage => "the company's stage",
         }
     }
 }
@@ -123,7 +132,7 @@ pub struct RuleReader;
 
 /// Revision of [`RuleReader`]'s vocabulary and cues. Bump it with any
 /// change that can read a reason differently.
-pub const RULE_READER_REVISION: &str = "rules/1";
+pub const RULE_READER_REVISION: &str = "rules/2";
 
 /// Words that point away from what follows.
 const AWAY: [&str; 22] = [
@@ -260,6 +269,14 @@ const TERMS: &[(&str, Dimension, &str)] = &[
     ),
     ("product minded", Dimension::WorkStyle, "product_closeness"),
     // Company and team.
+    ("company too big", Dimension::CompanyTrait, "large_company"),
+    (
+        "company too large",
+        Dimension::CompanyTrait,
+        "large_company",
+    ),
+    ("team too big", Dimension::CompanyTrait, "large_team"),
+    ("team too large", Dimension::CompanyTrait, "large_team"),
     ("corporate", Dimension::CompanyTrait, "large_company"),
     ("enterprise*", Dimension::CompanyTrait, "large_company"),
     ("big compan*", Dimension::CompanyTrait, "large_company"),
@@ -312,6 +329,7 @@ const TERMS: &[(&str, Dimension, &str)] = &[
     ("money", Dimension::Compensation, "pay_level"),
     // Only about this job.
     ("remote policy", Dimension::Information, "remote_policy"),
+    ("location", Dimension::Information, "location"),
     ("vague", Dimension::Information, "description"),
     ("product", Dimension::Product, "interest"),
     ("problem*", Dimension::Product, "interest"),
@@ -340,6 +358,19 @@ const REFERENCES: &[(&str, JobReference)] = &[
     ("too senior", JobReference::Level),
     ("too junior", JobReference::Level),
     ("wrong level", JobReference::Level),
+    ("wrong seniority", JobReference::Level),
+    ("seniority", JobReference::Level),
+    ("too specialized", JobReference::Specialty),
+    ("too specialised", JobReference::Specialty),
+    ("too niche", JobReference::Specialty),
+    ("too deep", JobReference::Specialty),
+    ("kind of work", JobReference::Work),
+    ("type of work", JobReference::Work),
+    ("wrong work", JobReference::Work),
+    ("company stage", JobReference::Stage),
+    ("wrong stage", JobReference::Stage),
+    ("too early", JobReference::Stage),
+    ("too late stage", JobReference::Stage),
 ];
 
 /// Levels a reason can name outright ("staff roles").
@@ -498,6 +529,22 @@ impl ReasonReader for RuleReader {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_one_click_reasons_are_read() {
+        for (reason, expected) in [
+            ("Wrong seniority", "avoid job:Level"),
+            ("Too specialized", "avoid job:Specialty"),
+            ("Wrong kind of work", "avoid job:Work"),
+            ("Company too big", "avoid company_trait:large_company"),
+            ("Company stage", "avoid job:Stage"),
+            ("Domain", "avoid job:Domain"),
+            ("Location", "avoid information:location"),
+            ("Compensation", "avoid compensation:pay_level"),
+        ] {
+            assert_eq!(reject(reason), [expected], "{reason}");
+        }
+    }
 
     fn read(reason: &str, action: FeedbackAction) -> Vec<String> {
         RuleReader

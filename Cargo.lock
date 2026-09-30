@@ -1692,6 +1692,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "jobhunt-profile",
+ "jobhunt-ranking",
  "reqwest",
  "serde",
  "serde_json",
@@ -1904,6 +1905,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "futures",
  "jobhunt-core",
  "jobhunt-eligibility",
  "jobhunt-jobs",
@@ -1911,6 +1913,8 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

@@ -200,6 +200,19 @@ fn case_detail(out: &mut String, candidate: &str, case: &Case) {
     );
     let _ = writeln!(
         out,
+        "- Fit: {}; practicality: {}",
+        o.fit,
+        if o.practical.is_empty() {
+            "—"
+        } else {
+            &o.practical
+        }
+    );
+    for a in &o.against {
+        let _ = writeln!(out, "  - against: {}", cell(a));
+    }
+    let _ = writeln!(
+        out,
         "- Today: labeled worth your attention: **{}**; on the feed: {}",
         yes(o.qualifies),
         yes(o.in_feed)
@@ -439,7 +452,7 @@ pub fn render(fixtures: &Fixtures, run: &Run, options: Options) -> String {
     );
     let _ = writeln!(
         out,
-        "- Surfaced = labeled worth your attention: not excluded, tier at least worth reviewing (what Today selects from). Feed = the best of each company, at most 5."
+        "- Surfaced = labeled worth your attention: not excluded, and a strong fit (what Today selects from). Feed = the best of each company, at most 5."
     );
     let _ = writeln!(
         out,

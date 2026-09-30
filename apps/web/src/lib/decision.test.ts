@@ -6,7 +6,7 @@ const why = ["Backend roles: a role you want", "Small teams: a kind of company o
 
 describe("selectDecision", () => {
   it("takes the strongest distinct reasons, in the API's order", () => {
-    expect(selectDecision({ why: [...why, "backend roles: a role you want."], caveats: [] }, "lead").reasons).toEqual(why.slice(0, 2));
+    expect(selectDecision({ why: [...why, "backend roles: a role you want."], caveats: [] }, "lead").reasons).toEqual(why.slice(0, 3));
     expect(selectDecision({ why, caveats: [] }, "peer").reasons).toEqual(why.slice(0, 1));
   });
 
@@ -52,6 +52,21 @@ describe("selectDecision", () => {
   it("never drops an unknown, and says a line once when it is both a caveat and an unknown", () => {
     const input = { why: [], caveats: ["Equity not stated"], unknowns: ["Equity not stated"] };
     expect(concernsOf(input)).toEqual([{ kind: "missing", text: "Equity not stated" }]);
-    expect(selectDecision(input, "peer")).toEqual({ reasons: [], concerns: [{ kind: "missing", text: "Equity not stated" }] });
+    expect(selectDecision(input, "peer")).toEqual({ reasons: [], concerns: [{ kind: "missing", text: "Equity not stated" }], checks: [] });
+  });
+
+  it("lists what else to check on the lead, never what is already shown", () => {
+    const input = {
+      why,
+      caveats: ["Occasional travel to the Lisbon office"],
+      unknowns: ["Pay isn't published: unknown, not low", "Eligibility unclear: the listing says remote but not where from"],
+    };
+    const lead = selectDecision(input, "lead");
+    expect(lead.concerns.map((c) => c.text)).toEqual(["Occasional travel to the Lisbon office"]);
+    expect(lead.checks).toEqual(input.unknowns);
+    expect(selectDecision(input, "peer").checks).toEqual([]);
+    const onlyUnknowns = selectDecision({ why, caveats: [], unknowns: input.unknowns }, "lead");
+    expect(onlyUnknowns.concerns.map((c) => c.text)).toEqual([input.unknowns[0]]);
+    expect(onlyUnknowns.checks).toEqual([input.unknowns[1]]);
   });
 });

@@ -1435,6 +1435,7 @@ mod tests {
             vec![
                 "discovery_runs",
                 "eligibility_decisions",
+                "fit_reviews",
                 "job_events",
                 "job_evidence",
                 "job_verifications",

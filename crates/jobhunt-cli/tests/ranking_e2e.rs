@@ -205,20 +205,24 @@ async fn ranks_learns_and_explains() {
         &[
             "Checked 11 open jobs",
             "passed basic eligibility",
-            "2 are worth reviewing",
-            "Member of Technical Staff - Systems — Modal   Strong fit",
-            "Security Engineer, Cloud — Ramp   Strong fit",
+            "3 are worth reviewing",
+            // Only the work is known to fit what they said (backend or
+            // infrastructure roles): worth reviewing, not strong fits.
+            "Member of Technical Staff - Systems — Modal   Worth reviewing",
+            "Security Engineer, Cloud — Ramp   Worth reviewing",
             "✓ Verified open just now · ✓ Eligible:",
             "Why this may be worth your time",
-            "+ Infrastructure roles: a role you want",
-            "+ Meets your minimum of USD 180,000 per year across the range",
-            "+ Reaches your target of USD 250,000 per year at the top of the range",
+            "+ Touches infrastructure (the team: “Cloud”), close to the infrastructure work you want",
+            "+ Senior level, matching your latest title",
             "maybe or low priority (--all)",
             "Offline: used stored jobs without refreshing or verifying them.",
             "Tiers are coarse on purpose",
         ],
     );
     assert!(!out.contains('%'), "{out}");
+    // Pay meeting the minimum or target is a fact, never a reason.
+    assert!(!out.contains("+ Meets your minimum"), "{out}");
+    assert!(!out.contains("+ Reaches your target"), "{out}");
     assert!(!out.contains("Account Manager"), "{out}");
     assert_eq!(out.matches(" · narrow why opp_").count(), 2, "{out}");
 
@@ -229,11 +233,9 @@ async fn ranks_learns_and_explains() {
         &[
             "? Not verified yet",
             "? Eligibility unclear: Requires hybrid presence in London",
-            "- Sales roles: a role you don't want",
             "- Account Manager | Commercial: sales, while your experience is in engineering",
             "Account Manager | Commercial — Ramp   Low priority",
-            "- Not one of the roles you listed (backend roles, infrastructure roles)",
-            "- Customer-facing engineering (solutions / forward-deployed), not product engineering",
+            "- Customer-facing engineering (solutions, forward-deployed), not product or platform engineering",
             " · narrow verify opp_",
             " · narrow check opp_",
         ],
@@ -247,13 +249,18 @@ async fn ranks_learns_and_explains() {
         &out,
         &[
             "Security Engineer, Cloud — Ramp",
-            "STRONG FIT",
-            "A strong fit for what you want.",
+            "WORTH REVIEWING",
+            "Worth a look: some of it fits what you want, not enough to recommend it.",
             "infrastructure, security · AWS, Terraform",
             "USD 211,400 – 290,600 per year · hybrid",
             "Why it may be worth your time",
-            "+ Asks for AWS and Terraform, which you've used",
+            "+ Touches infrastructure (the team: “Cloud”), close to the infrastructure work you want",
+            "How the fit was assessed",
+            "Fit plausible: the work 0.50, the rest 0.60 · fit-rules/1 · not reviewed by a model",
+            "Practicality",
+            "• Reaches your target of USD 250,000 per year at the top of the range",
             "Every signal",
+            "Asks for AWS and Terraform, which you've used",
             "verified at ashby:ramp just now",
             "your minimum: at least USD 180,000 per year",
             // The day count depends on today's date (the fixture was
@@ -272,7 +279,7 @@ async fn ranks_learns_and_explains() {
         &[
             "MAYBE",
             "but verify it first: the listing has not been verified",
-            "Unknown",
+            "Things to check",
             "? Not verified yet: it may be closed or changed",
             "Every signal with its evidence: narrow why --details",
         ],
@@ -371,8 +378,8 @@ async fn ranks_learns_and_explains() {
     has(
         &out,
         &[
-            "Security Engineer, Cloud — Ramp   Strong fit",
-            "+ Domain: infrastructure: you've favored jobs like this",
+            "Security Engineer, Cloud — Ramp   Worth reviewing",
+            "+ You saved it",
             "2 you rejected",
             "1 in your pipeline",
         ],
@@ -383,7 +390,7 @@ async fn ranks_learns_and_explains() {
     has(
         &out,
         &[
-            "Fit:\n  Strong fit: A strong fit for what you want.",
+            "Fit:\n  Worth reviewing: Worth a look: some of it fits what you want",
             "Your status: saved since",
         ],
     );

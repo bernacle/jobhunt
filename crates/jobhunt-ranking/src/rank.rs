@@ -20,15 +20,25 @@
 //! | eligible or conditional, but not trusted (never verified, stale, failed) | "verify first" |
 //! | eligible or conditional, trusted ([`Assessment::recommendable`]) | recommended |
 //!
-//! Within a gate, the tier ([`Tier`]) is what people see: strong fit, worth
-//! reviewing, maybe, low priority. The numeric score only orders jobs and
-//! is shown only in details; it is not a match percentage. A strong fit
-//! needs a reason in terms of what the person wants (a stated preference,
-//! learned taste, their own feedback), not just eligibility and
-//! freshness, and nothing they said they don't want; and a requirement the
-//! posting says nothing about (pay not published against a required
-//! minimum, a required team size, a required remote geography) is
-//! unresolved, which is never a strong fit.
+//! Within a gate, the tier ([`Tier`]) is what people see, and it is the
+//! job's **fit** ([`crate::fit`]): would this person genuinely want this
+//! company and role? Fit comes from affirmative evidence against the
+//! person's composed taste profile, and contradictions are first-class:
+//!
+//! | Fit | Tier |
+//! | --- | --- |
+//! | strong: the work and at least one more aspect fit, nothing contradicts | strong fit (Today) |
+//! | plausible: something points to it, not enough | worth reviewing |
+//! | insufficient evidence | maybe |
+//! | poor: a material contradiction | low priority |
+//!
+//! **Practicality** ([`crate::practicality`]) is assessed apart and shown
+//! after fit: what rules the job out (the gate), known concerns (pay below
+//! a floor) and things to check (pay not published, remote scope unclear).
+//! It never raises fit: pay, remote work, verification and freshness add
+//! nothing to it, and what the posting doesn't say (pay, team size) never
+//! lowers it. The numeric score only orders jobs of the same tier by how
+//! much evidence their fit rests on; it is not a match percentage.
 
 use chrono::{DateTime, Utc};
 use jobhunt_eligibility::{Assessment, Eligibility};
@@ -36,16 +46,21 @@ use jobhunt_jobs::verification::CompensationCheck;
 use jobhunt_jobs::{JobId, JobRecord, OpportunityId};
 use serde::{Deserialize, Serialize};
 
+use jobhunt_profile::taste::TasteProfile;
+
 use crate::brief::{DecisionBrief, brief};
 use crate::facets::{JobFacets, facets_of};
 use crate::feedback::{OpportunityState, Stage};
+use crate::fit::{FitAssessment, FitLevel};
 use crate::person::Person;
+use crate::practicality::Practicality;
 use crate::signals::{self, Inputs, PayEvidence, Signal, SignalKind};
 use crate::taste::TasteModel;
 
-/// Revision of the signals, weights, gates and tiers. Part of every stored
-/// ranking's key; bump it with any change that can rank a job differently.
-pub const RANKING_VERSION: &str = "5";
+/// Revision of the signals, fit rules, gates and tiers. Part of every
+/// stored ranking's key; bump it with any change that can rank a job
+/// differently.
+pub const RANKING_VERSION: &str = "6";
 
 /// Why an opportunity is not among the recommendations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,6 +163,16 @@ pub enum Tier {
 }
 
 impl Tier {
+    /// The tier a fit earns.
+    pub fn of(fit: FitLevel) -> Self {
+        match fit {
+            FitLevel::Strong => Self::StrongFit,
+            FitLevel::Plausible => Self::WorthReviewing,
+            FitLevel::Insufficient => Self::Maybe,
+            FitLevel::Poor => Self::LowPriority,
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::LowPriority => "low_priority",
@@ -179,6 +204,16 @@ pub struct Ranking {
     pub tier: Tier,
     /// Orders jobs within a tier. Not a percentage; shown only in details.
     pub score: f64,
+    /// Would they want it: the reasons, contradictions and level behind
+    /// the tier.
+    #[serde(default)]
+    pub fit: FitAssessment,
+    /// Can they pursue it: blockers, concerns and things to check.
+    #[serde(default)]
+    pub practicality: Practicality,
+    /// Every finding, inspectable (eligibility, verification, pay, the
+    /// stated preferences a posting matches); the evidence behind the
+    /// brief, not a sum.
     pub signals: Vec<Signal>,
     pub brief: DecisionBrief,
     /// The job, as read for ranking.
@@ -236,7 +271,10 @@ impl Candidate<'_> {
 /// What every ranking shares.
 pub struct Context<'a> {
     pub person: &'a Person,
+    /// Learned from feedback (it also feeds `taste_profile`).
     pub taste: &'a TasteModel,
+    /// What the person wants: the composed taste profile (BRU-321).
+    pub taste_profile: &'a TasteProfile,
     pub now: DateTime<Utc>,
 }
 
@@ -298,24 +336,6 @@ fn gate(a: &Assessment, state: &OpportunityState, stated: Stated) -> Gate {
     }
 }
 
-fn tier(signals: &[Signal], score: f64) -> Tier {
-    let personal = signals
-        .iter()
-        .any(|s| s.weight > 0.0 && s.basis.is_personal());
-    let refused = signals.iter().any(|s| s.weight <= -2.0);
-    let tier = if score >= 4.0 && personal {
-        Tier::StrongFit
-    } else if score >= 1.5 {
-        Tier::WorthReviewing
-    } else if score >= -1.0 {
-        Tier::Maybe
-    } else {
-        Tier::LowPriority
-    };
-    // Something the person said they don't want caps it.
-    if refused { tier.min(Tier::Maybe) } else { tier }
-}
-
 /// Ranks one opportunity.
 pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
     let record = candidate.representative()?;
@@ -334,9 +354,10 @@ pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
         signals::eligibility(candidate.assessment),
         signals::verification(candidate.assessment, ctx.now),
     ];
-    let work_setup = signals::work_setup_unresolved(candidate.assessment);
-    let work_setup_unresolved = work_setup.is_some();
-    all.extend(work_setup);
+    // What the posting leaves open (a work setup, pay against a required
+    // floor, a required team size or remote geography) is something to
+    // check, never a reason to doubt the fit: see `practicality`.
+    all.extend(signals::work_setup_unresolved(candidate.assessment));
     all.extend(signals::feedback(&inputs));
     all.extend(signals::notes(&inputs, record.opportunity_id));
     all.extend(signals::role(&inputs));
@@ -357,17 +378,15 @@ pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
         let reach = signals::remote_reach_of(record);
         Some(signals::remote_geography(&inputs, &reach))
     };
-    let (geography_out, geography_unresolved) = match geography {
+    let geography_out = match geography {
         Some(g) => {
             all.extend(g.signals);
-            (g.ruled_out, g.unresolved)
+            g.ruled_out
         }
-        None => (None, false),
+        None => None,
     };
     all.extend(signals::freshness(&inputs));
 
-    let score = all.iter().map(|s| s.weight).sum::<f64>();
-    let score = (score * 100.0).round() / 100.0;
     let gate = gate(
         candidate.assessment,
         candidate.state,
@@ -378,19 +397,53 @@ pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
             hides_unclear_eligibility: ctx.person.hides_unclear_eligibility,
         },
     );
-    let tier = tier(&all, score);
-    // A requirement the posting says nothing about is not met: never a
-    // strong fit on the strength of everything else.
-    let tier = if company.unresolved
-        || pay_reading.unresolved
-        || geography_unresolved
-        || work_setup_unresolved
-    {
-        tier.min(Tier::WorthReviewing)
-    } else {
-        tier
-    };
-    let brief = brief(&facets, &pay, &gate, tier, &all, ctx.person);
+    let mut fit = crate::fit::assess(&facets, ctx.person, ctx.taste_profile);
+    // What they already said about this job speaks for itself: liking or
+    // saving it is interest in this very job (it counts once).
+    let liked = candidate.state.sentiment == Some(crate::feedback::Sentiment::Liked);
+    let saved = candidate.state.stage == Stage::Saved;
+    if liked || saved {
+        fit.reasons.push(crate::fit::FitReason {
+            aspect: crate::fit::Aspect::Feedback,
+            text: if liked {
+                "You liked it"
+            } else {
+                "You saved it"
+            }
+            .into(),
+            evidence: Vec::new(),
+            firmness: crate::fit::Firmness::Firm,
+            weight: 1.0,
+            folded: false,
+        });
+        fit.support += 1.0;
+        fit.classify();
+    }
+    if candidate.state.sentiment == Some(crate::feedback::Sentiment::Disliked) {
+        fit.contradictions.insert(
+            0,
+            crate::fit::FitContradiction {
+                kind: crate::fit::ContradictionKind::WorkShape,
+                severity: crate::fit::Severity::Material,
+                text: "You disliked it".into(),
+                evidence: Vec::new(),
+                firmness: crate::fit::Firmness::Firm,
+            },
+        );
+        fit.classify();
+    }
+    let practicality = crate::practicality::assess(&gate, &all, pay_reading.standing);
+    let tier = Tier::of(fit.level);
+    let score = fit.score();
+    let brief = brief(
+        &facets,
+        &pay,
+        &gate,
+        &fit,
+        &practicality,
+        &all,
+        ctx.person.has_preferences() || !ctx.taste_profile.assertions.is_empty(),
+    );
     Some(Ranking {
         opportunity: record.opportunity_id,
         job: record.id,
@@ -399,6 +452,8 @@ pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
         gate,
         tier,
         score,
+        fit,
+        practicality,
         signals: all,
         brief,
         facets,

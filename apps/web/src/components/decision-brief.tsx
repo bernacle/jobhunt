@@ -30,7 +30,7 @@ export function DecisionSummary({
   size?: "md" | "sm" | "lg";
   className?: string;
 }) {
-  const { reasons, concerns } = selectDecision(input, variant);
+  const { reasons, concerns, checks } = selectDecision(input, variant);
   return (
     <ul role="list" className={`flex flex-col gap-1.5 ${className}`}>
       {reasons.length > 0 ? (
@@ -45,6 +45,11 @@ export function DecisionSummary({
       {concerns.map((c) => (
         <ConcernLine key={c.text} concern={c} size={size} />
       ))}
+      {checks.length > 0 && (
+        <li className="pt-0.5 text-[13px] leading-normal text-fg-muted">
+          <span className="font-medium text-fg-secondary">To check:</span> {checks.map((c) => sentence(c)).join(" · ")}
+        </li>
+      )}
     </ul>
   );
 }
@@ -73,7 +78,9 @@ export function DecisionBrief({
   className?: string;
 }) {
   const Heading = headingLevel === 2 ? "h2" : "h3";
-  const concerns = concernsOf({ why, caveats, unknowns, checkFirst, eligibilityHeadline });
+  const all = concernsOf({ why, caveats, unknowns, checkFirst, eligibilityHeadline });
+  const concerns = all.filter((c) => c.kind === "caution");
+  const checks = all.filter((c) => c.kind !== "caution");
   return (
     <div className={`grid gap-x-9 gap-y-6 ${className}`}>
       <div>
@@ -102,6 +109,16 @@ export function DecisionBrief({
           </ul>
         )}
       </div>
+      {checks.length > 0 && (
+        <div>
+          <Heading className="text-label text-fg-muted">Things to check</Heading>
+          <ul role="list" className="mt-2.5 flex flex-col gap-1.5">
+            {checks.map((c) => (
+              <ConcernLine key={c.text} concern={c} />
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

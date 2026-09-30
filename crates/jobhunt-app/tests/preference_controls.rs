@@ -538,13 +538,14 @@ async fn today_for_a_remote_only_person_in_brazil() {
     let feed = today(&app).await;
     let on = companies(&feed);
 
-    // Brazil-remote and global remote with unknown pay: on Today, unresolved.
+    // Brazil-remote and global remote with unknown pay: on Today (backend
+    // on a small team, what they want), the unresolved pay first to check.
     for company in ["Brazil Remote", "Global Remote"] {
         let r = entry(&feed, company);
         assert_eq!(
             r.tier,
-            Tier::WorthReviewing,
-            "{company}: never a strong fit"
+            Tier::StrongFit,
+            "{company}: unknown pay is a thing to check, not a doubt about fit"
         );
         assert!(
             r.brief.unknowns[0].starts_with("Unresolved: you require at least USD 140,000"),
@@ -579,23 +580,33 @@ async fn today_for_a_remote_only_person_in_brazil() {
     // Verified pay above the minimum meets it; verified below conflicts.
     let r = entry(&feed, "Pays Well");
     assert_eq!(r.tier, Tier::StrongFit, "{:?}", r.brief);
+    // Meeting the minimum is a practical fact, never a reason for fit.
     assert!(
-        r.brief
-            .worth
+        r.practicality
+            .facts
             .iter()
-            .any(|w| w.contains("Meets your minimum"))
+            .any(|f| f.contains("Meets your minimum"))
     );
+    assert!(!r.brief.worth.iter().any(|w| w.contains("minimum")));
     assert!(!on.contains(&"Pays Less".to_owned()), "{on:?}");
     // A large company doesn't make a large team: nothing counts against a
-    // small-team wish, which stays unknown.
-    let r = entry(&feed, "Big Public");
+    // small-team wish, which stays unknown; with only the work matching,
+    // it is worth reviewing, not Today.
+    assert!(!on.contains(&"Big Public".to_owned()), "{on:?}");
+    let r = feed
+        .report
+        .rankings
+        .iter()
+        .find(|r| r.company == "Big Public")
+        .unwrap();
+    assert_eq!(r.tier, Tier::WorthReviewing);
     assert!(
-        r.brief
-            .unknowns
+        r.fit
+            .uncertainties
             .iter()
-            .any(|u| u.contains("doesn't say whether it's small teams")),
+            .any(|u| u.contains("how big the team is")),
         "{:?}",
-        r.brief
+        r.fit
     );
     assert!(!r.brief.caveats.iter().any(|c| c.contains("small")));
     let excluded = &feed.report.excluded;
@@ -618,9 +629,7 @@ async fn today_for_a_remote_only_person_in_brazil() {
     for gone in ["No Scope", "Brazil Remote", "Global Remote"] {
         assert!(!on.contains(&gone.to_owned()), "{gone}: {on:?}");
     }
-    for kept in ["Pays Well", "Big Public"] {
-        assert!(on.contains(&kept.to_owned()), "{kept}: {on:?}");
-    }
+    assert!(on.contains(&"Pays Well".to_owned()), "{on:?}");
     assert_eq!(feed.report.excluded.pay_unknown, 2);
     assert_eq!(feed.report.excluded.eligibility_unconfirmed, 1);
 }
@@ -898,20 +907,22 @@ async fn today_after_the_production_smoke_test() {
 
     // Ramp is remote in the US only: someone in Brazil can't take it.
     assert!(!on.contains(&"Ramp".to_owned()), "{on:?}");
-    // Anthropic: shown, with the contradiction first, never "fine".
-    let r = entry(&feed, "Anthropic");
-    let card = feed
-        .entries
+    // Anthropic: backend work is all that fits (pay adds nothing), so it
+    // is worth reviewing, not Today; the office policy is the first thing
+    // to check, never "fine".
+    assert!(!on.contains(&"Anthropic".to_owned()), "{on:?}");
+    let r = feed
+        .report
+        .rankings
         .iter()
-        .find(|e| e.entry.ranking.company == "Anthropic")
-        .map(|e| jobhunt_app::shortlist::ShortlistItem::of(&e.entry))
+        .find(|r| r.company == "Anthropic")
         .unwrap();
     assert!(
-        card.unknowns[0].starts_with(
+        r.brief.unknowns[0].starts_with(
             "Unresolved: the listing says remote, but it also expects office presence or travel"
         ),
         "{:?}",
-        card.unknowns
+        r.brief.unknowns
     );
     assert_eq!(r.tier, Tier::WorthReviewing);
     // Supabase: a small team, but not an early-stage company; Anywhere adds
@@ -922,7 +933,12 @@ async fn today_after_the_production_smoke_test() {
         !lines.iter().any(|l| l.contains("Early-stage")),
         "{lines:?}"
     );
-    assert!(lines.iter().any(|l| l.contains("Small teams")), "{lines:?}");
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains("A small team, as you want")),
+        "{lines:?}"
+    );
     // Nowhere does Anywhere read as a preference met.
     for e in &feed.entries {
         assert!(
@@ -945,4 +961,140 @@ async fn today_after_the_production_smoke_test() {
         "{:?}",
         taste.stated.iter().map(|p| &p.value).collect::<Vec<_>>()
     );
+}
+
+/// Someone in Brazil wanting backend work on small teams, remote.
+async fn backend_on_small_teams() -> LocalApp {
+    let app = app().await;
+    set(
+        &app,
+        vec![
+            PreferenceInput::Location {
+                place: "Brazil".into(),
+            },
+            PreferenceInput::WorkSetup {
+                setup: WorkSetupInput::RemoteOnly,
+            },
+            PreferenceInput::Company {
+                company: "small_team".into(),
+                stance: StanceInput::Want,
+            },
+            PreferenceInput::Role {
+                role: "backend".into(),
+                stance: StanceInput::Want,
+            },
+        ],
+    )
+    .await;
+    app
+}
+
+const JUST_BACKEND: &str = "You'll build backend services in Rust and PostgreSQL.";
+
+fn another(mut p: JobPosting, id: &str, title: &str) -> JobPosting {
+    p.provenance.source_record_id = Some(id.into());
+    p.url = CanonicalUrl::parse(&format!("https://boards.example.com/acme/{id}")).unwrap();
+    p.title = title.into();
+    p
+}
+
+/// BRU-322: Today is the few jobs Narrow puts its name behind. With only
+/// plausible fits, it is empty ("caught up"), not padded.
+#[tokio::test]
+async fn today_can_be_empty_and_is_never_padded_with_weaker_jobs() {
+    let app = backend_on_small_teams().await;
+    discover(
+        app.store(),
+        &[
+            posting(
+                "Plain One",
+                "Remote - Brazil",
+                Some(WorkplaceType::Remote),
+                JUST_BACKEND,
+                None,
+            ),
+            posting(
+                "Plain Two",
+                "Remote - Worldwide",
+                Some(WorkplaceType::Remote),
+                JUST_BACKEND,
+                None,
+            ),
+            posting(
+                "Well Paid",
+                "Remote - Worldwide",
+                Some(WorkplaceType::Remote),
+                JUST_BACKEND,
+                Some((400_000.0, 500_000.0)),
+            ),
+        ],
+    )
+    .await;
+    let feed = today(&app).await;
+    assert!(feed.entries.is_empty(), "{:?}", companies(&feed));
+    let view = jobhunt_app::feed::FeedView::of(&feed, now());
+    assert!(view.caught_up);
+    assert_eq!(view.summary.strong_fits, 0);
+    assert_eq!(
+        view.summary.worth_reviewing, 3,
+        "plausible: search lists them"
+    );
+    assert!(
+        feed.report
+            .rankings
+            .iter()
+            .all(|r| r.tier == Tier::WorthReviewing),
+        "high pay makes nothing a strong fit"
+    );
+}
+
+/// One strong fit is a Today of one; the same company's plausible roles
+/// don't ride along, and plausible jobs elsewhere don't fill the slots.
+#[tokio::test]
+async fn today_of_one_strong_fit_without_weaker_company_peers() {
+    let app = backend_on_small_teams().await;
+    let strong = posting(
+        "Acme",
+        "Remote - Brazil",
+        Some(WorkplaceType::Remote),
+        SMALL_TEAM,
+        None,
+    );
+    let weaker = another(strong.clone(), "acme-2", "Backend Engineer");
+    let mut weaker = weaker;
+    weaker.description_text = Some(JUST_BACKEND.into());
+    let peer = another(strong.clone(), "acme-3", "Staff Backend Engineer");
+    discover(
+        app.store(),
+        &[
+            strong,
+            weaker,
+            peer,
+            posting(
+                "Elsewhere",
+                "Remote - Brazil",
+                Some(WorkplaceType::Remote),
+                JUST_BACKEND,
+                None,
+            ),
+        ],
+    )
+    .await;
+    let feed = today(&app).await;
+    assert_eq!(companies(&feed), ["Acme"], "one company, one strong fit");
+    let mut acme: Vec<&str> = feed.entries[0]
+        .also_at_company
+        .iter()
+        .map(|p| p.title.as_str())
+        .chain([feed.entries[0].entry.ranking.title.as_str()])
+        .collect();
+    acme.sort();
+    assert_eq!(
+        acme,
+        ["Senior Backend Engineer", "Staff Backend Engineer"],
+        "only the company's other strong fits go with it, never the plausible one"
+    );
+    let item = jobhunt_app::shortlist::ShortlistItem::of(&feed.entries[0].entry);
+    assert_eq!(item.fit.as_deref(), Some("strong"));
+    assert!(item.why[0].contains("ackend work"), "{:?}", item.why);
 }

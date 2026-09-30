@@ -27,7 +27,7 @@ struct Sealed {
     key: &'static [&'static str],
 }
 
-const TABLES: [Sealed; 7] = [
+const TABLES: [Sealed; 8] = [
     Sealed {
         table: "profile_entities",
         column: "body",
@@ -57,6 +57,12 @@ const TABLES: [Sealed; 7] = [
         column: "ranking",
         context: "'rankings|' || user_id || '|' || opportunity_id || '|' || rank_key",
         key: &["user_id", "opportunity_id", "profile_id", "rank_key"],
+    },
+    Sealed {
+        table: "fit_reviews",
+        column: "review",
+        context: "'fit_reviews|' || user_id || '|' || profile_id || '|' || review_key",
+        key: &["user_id", "profile_id", "review_key"],
     },
     Sealed {
         table: "notification_settings",

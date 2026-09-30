@@ -426,6 +426,19 @@ pub struct ShortlistItem {
     pub why: Vec<String>,
     /// What to consider: caveats, then unknowns (up to 3).
     pub consider: Vec<String>,
+    /// How well it fits what the person wants: `strong`, `plausible`,
+    /// `insufficient` or `poor` (the tier, in fit's words).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fit: Option<String>,
+    /// Things to check before spending time on it (pay not published,
+    /// remote scope unclear, travel expected): the person's own
+    /// requirements first, up to 3.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub to_check: Vec<String>,
+    /// Useful practical facts (pay reaching the person's target, remote
+    /// from where they want). Never reasons for fit.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub facts: Vec<String>,
     /// The lines of `consider` about what the posting doesn't say
     /// (unknowns, not cautions); the others are caveats.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -507,6 +520,16 @@ impl ShortlistItem {
                 .cloned()
                 .collect(),
             consider,
+            fit: Some(r.fit.level.as_str().to_owned()),
+            to_check: r
+                .practicality
+                .checks
+                .iter()
+                .filter(fresh)
+                .take(3)
+                .cloned()
+                .collect(),
+            facts: r.practicality.facts.iter().take(3).cloned().collect(),
             unknowns,
             sources: entry.checked.verified.len(),
             next_step,

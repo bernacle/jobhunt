@@ -1,6 +1,6 @@
 [package]
 name = "jobhunt-ai"
-description = "Optional model providers for JobHunt's interpretation seams (the taste profile reader): the Anthropic Messages API or any OpenAI-compatible server, over plain HTTP."
+description = "Optional model providers for JobHunt's interpretation seams (the taste profile reader and the fit reviewer): the Anthropic Messages API or any OpenAI-compatible server, over plain HTTP."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 async-trait.workspace = true
 jobhunt-profile.workspace = true
+jobhunt-ranking.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

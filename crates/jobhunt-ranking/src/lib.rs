@@ -20,10 +20,20 @@
 //!   shows they have done, kept apart.
 //! * [`taste`]: patterns learned from feedback, each with its evidence,
 //!   confidence and contradictions; explicit preferences always win.
+//! * [`facets::work`]: the work itself, read for fit (level, shape, depth,
+//!   company, team, culture).
+//! * [`fit`]: would this person genuinely want this company and role?
+//!   Affirmative reasons and first-class contradictions against the
+//!   composed taste profile, weighed by whose each statement is.
+//! * [`practicality`]: can they pursue it, and what still needs checking?
+//!   Blockers, concerns, things to check; never a reason for fit.
+//! * [`review`]: the optional semantic review of the shortlist by a model,
+//!   validated and folded into the fit by deterministic rules.
 //! * [`signals`], [`rank`](mod@rank)(mod@rank) and [`brief`]: deterministic, independently
-//!   inspectable signals; a gate on eligibility and verification; a coarse
-//!   tier (strong fit, worth reviewing, maybe, low priority) instead of a
-//!   match percentage; and the decision brief.
+//!   inspectable signals (the evidence); a gate on eligibility and
+//!   verification; a coarse tier from the fit (strong fit, worth reviewing,
+//!   maybe, low priority) instead of a match percentage; and the decision
+//!   brief.
 //! * [`cache`]: stored rankings keyed by every input, and the
 //!   [`FeedbackRepository`] / [`RankingRepository`] storage boundaries.
 //! * [`service`]: the use cases front-ends call.
@@ -34,10 +44,13 @@ pub mod brief;
 pub mod cache;
 pub mod facets;
 pub mod feedback;
+pub mod fit;
 pub mod key;
 pub mod person;
+pub mod practicality;
 pub mod rank;
 pub mod reason;
+pub mod review;
 pub mod service;
 pub mod signals;
 pub mod taste;
@@ -48,10 +61,18 @@ pub use brief::DecisionBrief;
 pub use cache::{FeedbackRepository, RankKey, RankingRepository, cached_rank};
 pub use facets::{JobFacets, JobFunction, Level, facets, facets_of};
 pub use feedback::{FeedbackAction, FeedbackEvent, FeedbackId, OpportunityState, Sentiment, Stage};
+pub use fit::{
+    Aspect, ContradictionKind, Firmness, FitAssessment, FitContradiction, FitLevel, FitReason,
+    ReviewState, Severity,
+};
 pub use key::{Dimension, Direction, TasteKey};
 pub use person::Person;
+pub use practicality::{PayStanding, PracticalStatus, Practicality};
 pub use rank::{Candidate, Context, Exclusion, Gate, RANKING_VERSION, Ranking, Tier, rank};
 pub use reason::{RULE_READER_REVISION, ReasonReader, ReasonReading, RuleReader};
+pub use review::{
+    FitReview, FitReviewRequest, FitReviewer, ReviewBudget, ReviewError, ReviewStats,
+};
 pub use service::{
     Excluded, Explained, PipelineEntry, RankQuery, RankReport, RankTimings, RankingError,
     RankingService, Recorded,

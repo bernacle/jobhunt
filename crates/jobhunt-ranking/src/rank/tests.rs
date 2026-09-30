@@ -117,9 +117,11 @@ fn ranked_with(
         assessment: &a,
         state,
     };
+    let profile = crate::testing::taste_with(person, taste);
     let ctx = Context {
         person,
         taste,
+        taste_profile: &profile,
         now: now(),
     };
     rank(&candidate, &ctx).expect("a ranking")
@@ -136,12 +138,9 @@ fn summaries(r: &Ranking) -> Vec<String> {
 const RUST_BACKEND: &str = "About the role\nYou'll own our payments API end to end.\n\
     Requirements\n- Strong experience with Rust\n- PostgreSQL in production\n";
 
-#[test]
-fn a_wanted_role_with_good_pay_is_a_strong_fit() {
+fn well_paid(person: &mut Person) -> JobRecord {
     let mut r = job("Senior Backend Engineer", RUST_BACKEND);
     r.posting.compensation = Some(salary(Some("USD"), 170_000.0, 210_000.0, None));
-    let mut person = engineer();
-    person.stated.push(role("backend", Stance::Wanted));
     person.pay.push(pay(
         CompensationBound::Minimum,
         150_000,
@@ -154,29 +153,73 @@ fn a_wanted_role_with_good_pay_is_a_strong_fit() {
         Some("USD"),
         Stance::Wanted,
     ));
+    r
+}
+
+#[test]
+fn a_wanted_role_alone_is_not_a_strong_fit_however_well_paid() {
+    let mut person = engineer();
+    person.stated.push(role("backend", Stance::Wanted));
+    let r = well_paid(&mut person);
     let ranking = ranked(&r, &person, &no_taste(), Some(2));
     assert_eq!(ranking.gate, Gate::Recommended);
-    assert_eq!(ranking.tier, Tier::StrongFit, "{:#?}", summaries(&ranking));
+    // The work fits, and nothing else is known to: worth reviewing, not
+    // Today. Pay reaching the target adds nothing to fit.
+    assert_eq!(ranking.tier, Tier::WorthReviewing, "{:#?}", ranking.fit);
+    assert!(
+        !ranking
+            .brief
+            .worth
+            .iter()
+            .any(|w| w.contains("minimum") || w.contains("target")),
+        "{:?}",
+        ranking.brief.worth
+    );
+    assert_eq!(
+        ranking.practicality.pay,
+        crate::practicality::PayStanding::Meets
+    );
+    assert!(
+        ranking
+            .practicality
+            .facts
+            .iter()
+            .any(|f| f.contains("Reaches your target of USD 180,000 per year at the top")),
+        "{:?}",
+        ranking.practicality
+    );
+    // Without any pay preference, the same fit.
+    let mut unpaid = person.clone();
+    unpaid.pay.clear();
+    assert_eq!(ranked(&r, &unpaid, &no_taste(), Some(2)).tier, ranking.tier);
+}
+
+#[test]
+fn a_wanted_role_and_way_of_working_is_a_strong_fit() {
+    let mut person = engineer();
+    person.stated.push(role("backend", Stance::Wanted));
+    person.stated.push(stated(
+        Dimension::WorkStyle,
+        Matcher::Keys(vec![TasteKey::new(Dimension::WorkStyle, "ownership")]),
+        Stance::Wanted,
+        "ownership and autonomy",
+    ));
+    let r = well_paid(&mut person);
+    let ranking = ranked(&r, &person, &no_taste(), Some(2));
+    assert_eq!(ranking.gate, Gate::Recommended);
+    assert_eq!(ranking.tier, Tier::StrongFit, "{:#?}", ranking.fit);
     let brief = &ranking.brief;
     assert!(
-        brief.verdict.starts_with("A strong fit"),
+        brief.verdict.starts_with("Looks unusually aligned"),
         "{}",
         brief.verdict
     );
-    assert_eq!(brief.worth[0], "Backend roles: a role you want");
-    assert!(
-        brief
-            .worth
-            .iter()
-            .any(|w| w.contains("Meets your minimum of USD 150,000 per year")),
-        "{:?}",
-        brief.worth
+    assert_eq!(
+        brief.worth[0],
+        "Senior backend work, the kind of engineering you want"
     );
     assert!(
-        brief
-            .worth
-            .iter()
-            .any(|w| w.contains("Reaches your target of USD 180,000 per year at the top")),
+        brief.worth[1].starts_with("Real ownership, as you want: “You'll own our payments API"),
         "{:?}",
         brief.worth
     );
@@ -307,19 +350,21 @@ fn conditional_eligibility_stays_rankable_with_its_condition_visible() {
         &Context {
             person: &person,
             taste: &taste,
+            taste_profile: &crate::testing::taste_of(&person),
             now: now(),
         },
     )
     .unwrap();
     assert_eq!(ranking.gate, Gate::Recommended);
+    // The condition is a thing to check before applying.
     assert!(
         ranking
             .brief
-            .caveats
+            .unknowns
             .iter()
             .any(|c| c.starts_with("Conditional:")),
         "{:?}",
-        ranking.brief.caveats
+        ranking.brief.unknowns
     );
 }
 
@@ -399,7 +444,7 @@ fn unwanted_roles_and_other_kinds_of_work_rank_low() {
     );
     assert!(sre.tier <= Tier::Maybe, "{:?}", sre.tier);
     assert!(
-        sre.brief.caveats[0].contains("a role you don't want"),
+        sre.brief.caveats[0].contains("SRE work, which you said you don't want"),
         "{:?}",
         sre.brief.caveats
     );
@@ -464,7 +509,12 @@ fn pay_below_a_required_minimum() {
             }
         }
     );
-    // Only what discovery stored: heavily penalized, not hidden.
+    assert_eq!(
+        verified.practicality.status,
+        crate::practicality::PracticalStatus::Concern
+    );
+    // Only what discovery stored: a practical concern, not hidden, and
+    // never a reason to doubt the fit.
     let unverified = ranked(&r, &person, &no_taste(), None);
     assert!(matches!(unverified.gate, Gate::VerifyFirst { .. }));
     let signal = unverified
@@ -472,13 +522,31 @@ fn pay_below_a_required_minimum() {
         .iter()
         .find(|s| s.summary.starts_with("Pays at most"))
         .unwrap();
-    assert_eq!(signal.weight, -3.0);
+    assert_eq!(signal.kind, SignalKind::Minus);
+    assert_eq!(signal.weight, 0.0, "pay never moves fit");
     assert!(signal.evidence.iter().any(|e| e.contains("not verified")));
-    // A preferred (not required) minimum is a penalty too.
+    assert!(
+        unverified
+            .practicality
+            .concerns
+            .iter()
+            .any(|c| c.starts_with("Pays at most"))
+    );
+    // A preferred (not required) minimum: shown as a concern, the fit is
+    // what it would be without it.
     person.pay[0].stance = Stance::Wanted;
     let preferred = ranked(&r, &person, &no_taste(), Some(2));
     assert_eq!(preferred.gate, Gate::Recommended);
-    assert!(preferred.tier <= Tier::Maybe);
+    let mut unpaid = person.clone();
+    unpaid.pay.clear();
+    assert_eq!(
+        preferred.tier,
+        ranked(&r, &unpaid, &no_taste(), Some(2)).tier
+    );
+    assert_eq!(
+        preferred.practicality.status,
+        crate::practicality::PracticalStatus::Concern
+    );
 }
 
 #[test]
@@ -701,11 +769,15 @@ fn work_mode_and_work_style_preferences() {
         manager.brief.caveats
     );
     let ic = ranked(&job("Platform Engineer", ""), &person, &no_taste(), Some(2));
+    // Remote work is practical: a fact about the job, not a reason for fit.
     assert!(
-        ic.brief
-            .worth
-            .contains(&"Can be done remote, as you prefer".to_owned())
+        ic.practicality
+            .facts
+            .contains(&"Can be done remote, as you prefer".to_owned()),
+        "{:?}",
+        ic.practicality
     );
+    assert!(!ic.brief.worth.iter().any(|w| w.contains("remote")));
     assert!(ic.score > manager.score);
 }
 

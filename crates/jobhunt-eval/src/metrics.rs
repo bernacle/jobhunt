@@ -215,11 +215,14 @@ pub(crate) mod tests {
                 gate_why: None,
                 eligibility: Eligibility::Eligible,
                 tier: if surfaced {
-                    Tier::WorthReviewing
+                    Tier::StrongFit
                 } else {
                     Tier::Maybe
                 },
                 score: 0.0,
+                fit: String::new(),
+                against: Vec::new(),
+                practical: String::new(),
                 qualifies: surfaced,
                 in_feed: surfaced,
                 worth: Vec::new(),

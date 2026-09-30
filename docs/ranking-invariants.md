@@ -1,8 +1,10 @@
 # Recommendation-quality invariants
 
 What any change to preferences, ranking or Today must preserve. The
-[recommendation benchmark](recommendation-benchmark.md) measures them;
-BRU-322 will turn the important ones into hard regression gates.
+[recommendation benchmark](recommendation-benchmark.md) measures them, and
+since BRU-322 its `the_ranker_meets_the_recommendation_gate` test fails CI
+when one breaks on the fixtures. How ranking keeps them:
+[fit-and-practicality.md](fit-and-practicality.md).
 
 Narrow tells people that a few of thousands of jobs are *worth their
 attention*. That is a precision promise. The standard for earning it:
@@ -63,6 +65,7 @@ attention*. That is a precision promise. The standard for earning it:
 
 ```bash
 cargo run -p jobhunt-eval --bin narrow-eval -- recommendation-benchmark
+cargo test -p jobhunt-eval   # the gate, fixture integrity, baseline in sync
 JOBHUNT_UPDATE_BENCHMARK=1 cargo test -p jobhunt-eval --test recommendation_benchmark
 ```
 

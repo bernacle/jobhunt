@@ -30,14 +30,13 @@ use jobhunt_profile::taste::edit::{self, TasteEditError};
 use jobhunt_profile::taste::reading::{TasteReading, TasteRequest, Words};
 use jobhunt_profile::taste::{
     ComposedAssertion, InterpretationOutcome, LearnedSignal, Polarity, RulesInterpreter,
-    TasteConfidence, TasteDimension, TasteOrigin, TasteProfile, TasteReview, TasteSource, compose,
-    vocab,
+    TasteDimension, TasteOrigin, TasteProfile, TasteReview, TasteSource, compose, vocab,
 };
 use jobhunt_profile::{
     Preference, PreferenceValue, ProfileData, ProfileError, ProfileEventKind, Stance, TasteId,
     WorkMode,
 };
-use jobhunt_ranking::{TasteModel as LearnedModel, TasteStatus};
+use jobhunt_ranking::TasteModel as LearnedModel;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -331,34 +330,7 @@ pub struct TasteUpdateResult {
 /// Learned patterns as taste signals: only patterns ranking uses (active),
 /// never pay or particular employers.
 pub fn learned_signals(model: &LearnedModel) -> Vec<LearnedSignal> {
-    model
-        .learned
-        .iter()
-        .filter_map(|l| {
-            let TasteStatus::Active { confidence } = &l.status else {
-                return None;
-            };
-            let (dimension, value) = vocab::from_learned(l.key.dimension.as_str(), &l.key.value)?;
-            if value.is_empty() {
-                return None;
-            }
-            Some(LearnedSignal {
-                dimension,
-                value,
-                polarity: match l.direction {
-                    jobhunt_ranking::Direction::Prefer => Polarity::Prefer,
-                    jobhunt_ranking::Direction::Avoid => Polarity::Avoid,
-                },
-                confidence: match confidence {
-                    jobhunt_ranking::taste::Confidence::Tentative => TasteConfidence::Low,
-                    jobhunt_ranking::taste::Confidence::Established => TasteConfidence::Medium,
-                    jobhunt_ranking::taste::Confidence::Strong => TasteConfidence::High,
-                },
-                pattern: l.key.to_string(),
-                basis: l.basis(),
-            })
-        })
-        .collect()
+    jobhunt_ranking::taste::learned_signals(model)
 }
 
 fn capitalize(text: &str) -> String {

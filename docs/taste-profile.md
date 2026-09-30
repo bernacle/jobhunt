@@ -4,9 +4,8 @@ What Narrow understands about the kind of role and company a person would
 genuinely want, kept apart from what they can practically take (BRU-321).
 It replaces the long Preferences form as the default experience: the person
 says in a few words what they're looking for, Narrow reads it into a short
-summary, and they confirm or correct it. It is the input BRU-322's ranking
-will consume; **today's ranking does not read it** (see
-[What ranking reads](#what-ranking-reads)).
+summary, and they confirm or correct it. It is what ranking's fit reads
+(BRU-322; see [What ranking reads](#what-ranking-reads)).
 
 - Domain: [`crates/jobhunt-profile/src/taste`](../crates/jobhunt-profile/src/taste)
 - Use cases and views: [`crates/jobhunt-app/src/taste_profile.rs`](../crates/jobhunt-app/src/taste_profile.rs)
@@ -20,7 +19,7 @@ will consume; **today's ranking does not read it** (see
 | Examples | small technical teams, high ownership, backend/platform, startups; avoids early-career roles and process-heavy large companies | remote only, based in Brazil, authorized in Brazil, not relocating, time zones, a pay floor |
 | Nature | semantic, often fuzzy; every statement has provenance, a confidence and the person's review | deterministic and explicit |
 | Stored as | `TasteAssertion`s and the `TasteBrief` | the existing structured `Preference` records |
-| Read by | nothing yet (BRU-322) | eligibility and ranking, exactly as before |
+| Read by | ranking's fit (BRU-322) | eligibility and ranking's practicality |
 
 Compensation is never taste: a pay floor or target is a practical
 constraint, unknown pay stays neutral, and a model's statement mentioning
@@ -157,11 +156,13 @@ tries the model again.
 
 ### When a model is called
 
-Only on: a new or changed description, an explicit "read again", and a
-correction with new words or an added sentence (that sentence alone). Never
-on a page load, a ranking, Today, or a job. The same input (a digest of
-everything the interpreter is given, and its name) is never interpreted
-twice unless the person asks.
+The taste reader is called only on: a new or changed description, an
+explicit "read again", and a correction with new words or an added sentence
+(that sentence alone). Never on a page load, a ranking, Today, or a job.
+The same input (a digest of everything the interpreter is given, and its
+name) is never interpreted twice unless the person asks. (The separate fit
+reviewer of BRU-322, off by default, reads a ranking's shortlist: see
+[fit-and-practicality.md](fit-and-practicality.md#semantic-review).)
 
 ### Exactly what is sent
 
@@ -252,21 +253,27 @@ its words set); statements added before the taste profile are left alone.
 
 ## What ranking reads
 
-Nothing of this, yet. Ranking, Today's thresholds, tiers and the BRU-320
-baseline are unchanged (the benchmark's `baseline_is_current` passes on the
-same recorded baseline). BRU-322 reads the composed profile:
+Since BRU-322, ranking's fit ([fit-and-practicality.md](fit-and-practicality.md))
+reads the composed profile, every statement weighed by whose it is:
 
 ```rust
 let (data, profile, learned) = app.candidate_taste().await?;   // jobhunt_app
 // or, from a ProfileData and learned signals:
+let learned = jobhunt_ranking::taste::learned_signals(&taste_model);
 let profile = jobhunt_profile::taste::compose(&data, &learned);
-profile.wanted(TasteDimension::WorkShape);   // ["backend", "platform"]
-profile.avoided(TasteDimension::Seniority);  // ["early_career"]
-profile.about(TasteDimension::Specialization) // every statement, with provenance
 ```
 
-`wanted` and `avoided` leave out learned-only patterns; `is_persons()` and
-`is_firm()` tell what the person said or confirmed from what Narrow only
-inferred. The benchmark's candidates carry a `[taste]` profile
-(`candidate.toml`) loaded into the profile the ranker is given, so BRU-322
-can compare against the same baseline.
+| The statement | Counts as | A job going against it |
+| --- | --- | --- |
+| the person's (written, confirmed, corrected), or an earlier setting they entered | firm (1) | a material contradiction |
+| Narrow's reading of their words, an inference (medium confidence or better) | soft (0.6) | a material contradiction |
+| a low-confidence reading | weak (0.3) | holds a strong fit back |
+| a learned pattern, never confirmed | learned (0.3) | holds it back when established with high confidence, else only said |
+| neutral ("doesn't matter") | nothing | nothing |
+| removed (a tombstone) | nothing | nothing |
+
+`RankingService` composes the profile on every ranking (so structured
+preferences set before the taste profile keep working and nobody redoes
+onboarding), and the ranking key covers it through the profile revision and
+the learned-taste digest. The benchmark's candidates carry their `[taste]`
+profile in `candidate.toml`, loaded into the profile the ranker is given.

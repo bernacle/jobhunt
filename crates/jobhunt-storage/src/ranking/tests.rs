@@ -293,7 +293,9 @@ async fn ranks_explains_and_keeps_what_was_shown() {
     assert_eq!(titles.len(), 2, "{titles:?}");
     assert_eq!(titles[0].0, "Senior Backend Engineer");
     assert_eq!(report.rankings[0].gate, Gate::Recommended);
-    assert_eq!(report.rankings[0].tier, Tier::StrongFit);
+    // The work is what they want and nothing else is known to fit (pay
+    // meeting the minimum adds nothing): worth reviewing, not Today.
+    assert_eq!(report.rankings[0].tier, Tier::WorthReviewing);
     assert!(matches!(report.rankings[1].gate, Gate::VerifyFirst { .. }));
     assert_eq!(report.excluded.ineligible, 1);
     assert_eq!(report.excluded.below_minimum, 1);
@@ -371,6 +373,347 @@ async fn ranking_needs_a_profile() {
         error.to_string().contains("needs a career profile"),
         "{error}"
     );
+}
+
+/// The semantic review stage, end to end on SQLite with a scripted
+/// reviewer: what is shortlisted, cached, held back or raised, and what a
+/// failing reviewer leaves (the rules' assessment, never weaker jobs).
+mod semantic_review {
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use jobhunt_profile::CompanyTrait;
+    use jobhunt_ranking::review::{FitReview, FitReviewRequest, ReviewBudget, ReviewPoint};
+    use jobhunt_ranking::{FitLevel, FitReviewer, ReviewError, ReviewState};
+
+    use super::*;
+
+    /// Answers by job title; counts calls.
+    struct Scripted {
+        answers: HashMap<&'static str, Result<FitLevel, ReviewError>>,
+        calls: AtomicUsize,
+    }
+
+    impl Scripted {
+        fn new(answers: &[(&'static str, Result<FitLevel, ReviewError>)]) -> Self {
+            Self {
+                answers: answers.iter().cloned().collect(),
+                calls: AtomicUsize::new(0),
+            }
+        }
+        fn calls(&self) -> usize {
+            self.calls.load(Ordering::SeqCst)
+        }
+    }
+
+    fn point(aspect: &str, quote: &str) -> ReviewPoint {
+        ReviewPoint {
+            aspect: aspect.into(),
+            reason: format!("About the {aspect}"),
+            quote: quote.into(),
+        }
+    }
+
+    #[async_trait]
+    impl FitReviewer for Scripted {
+        fn name(&self) -> String {
+            "model/test:scripted".into()
+        }
+
+        async fn review(&self, request: &FitReviewRequest) -> Result<FitReview, ReviewError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            let fit = self
+                .answers
+                .get(request.job.title.as_str())
+                .cloned()
+                .unwrap_or(Err(ReviewError::Transport("no script".into())))?;
+            Ok(FitReview {
+                fit,
+                role_fit: "match".into(),
+                company_fit: "unknown".into(),
+                seniority: "unknown".into(),
+                specialization: "unknown".into(),
+                affirmative: vec![
+                    point("role", "backend services"),
+                    point("ownership", "end to end"),
+                ],
+                contradictions: vec![point("specialization", "backend services")],
+                uncertainties: Vec::new(),
+                reviewer: self.name(),
+                rejected: 0,
+                input_tokens: 2_000,
+                output_tokens: 300,
+            })
+        }
+    }
+
+    const SMALL_TEAM: &str = "You'll join a team of 6 engineers and own backend services end \
+        to end.\nRequirements\nStrong experience with Rust.";
+    const PLAIN: &str = "You will build backend services end to end.\nRequirements\nStrong \
+        experience with Rust.";
+
+    /// Someone in Berlin wanting backend roles on small teams; a strong
+    /// fit (backend, small team) and a plausible one (backend only).
+    async fn setup() -> SqliteJobStore {
+        let store = SqliteJobStore::open_in_memory().await.unwrap();
+        let profile = ProfileService::new(&store);
+        let at = now() - Duration::days(1);
+        for (value, stance) in [
+            (
+                PreferenceValue::CurrentLocation {
+                    place: "Berlin, Germany".into(),
+                },
+                Stance::Required,
+            ),
+            (
+                PreferenceValue::Role {
+                    role: "backend".into(),
+                },
+                Stance::Wanted,
+            ),
+            (
+                PreferenceValue::Company {
+                    company: CompanyTrait::SmallTeam,
+                },
+                Stance::Wanted,
+            ),
+        ] {
+            profile.set_preference(value, stance, at).await.unwrap();
+        }
+        let mut strong = posting("1", "Senior Backend Engineer", "Remote - Worldwide", None);
+        strong.description_text = Some(SMALL_TEAM.into());
+        let mut plausible = posting("2", "Backend Engineer", "Remote - Worldwide", None);
+        plausible.description_text = Some(PLAIN.into());
+        let all = [strong, plausible];
+        discover(&store, &all).await;
+        let verifier = Live(Mutex::new(all.to_vec()));
+        for p in &all {
+            let r = get(&store, p).await;
+            VerificationService::new(&store, &verifier)
+                .verify(&[r], VerifyMode::Force, now() - Duration::minutes(5))
+                .await
+                .unwrap();
+        }
+        store
+    }
+
+    fn tiers(report: &jobhunt_ranking::RankReport) -> Vec<(String, Tier)> {
+        let mut out: Vec<(String, Tier)> = report
+            .rankings
+            .iter()
+            .map(|r| (r.title.clone(), r.tier))
+            .collect();
+        out.sort();
+        out
+    }
+
+    const STRONG: &str = "Senior Backend Engineer";
+    const PLAUSIBLE: &str = "Backend Engineer";
+
+    #[tokio::test]
+    async fn the_rules_alone_without_a_reviewer() {
+        let store = setup().await;
+        let report = RankingService::new(&store, &RuleReader)
+            .rank(&RankQuery::default(), now())
+            .await
+            .unwrap();
+        assert_eq!(
+            tiers(&report),
+            [
+                (PLAUSIBLE.to_owned(), Tier::WorthReviewing),
+                (STRONG.to_owned(), Tier::StrongFit)
+            ]
+        );
+        assert_eq!(report.review, jobhunt_ranking::ReviewStats::default());
+        assert!(
+            report
+                .rankings
+                .iter()
+                .all(|r| r.fit.review == ReviewState::NotReviewed)
+        );
+    }
+
+    #[tokio::test]
+    async fn reviews_are_stored_and_never_paid_for_twice() {
+        let store = setup().await;
+        let reviewer = Scripted::new(&[
+            (STRONG, Ok(FitLevel::Strong)),
+            (PLAUSIBLE, Ok(FitLevel::Plausible)),
+        ]);
+        let service = RankingService::new(&store, &RuleReader)
+            .with_reviewer(&reviewer, ReviewBudget::default());
+        let first = service.rank(&RankQuery::default(), now()).await.unwrap();
+        assert_eq!(first.review.shortlisted, 2);
+        assert_eq!(first.review.calls, 2);
+        assert_eq!(first.review.input_tokens, 4_000);
+        let again = service.rank(&RankQuery::default(), now()).await.unwrap();
+        assert_eq!(
+            reviewer.calls(),
+            2,
+            "the same inputs are never reviewed again"
+        );
+        assert_eq!(again.review.cache_hits, 2);
+        assert_eq!(again.review.calls, 0);
+        assert_eq!(tiers(&first), tiers(&again));
+        // Explaining one job reads the stored review; it never calls.
+        let r = store
+            .opportunity_records(first.rankings[0].opportunity)
+            .await
+            .unwrap();
+        let explained = service.explain(&r, now()).await.unwrap();
+        assert!(matches!(
+            explained.ranking.fit.review,
+            ReviewState::Reviewed { .. }
+        ));
+        assert_eq!(reviewer.calls(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_review_holds_back_a_strong_fit_and_raises_a_plausible_one_on_quotes() {
+        let store = setup().await;
+        let reviewer = Scripted::new(&[
+            (STRONG, Ok(FitLevel::Plausible)),
+            (PLAUSIBLE, Ok(FitLevel::Strong)),
+        ]);
+        let report = RankingService::new(&store, &RuleReader)
+            .with_reviewer(&reviewer, ReviewBudget::default())
+            .rank(&RankQuery::default(), now())
+            .await
+            .unwrap();
+        assert_eq!(
+            tiers(&report),
+            [
+                (PLAUSIBLE.to_owned(), Tier::StrongFit),
+                (STRONG.to_owned(), Tier::WorthReviewing)
+            ]
+        );
+        assert_eq!(report.review.changed, 2);
+        let raised = report
+            .rankings
+            .iter()
+            .find(|r| r.title == PLAUSIBLE)
+            .unwrap();
+        assert!(
+            raised
+                .brief
+                .worth
+                .iter()
+                .any(|w| w.contains("“end to end”")),
+            "the review's quoted reasons are shown: {:?}",
+            raised.brief.worth
+        );
+        assert!(raised.fit.assessor.contains("model/test:scripted"));
+    }
+
+    #[tokio::test]
+    async fn a_failing_reviewer_leaves_the_rules_assessment_and_asks_again_later() {
+        for error in [
+            ReviewError::Status {
+                status: 429,
+                retryable: true,
+            },
+            ReviewError::Transport("timed out".into()),
+            ReviewError::Malformed("not the expected JSON".into()),
+            ReviewError::Refused,
+        ] {
+            let store = setup().await;
+            let reviewer = Scripted::new(&[
+                (STRONG, Err(error.clone())),
+                (PLAUSIBLE, Err(error.clone())),
+            ]);
+            let service = RankingService::new(&store, &RuleReader)
+                .with_reviewer(&reviewer, ReviewBudget::default());
+            let report = service.rank(&RankQuery::default(), now()).await.unwrap();
+            assert_eq!(
+                tiers(&report),
+                [
+                    (PLAUSIBLE.to_owned(), Tier::WorthReviewing),
+                    (STRONG.to_owned(), Tier::StrongFit)
+                ],
+                "{error}: the rules stand, nothing weaker is promoted"
+            );
+            assert_eq!(report.review.failures, 2, "{error}");
+            assert!(report.rankings.iter().all(|r| matches!(
+                &r.fit.review,
+                ReviewState::Unavailable { why } if *why == error.short()
+            )));
+            service.rank(&RankQuery::default(), now()).await.unwrap();
+            assert_eq!(reviewer.calls(), 4, "{error}: nothing stored, asked again");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_partial_failure_keeps_what_was_reviewed() {
+        let store = setup().await;
+        let reviewer = Scripted::new(&[
+            (STRONG, Ok(FitLevel::Poor)),
+            (
+                PLAUSIBLE,
+                Err(ReviewError::Status {
+                    status: 503,
+                    retryable: true,
+                }),
+            ),
+        ]);
+        let report = RankingService::new(&store, &RuleReader)
+            .with_reviewer(&reviewer, ReviewBudget::default())
+            .rank(&RankQuery::default(), now())
+            .await
+            .unwrap();
+        assert_eq!(
+            tiers(&report),
+            [
+                (PLAUSIBLE.to_owned(), Tier::WorthReviewing),
+                (STRONG.to_owned(), Tier::LowPriority)
+            ]
+        );
+        assert_eq!((report.review.calls, report.review.failures), (2, 1));
+    }
+
+    #[tokio::test]
+    async fn a_corrupt_stored_review_is_reviewed_again() {
+        let store = setup().await;
+        let reviewer = Scripted::new(&[
+            (STRONG, Ok(FitLevel::Strong)),
+            (PLAUSIBLE, Ok(FitLevel::Plausible)),
+        ]);
+        let service = RankingService::new(&store, &RuleReader)
+            .with_reviewer(&reviewer, ReviewBudget::default());
+        service.rank(&RankQuery::default(), now()).await.unwrap();
+        sqlx::query("UPDATE fit_reviews SET review = '{not json'")
+            .execute(&store.pool)
+            .await
+            .unwrap();
+        let report = service.rank(&RankQuery::default(), now()).await.unwrap();
+        assert_eq!(report.review.cache_hits, 0);
+        assert_eq!(
+            report.review.calls, 2,
+            "read as a miss, reviewed and stored again"
+        );
+        let again = service.rank(&RankQuery::default(), now()).await.unwrap();
+        assert_eq!(again.review.cache_hits, 2);
+    }
+
+    #[tokio::test]
+    async fn the_budget_bounds_calls_and_defers_the_rest() {
+        let store = setup().await;
+        let reviewer = Scripted::new(&[
+            (STRONG, Ok(FitLevel::Strong)),
+            (PLAUSIBLE, Ok(FitLevel::Plausible)),
+        ]);
+        let budget = ReviewBudget {
+            new_reviews: 1,
+            ..ReviewBudget::default()
+        };
+        let service = RankingService::new(&store, &RuleReader).with_reviewer(&reviewer, budget);
+        let report = service.rank(&RankQuery::default(), now()).await.unwrap();
+        assert_eq!((report.review.calls, report.review.deferred), (1, 1));
+        // The strong fit (what Today would show) is reviewed first.
+        let strong = report.rankings.iter().find(|r| r.title == STRONG).unwrap();
+        assert!(matches!(strong.fit.review, ReviewState::Reviewed { .. }));
+        let report = service.rank(&RankQuery::default(), now()).await.unwrap();
+        assert_eq!((report.review.cache_hits, report.review.calls), (1, 1));
+    }
 }
 
 /// Ranking asks the repository a fixed number of questions, whatever the
@@ -605,6 +948,26 @@ mod repository_calls {
         ) -> Result<(), StorageError> {
             self.count("store_ranking");
             self.inner.store_ranking(key, ranking, at).await
+        }
+        async fn cached_fit_review(
+            &self,
+            profile_id: &str,
+            key: &str,
+        ) -> Result<Option<jobhunt_ranking::FitReview>, StorageError> {
+            self.count("cached_fit_review");
+            self.inner.cached_fit_review(profile_id, key).await
+        }
+        async fn store_fit_review(
+            &self,
+            profile_id: &str,
+            key: &str,
+            review: &jobhunt_ranking::FitReview,
+            at: DateTime<Utc>,
+        ) -> Result<(), StorageError> {
+            self.count("store_fit_review");
+            self.inner
+                .store_fit_review(profile_id, key, review, at)
+                .await
         }
     }
 

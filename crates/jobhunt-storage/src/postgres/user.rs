@@ -12,7 +12,8 @@ use jobhunt_jobs::{
     OpportunityId, RunId, RunSummary, ScanResult, ScanWrite, StorageError,
 };
 use jobhunt_ranking::{
-    FeedbackAction, FeedbackEvent, FeedbackRepository, RankKey, Ranking, RankingRepository,
+    FeedbackAction, FeedbackEvent, FeedbackRepository, FitReview, RankKey, Ranking,
+    RankingRepository,
 };
 use sqlx::{PgConnection, Postgres, Row};
 
@@ -508,6 +509,10 @@ fn ranking_context(user: &UserId, key: &RankKey) -> String {
     format!("rankings|{user}|{}|{}", key.opportunity, key.key)
 }
 
+fn review_context(user: &UserId, profile_id: &str, key: &str) -> String {
+    format!("fit_reviews|{user}|{profile_id}|{key}")
+}
+
 const FEEDBACK_COLUMNS: &str =
     "id, profile_id, opportunity_id, job_id, action, reason, title, company, recorded_at";
 
@@ -613,6 +618,60 @@ impl RankingRepository for PgUserStore {
         .execute(self.shared.pool())
         .await
         .map_err(query_error("storing a ranking"))?;
+        Ok(())
+    }
+
+    async fn cached_fit_review(
+        &self,
+        profile_id: &str,
+        key: &str,
+    ) -> Result<Option<FitReview>, StorageError> {
+        let row: Option<Vec<u8>> = sqlx::query_scalar(
+            "SELECT review FROM fit_reviews WHERE user_id = $1 AND profile_id = $2 \
+             AND review_key = $3",
+        )
+        .bind(self.user.as_str())
+        .bind(profile_id)
+        .bind(key)
+        .fetch_optional(self.shared.pool())
+        .await
+        .map_err(query_error("loading a fit review"))?;
+        row.map(|sealed| {
+            let json = self.open(&review_context(&self.user, profile_id, key), &sealed)?;
+            serde_json::from_slice(&json).map_err(|e| corrupt(key, format!("fit review: {e}")))
+        })
+        .transpose()
+    }
+
+    async fn store_fit_review(
+        &self,
+        profile_id: &str,
+        key: &str,
+        review: &FitReview,
+        at: DateTime<Utc>,
+    ) -> Result<(), StorageError> {
+        let json = serde_json::to_vec(review).map_err(|e| StorageError::Query {
+            operation: "encoding a fit review",
+            source: Box::new(e),
+        })?;
+        let sealed = self.seal(&review_context(&self.user, profile_id, key), &json)?;
+        sqlx::query(
+            "INSERT INTO fit_reviews (user_id, profile_id, review_key, reviewer, fit, \
+             reviewed_at, review) VALUES ($1, $2, $3, $4, $5, $6, $7) \
+             ON CONFLICT (user_id, profile_id, review_key) DO UPDATE SET \
+             reviewer = excluded.reviewer, fit = excluded.fit, \
+             reviewed_at = excluded.reviewed_at, review = excluded.review",
+        )
+        .bind(self.user.as_str())
+        .bind(profile_id)
+        .bind(key)
+        .bind(&review.reviewer)
+        .bind(review.fit.as_str())
+        .bind(at)
+        .bind(sealed)
+        .execute(self.shared.pool())
+        .await
+        .map_err(query_error("storing a fit review"))?;
         Ok(())
     }
 }
