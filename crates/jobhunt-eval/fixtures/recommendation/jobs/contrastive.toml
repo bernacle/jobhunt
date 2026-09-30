@@ -1,0 +1,294 @@
+# Pairs that share keywords but differ in one meaningful way. The side a
+# candidate fits depends on the candidate: the same storage-engine role is a
+# No for someone who used PostgreSQL and a Strong yes for someone who builds
+# database engines. Companies are made up.
+
+# --- PostgreSQL: using it heavily vs building its storage engine ---
+
+[[job]]
+id = "ledgerline-backend-postgres"
+group = "contrastive"
+pair = "postgres"
+source = "ashby:ledgerline"
+company = "Ledgerline"
+title = "Senior Backend Engineer"
+location = "Remote - Latin America"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 155000.0, max = 185000.0, interval = "year" }] }
+description = """
+About us
+Ledgerline is a 30-person startup building bookkeeping software for small agencies.
+
+About the role
+Our product lives in PostgreSQL. You'll own the schema design, query performance, partitioning and logical replication for our application data, and the Node.js services on top of it. You will work on a small team with real ownership of what you ship.
+
+What you'll need
+- Strong experience with PostgreSQL in production applications: schema design, indexing, query tuning
+- Strong experience with TypeScript and Node.js
+- Experience with AWS
+
+This role is remote and open to candidates in Latin America.
+"""
+
+[[job]]
+id = "stratadb-storage-engine"
+group = "contrastive"
+pair = "postgres"
+source = "ashby:stratadb"
+company = "StrataDB"
+title = "Senior Software Engineer, Storage Engine"
+location = "Remote"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 190000.0, max = 240000.0, interval = "year" }] }
+description = """
+About StrataDB
+StrataDB builds a distributed, PostgreSQL-compatible database. We are a startup of 45 people, most of them database engineers.
+
+About the role
+You'll work on the storage engine itself: the write-ahead log, MVCC, the buffer pool, compaction and crash recovery. You'll read papers, write design documents and prove your changes with benchmarks and fault injection.
+
+What you'll need
+- Deep experience building database internals or storage engines
+- Strong experience with C++ or Rust
+- Deep understanding of PostgreSQL internals, concurrency control and durability
+
+We hire anywhere in the world.
+"""
+
+# --- Kubernetes: services that run on it vs the control plane itself ---
+
+[[job]]
+id = "relaywise-backend-kubernetes"
+group = "contrastive"
+pair = "kubernetes"
+source = "greenhouse:relaywise"
+company = "Relaywise"
+title = "Senior Backend Engineer"
+location = "Remote - Latin America"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 150000.0, max = 180000.0, interval = "year" }] }
+description = """
+About us
+Relaywise is a startup of 25 people building webhook delivery infrastructure for SaaS companies.
+
+About the role
+You'll own backend services in Go that run on Kubernetes: you'll write the services, their Helm charts and their dashboards, and carry the pager for them. Small team, broad ownership.
+
+What you'll need
+- Strong experience with Go
+- Experience running services on Kubernetes
+- Experience with PostgreSQL
+
+This role is remote and open to candidates in Latin America.
+"""
+
+[[job]]
+id = "helmsman-k8s-control-plane"
+group = "contrastive"
+pair = "kubernetes"
+source = "ashby:helmsman"
+company = "Helmsman"
+title = "Senior Software Engineer, Kubernetes Control Plane"
+location = "Remote"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 185000.0, max = 225000.0, interval = "year" }] }
+description = """
+About Helmsman
+Helmsman runs managed Kubernetes for regulated industries. We are a company of 80 people.
+
+About the role
+You'll work on the Kubernetes control plane itself: custom controllers and operators, API server extensions, etcd performance and scheduler behavior at scale. You'll contribute upstream to Kubernetes SIGs as part of the job.
+
+What you'll need
+- Deep experience with Kubernetes internals: controllers, the API machinery, etcd
+- Strong experience with Go
+- Upstream contributions to Kubernetes or a CNCF project
+
+We hire anywhere in the world.
+"""
+
+# --- AI: integrating LLM APIs into a product vs training models ---
+
+[[job]]
+id = "copperleaf-product-engineer-llm"
+group = "contrastive"
+pair = "ai"
+source = "ashby:copperleaf"
+company = "Copperleaf"
+title = "Senior Product Engineer, AI"
+location = "Remote"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 165000.0, max = 200000.0, interval = "year" }] }
+description = """
+About us
+Copperleaf is a 20-person startup building a support inbox for small software companies.
+
+About the role
+You'll build AI features into the product: integrate LLM APIs from Anthropic and OpenAI, design prompt pipelines and evaluations, and ship them end to end in our TypeScript codebase. You will own features from the database to the UI and talk to customers.
+
+What you'll need
+- Strong experience with TypeScript and Node.js
+- Experience with PostgreSQL
+- Curiosity about LLMs; no machine learning background needed
+
+We hire remotely anywhere in the world.
+"""
+
+[[job]]
+id = "northstar-research-pretraining"
+group = "contrastive"
+pair = "ai"
+source = "greenhouse:northstar"
+company = "Northstar AI"
+title = "Research Engineer, Pretraining"
+location = "Remote"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 300000.0, max = 450000.0, interval = "year" }] }
+description = """
+About Northstar AI
+Northstar AI is a research lab training large language models.
+
+About the role
+You'll train frontier models: scale distributed training across thousands of GPUs, write custom CUDA kernels, and run ablations on architectures and data mixtures.
+
+What you'll need
+- Deep experience with large-scale model training in PyTorch
+- Experience with distributed training (FSDP, tensor and pipeline parallelism)
+- Experience writing CUDA kernels
+- Published machine learning research, or a PhD in a related field
+
+We hire anywhere in the world.
+"""
+
+# --- Seniority: same company, same stack, a senior role and a new-grad role ---
+
+[[job]]
+id = "orbitly-senior-engineer"
+group = "contrastive"
+pair = "seniority"
+source = "ashby:orbitly"
+company = "Orbitly"
+title = "Senior Software Engineer"
+location = "Remote - Latin America"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 150000.0, max = 180000.0, interval = "year" }] }
+description = """
+About us
+Orbitly is a startup of 30 people building scheduling software for clinics.
+
+About the role
+You'll own backend services end to end on a small team: design, build, deploy and run them. You'll mentor other engineers and shape our architecture.
+
+What you'll need
+- 6+ years of experience building backend systems
+- Strong experience with TypeScript and Node.js
+- Experience with PostgreSQL
+
+This role is remote and open to candidates in Latin America.
+"""
+
+[[job]]
+id = "orbitly-new-grad"
+group = "contrastive"
+pair = "seniority"
+source = "ashby:orbitly"
+company = "Orbitly"
+title = "Software Engineer, New Grad (2027)"
+location = "Remote - Latin America"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+description = """
+About us
+Orbitly is a startup of 30 people building scheduling software for clinics.
+
+About the role
+Our new-grad program pairs you with a mentor while you ship backend features on a small team. You'll learn how we design, test, deploy and run services.
+
+What you'll need
+- A degree in Computer Science or a related field, completed or expected by 2027
+- Experience with TypeScript, JavaScript or Python from school, internships or projects
+- Familiarity with SQL databases such as PostgreSQL
+
+This role is remote and open to candidates in Latin America.
+"""
+
+# --- Company shape: a 15-person startup vs a narrow role at a large enterprise ---
+
+[[job]]
+id = "pebblestack-backend-small"
+group = "contrastive"
+pair = "company-shape"
+source = "ashby:pebblestack"
+company = "Pebblestack"
+title = "Senior Backend Engineer"
+location = "Remote - Latin America"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 160000.0, max = 190000.0, interval = "year" }] }
+description = """
+About us
+Pebblestack is a 15-person startup building billing for vertical SaaS companies. We are founder-led and early stage.
+
+About the role
+You'll be one of 5 engineers and own whole areas of the product end to end: billing, our public API and the infrastructure under them. Broad ownership, direct access to customers and founders.
+
+What you'll need
+- Strong experience with Go or TypeScript
+- Experience with PostgreSQL
+- Experience with AWS
+
+This role is remote and open to candidates in Latin America.
+"""
+
+[[job]]
+id = "consolidated-enterprise-backend"
+group = "contrastive"
+pair = "company-shape"
+source = "greenhouse:consolidatedmeridian"
+company = "Consolidated Meridian"
+title = "Senior Software Engineer II, Billing Services"
+location = "Remote - Latin America"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 160000.0, max = 190000.0, interval = "year" }] }
+description = """
+About us
+Consolidated Meridian is a Fortune 500 insurer and a publicly traded company with thousands of employees in 30 countries.
+
+About the role
+You'll join a team of 60 engineers in the Billing Services organization and maintain the invoice-rendering microservice. Changes go through our change advisory board and ship in quarterly releases. Architecture decisions are made by the enterprise architecture group.
+
+What you'll need
+- Strong experience with Java and Spring
+- Experience with Oracle or PostgreSQL
+- Experience working within ITIL change-management processes
+
+This role is remote and open to candidates in Latin America.
+"""

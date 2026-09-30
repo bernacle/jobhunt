@@ -1,0 +1,91 @@
+id = "us-platform-engineer"
+summary = """
+A synthetic senior platform engineer in the US: nine years across SRE and platform teams, building Kubernetes operators and controllers in Go, with upstream contributions. Authorized to work in the US, prefers remote. The Stripe posting that is impossible for the Brazil-based candidate is practical here, and the Kubernetes control-plane role is a Strong yes.
+"""
+unexpressed = [
+    "Platform depth as wanted: control-plane and operator work over running services on Kubernetes.",
+]
+
+[[preference]]
+stance = "required"
+value = { type = "current_location", place = "Denver, Colorado" }
+
+[[preference]]
+stance = "required"
+value = { type = "work_authorization", place = "United States" }
+
+[[preference]]
+stance = "wanted"
+value = { type = "work_mode", mode = "remote" }
+
+[[preference]]
+stance = "required"
+value = { type = "relocation", willing = false }
+
+[[preference]]
+stance = "wanted"
+value = { type = "role", role = "platform" }
+
+[[preference]]
+stance = "wanted"
+value = { type = "role", role = "infrastructure" }
+
+[[preference]]
+stance = "required"
+value = { type = "compensation", bound = "minimum", amount = 180000, currency = "USD", period = "year" }
+
+[[judgment]]
+job = "helmsman-k8s-control-plane"
+fit = "strong_yes"
+practicality = "valid"
+reasons = ["specialization_match", "technical_depth_match", "seniority_match", "geography_valid", "compensation_good"]
+why = "Controllers, API machinery, etcd and upstream work: this candidate's specialty, remote anywhere, pay above the floor."
+
+[[judgment]]
+job = "crestline-remote-us-canada"
+fit = "strong_yes"
+practicality = "valid"
+reasons = ["engineering_work_match", "seniority_match", "team_shape_match", "ownership_match", "geography_valid", "compensation_good"]
+why = "Owning a Kubernetes platform on a team of 5, remote in the US or Canada."
+
+[[judgment]]
+job = "stripe-payments-us-remote"
+fit = "maybe"
+practicality = "valid"
+reasons = ["seniority_match", "weak_positive_evidence", "geography_valid", "compensation_good"]
+why = "US-remote works here, and the level fits, but it is payments backend work rather than platform work: worth a look, not a strong fit."
+
+[[judgment]]
+job = "lanternfish-platform-no-pay"
+fit = "strong_yes"
+practicality = "unknown"
+reasons = ["engineering_work_match", "seniority_match", "ownership_match", "geography_valid", "compensation_unknown"]
+why = "Owning Kubernetes infrastructure end to end at a small startup hiring worldwide; pay isn't published."
+
+[[judgment]]
+job = "relaywise-backend-kubernetes"
+fit = "maybe"
+practicality = "impossible"
+reasons = ["weak_positive_evidence", "remote_scope_invalid"]
+why = "Backend services that merely run on Kubernetes, remote only in Latin America."
+
+[[judgment]]
+job = "airbnb-early-career"
+fit = "no"
+practicality = "impossible"
+reasons = ["seniority_mismatch", "remote_scope_invalid"]
+why = "Early-career role, remote only within Brazil."
+
+[[judgment]]
+job = "harborline-remote-us-in-description"
+fit = "maybe"
+practicality = "valid"
+reasons = ["seniority_match", "weak_positive_evidence", "geography_valid", "compensation_good"]
+why = "US-based, so practical, but TypeScript product backend work rather than platform work."
+
+[[judgment]]
+job = "northstar-research-pretraining"
+fit = "no"
+practicality = "valid"
+reasons = ["engineering_work_mismatch", "geography_valid", "compensation_good"]
+why = "Model training research; well paid, not this candidate's work."

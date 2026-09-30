@@ -1,0 +1,84 @@
+id = "database-internals-specialist"
+summary = """
+A synthetic storage-engine engineer: eight years building database internals (WAL, MVCC, buffer management, crash recovery) in C, C++ and Rust, and a PostgreSQL contributor. Lives in Germany with EU work authorization, prefers remote work, won't relocate. Wants deep specialization: the same storage-engine jobs that are a No for the startup generalist are a Strong yes here.
+"""
+unexpressed = [
+    "Specialization as the thing wanted: 'database internals or storage engines'. The role vocabulary has no such role; a stated role 'storage engine' only matches titles containing those words, so 'OrioleDB Developer' doesn't match it.",
+    "Aversion to application work that merely uses a database, however heavily.",
+]
+
+[[preference]]
+stance = "required"
+value = { type = "current_location", place = "Berlin, Germany" }
+
+[[preference]]
+stance = "required"
+value = { type = "work_authorization", place = "European Union" }
+
+[[preference]]
+stance = "wanted"
+value = { type = "work_mode", mode = "remote" }
+
+[[preference]]
+stance = "required"
+value = { type = "relocation", willing = false }
+
+[[preference]]
+stance = "wanted"
+value = { type = "role", role = "storage engine" }
+
+[[judgment]]
+job = "supabase-orioledb"
+fit = "strong_yes"
+practicality = "unknown"
+reasons = ["specialization_match", "technical_depth_match", "seniority_match", "geography_valid", "compensation_unknown"]
+why = "A PostgreSQL storage engine in C, upstream patches included, remote anywhere: exactly this candidate's work. Pay isn't published."
+
+[[judgment]]
+job = "stratadb-storage-engine"
+fit = "strong_yes"
+practicality = "valid"
+reasons = ["specialization_match", "technical_depth_match", "seniority_match", "geography_valid", "compensation_good"]
+why = "WAL, MVCC, buffer pool and crash recovery in C++ or Rust, remote anywhere."
+
+[[judgment]]
+job = "ledgerline-backend-postgres"
+fit = "no"
+practicality = "impossible"
+reasons = ["engineering_work_mismatch", "remote_scope_invalid"]
+why = "Application work on top of PostgreSQL, not engine work; and remote only in Latin America."
+
+[[judgment]]
+job = "copperleaf-product-engineer-llm"
+fit = "no"
+practicality = "valid"
+reasons = ["engineering_work_mismatch", "geography_valid", "compensation_good"]
+why = "TypeScript product engineering: none of the depth this candidate wants."
+
+[[judgment]]
+job = "northstar-research-pretraining"
+fit = "no"
+practicality = "valid"
+reasons = ["engineering_work_mismatch", "geography_valid", "compensation_good"]
+why = "Deep and specialized, but in model training, not databases."
+
+[[judgment]]
+job = "helmsman-k8s-control-plane"
+fit = "no"
+practicality = "valid"
+reasons = ["engineering_work_mismatch", "geography_valid", "compensation_good"]
+why = "Systems work, but on Kubernetes rather than storage."
+
+[[judgment]]
+job = "tempohaus-remote-europe"
+fit = "no"
+practicality = "valid"
+reasons = ["engineering_work_mismatch", "geography_valid"]
+why = "Remote in Europe, so practical, but Go product backend work is not what this candidate wants."
+
+[[judgment]]
+job = "airbnb-early-career"
+fit = "no"
+practicality = "impossible"
+reasons = ["seniority_mismatch", "engineering_work_mismatch", "remote_scope_invalid"]
+why = "Early-career product backend work, remote only within Brazil."

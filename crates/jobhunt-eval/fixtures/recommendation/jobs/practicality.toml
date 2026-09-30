@@ -1,0 +1,138 @@
+# Jobs that may fit but can't be pursued from where the candidate is, or
+# can be pursued by one candidate and not another. Companies are made up.
+
+[[job]]
+id = "nimbusly-onsite-sf"
+group = "practicality"
+source = "ashby:nimbusly"
+company = "Nimbusly"
+title = "Senior Backend Engineer"
+location = "San Francisco, CA"
+workplace = "on_site"
+remote = false
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 185000.0, max = 220000.0, interval = "year" }] }
+description = """
+About us
+Nimbusly is a 20-person startup building scheduling APIs. We work together in our San Francisco office five days a week.
+
+About the role
+You'll own backend services end to end on a small team, in TypeScript and PostgreSQL.
+
+What you'll need
+- Strong experience with TypeScript and Node.js
+- Experience with PostgreSQL
+"""
+
+[[job]]
+id = "tempohaus-remote-europe"
+group = "practicality"
+source = "ashby:tempohaus"
+company = "Tempohaus"
+title = "Senior Backend Engineer"
+location = "Remote - Europe"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "EUR", min = 85000.0, max = 105000.0, interval = "year" }] }
+description = """
+About us
+Tempohaus is a 25-person startup building payroll software for European restaurants.
+
+About the role
+You'll own backend services in Go on a small team with a lot of autonomy.
+
+What you'll need
+- Strong experience with Go
+- Experience with PostgreSQL
+
+This role is remote within Europe. You must be authorized to work in the EU and work during Central European business hours.
+"""
+
+[[job]]
+id = "crestline-remote-us-canada"
+group = "practicality"
+source = "lever:crestline"
+company = "Crestline"
+title = "Senior Software Engineer, Platform"
+location = "Remote - US or Canada"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 190000.0, max = 230000.0, interval = "year" }] }
+description = """
+About us
+Crestline is a 150-person company building fleet-management software.
+
+About the role
+You'll join the platform team of 5 engineers and own our Kubernetes platform, deploy tooling and service templates end to end.
+
+What you'll need
+- Strong experience with Go
+- Experience running Kubernetes and Terraform in production
+
+This role is remote and open to candidates in the United States or Canada.
+"""
+
+[[job]]
+id = "harborline-remote-us-in-description"
+group = "practicality"
+source = "ashby:harborline"
+company = "Harborline"
+title = "Senior Backend Engineer"
+location = "Remote"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 170000.0, max = 200000.0, interval = "year" }] }
+description = """
+About us
+Harborline is a 35-person startup building dispatch software for marinas.
+
+About the role
+You'll own backend services in TypeScript on a small team with broad ownership.
+
+What you'll need
+- Strong experience with TypeScript and Node.js
+- Experience with PostgreSQL
+
+Location
+You must reside in the United States. We are unable to hire outside the US.
+"""
+
+# The control for the golden Stripe case: the same posting with its US-only
+# scope written in a form eligibility reads. Excluded today; the golden
+# case isn't, because "Remote in United States" and "open to US-based
+# candidates" are not read as a scope.
+[[job]]
+id = "stripe-payments-us-remote-explicit"
+group = "practicality"
+source = "greenhouse:stripe"
+company = "Stripe"
+title = "Backend Engineer, Payments Infrastructure"
+location = "US-Remote"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "paraphrased from a public Stripe posting"
+compensation = { summary = "$184K - $276K", components = [{ kind = "salary", label = "US base salary range", currency = "USD", min = 184000.0, max = 276000.0, interval = "year" }] }
+description = """
+Who we are
+Stripe is a financial infrastructure platform for businesses.
+
+What you'll do
+- Design, build and operate highly available backend services in Go and Java
+- Own the reliability of the systems that route payments across card networks
+
+Who you are
+Minimum requirements
+- 6+ years of experience building and operating backend systems
+- Strong experience with Go, Java or Ruby
+
+Location
+This role is available for remote work within the United States. Candidates must be located in the US and authorized to work in the US.
+"""

@@ -1,0 +1,144 @@
+# Jobs Narrow should surface for the senior startup candidate: the benchmark
+# rewards genuine recommendations, not only suppression. Companies are made
+# up.
+
+[[job]]
+id = "quarrybird-senior-backend"
+group = "positive"
+source = "ashby:quarrybird"
+company = "Quarrybird"
+title = "Senior Backend Engineer"
+location = "Remote - Latin America"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 160000.0, max = 190000.0, interval = "year" }] }
+description = """
+About us
+Quarrybird is a 15-person startup building the freight-booking API that small logistics companies run on. We raised our Series A last year and are profitable on our core product.
+
+About the role
+You'll join a team of 6 engineers and own backend services end to end: API design, data model, deployment and on-call. There are no handoffs and no separate platform team; the people who build a service run it.
+
+What you'll do
+- Design and build services in TypeScript on Node.js
+- Own our PostgreSQL schema and its performance
+- Run what you build on AWS
+
+What you'll need
+- Several years of experience building backend systems in production
+- Strong experience with TypeScript and Node.js
+- Experience with PostgreSQL and AWS
+
+This role is remote and open to candidates anywhere in Latin America.
+"""
+
+[[job]]
+id = "lanternfish-platform-no-pay"
+group = "positive"
+source = "ashby:lanternfish"
+company = "Lanternfish"
+title = "Senior Platform Engineer"
+location = "Remote"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+description = """
+About us
+Lanternfish is an early-stage startup: we closed our seed round in the spring and are a team of 9 building usage analytics for developer platforms.
+
+About the role
+You will be one of 4 engineers and own our infrastructure end to end, from the Kubernetes clusters to the deploy pipeline and the services' observability. High agency, real ownership, and a lot of greenfield work.
+
+What you'll need
+- Strong experience with Go
+- Experience running Kubernetes in production on AWS
+- Experience with Terraform
+
+We hire anywhere in the world; the team works asynchronously across time zones.
+"""
+
+[[job]]
+id = "brightmoss-senior-backend-midsize"
+group = "positive"
+source = "greenhouse:brightmoss"
+company = "Brightmoss"
+title = "Senior Software Engineer, Backend"
+location = "Remote - Americas"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 140000.0, max = 165000.0, interval = "year" }] }
+description = """
+About Brightmoss
+Brightmoss is a Series C company of about 400 people making accounting software for independent clinics.
+
+About the team
+You'll join a team of 5 engineers that owns the ledger service outright: its design, its roadmap with product, its reliability. The team decides how it works and ships to production daily.
+
+What you'll do
+- Own the ledger service end to end, from API design to on-call
+- Design data models and migrations in PostgreSQL
+- Build services in Go
+
+What you'll need
+- Strong experience with Go
+- Experience with PostgreSQL in production
+
+This role is remote and open to candidates in North, Central and South America.
+"""
+
+[[job]]
+id = "parcelwise-fullstack-unscoped-remote"
+group = "positive"
+source = "lever:parcelwise"
+company = "Parcelwise"
+title = "Senior Full Stack Engineer"
+location = "Remote"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 165000.0, max = 195000.0, interval = "year" }] }
+description = """
+About us
+Parcelwise is a startup of 20 people building returns software for independent online shops.
+
+About the role
+You'll own features end to end, from the database to the UI, on a small team with a lot of autonomy. You will talk to customers and decide what to build with product.
+
+What you'll need
+- Strong experience with TypeScript and Node.js
+- Experience with React
+- Experience with PostgreSQL
+"""
+
+[[job]]
+id = "tallgrass-founding-engineer"
+group = "positive"
+source = "yc:tallgrass"
+company = "Tallgrass"
+title = "Founding Engineer"
+location = "Remote"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { summary = "$150K - $185K • 0.5% - 1.5%", components = [{ kind = "salary", currency = "USD", min = 150000.0, max = 185000.0, interval = "year" }] }
+description = """
+About Tallgrass
+Tallgrass is a 5-person Y Combinator startup building deploy previews for backend teams. We are founder-led and early stage.
+
+About the role
+As our first engineering hire, you will own the backend and infrastructure end to end and shape how we build.
+
+What you'll need
+- Strong experience with TypeScript or Go
+- Experience with PostgreSQL
+- Experience with AWS or another cloud
+
+We hire remotely anywhere in the world.
+"""
