@@ -153,6 +153,14 @@ impl TasteInterpreter for Fake {
                 "early-career",
             ));
         }
+        if words.contains("no backend") {
+            assertions.push(read(
+                TasteDimension::WorkShape,
+                "backend",
+                Polarity::Avoid,
+                "no backend",
+            ));
+        }
         if words.contains("small established") {
             assertions.push(read(
                 TasteDimension::Company,
@@ -537,8 +545,27 @@ async fn added_sentences_and_invalid_input() {
         )
         .await
         .unwrap();
-    let tooling = find(&r.profile, "work_shape:developer_tooling").unwrap();
-    assert_eq!(tooling.basis, "You said");
+    // A kind of work in their own words is their choice of role (BRU-324):
+    // shown as what they're looking for, and Narrow's unconfirmed readings
+    // of the kind of work stay as context until they choose those too.
+    assert!(r.profile.roles.answered);
+    let chosen: Vec<&str> = r
+        .profile
+        .roles
+        .chosen
+        .iter()
+        .map(|c| c.value.as_str())
+        .collect();
+    assert_eq!(chosen, ["developer_tooling"]);
+    assert!(find(&r.profile, "work_shape:developer_tooling").is_none());
+    assert!(
+        r.profile
+            .supporting
+            .iter()
+            .all(|s| s.dimension == "work_shape" && s.basis == "Narrow's reading of your words"),
+        "{:?}",
+        r.profile.supporting
+    );
     assert!(app.describe_taste("   ", now()).await.is_err());
     assert!(app.describe_taste(&"x".repeat(2001), now()).await.is_err());
     assert!(
@@ -550,5 +577,202 @@ async fn added_sentences_and_invalid_input() {
         )
         .await
         .is_err()
+    );
+}
+
+// --- BRU-324: "What kind of role are you looking for?" ---------------------
+
+fn set_roles(roles: &[&str], title: Option<&str>) -> TasteAction {
+    TasteAction::SetRoles {
+        roles: roles.iter().map(|r| (*r).to_owned()).collect(),
+        title: title.map(str::to_owned),
+    }
+}
+
+fn chosen(v: &TasteProfileView) -> Vec<&str> {
+    v.roles.chosen.iter().map(|c| c.value.as_str()).collect()
+}
+
+#[tokio::test]
+async fn an_existing_profile_is_asked_and_keeps_everything_else() {
+    let app = app(None).await;
+    app.describe_taste(
+        "Small technical teams with high ownership at startups. No early-career roles.",
+        now(),
+    )
+    .await
+    .unwrap();
+    let v = app.taste_profile().await.unwrap();
+    assert!(!v.roles.answered, "not answered: Preferences asks");
+    assert!(v.roles.chosen.is_empty());
+    assert_eq!(v.roles.options.len(), 12);
+    assert_eq!(v.roles.max, 3);
+    // Their career is a hint, never taken as what they want.
+    assert!(
+        v.roles.experience.contains(&"backend".to_owned()),
+        "{:?}",
+        v.roles.experience
+    );
+    let summary_before = items(&v).len();
+
+    let r = app
+        .review_taste(&set_roles(&["backend"], None), later(1))
+        .await
+        .unwrap();
+    assert!(r.changed);
+    assert!(r.profile.roles.answered);
+    assert_eq!(chosen(&r.profile), ["backend"]);
+    assert_eq!(
+        items(&r.profile).len(),
+        summary_before,
+        "the rest of their taste untouched"
+    );
+    assert_eq!(r.profile.looking_for, v.looking_for);
+    // Stored as their own statement: stated, confirmed, firm.
+    let data = app.profiles().require().await.unwrap();
+    let stored = data
+        .taste
+        .iter()
+        .find(|a| a.dimension == TasteDimension::WorkShape && a.value == "backend")
+        .unwrap();
+    assert_eq!(stored.origin, TasteOrigin::Stated);
+    assert_eq!(
+        stored.review,
+        jobhunt_profile::taste::TasteReview::Confirmed
+    );
+    assert_eq!(stored.confidence, TasteConfidence::High);
+}
+
+#[tokio::test]
+async fn roles_are_chosen_changed_and_removed_in_one_step_each() {
+    let app = app(None).await;
+    let r = app
+        .review_taste(&set_roles(&["platform", "Backend", "product"], None), now())
+        .await
+        .unwrap();
+    assert_eq!(chosen(&r.profile), ["backend", "platform", "product"]);
+    assert_eq!(r.action, "set_roles");
+
+    let r = app
+        .review_taste(&set_roles(&["backend", "infrastructure"], None), later(1))
+        .await
+        .unwrap();
+    assert_eq!(chosen(&r.profile), ["backend", "infrastructure"]);
+    let removed: Vec<&str> = r.profile.removed.iter().map(|i| i.value.as_str()).collect();
+    assert!(
+        removed.contains(&"platform") && removed.contains(&"product"),
+        "{removed:?}"
+    );
+    // The same answer again changes nothing.
+    let r = app
+        .review_taste(&set_roles(&["infrastructure", "backend"], None), later(2))
+        .await
+        .unwrap();
+    assert!(!r.changed);
+
+    // Invalid answers are refused whole: nothing changes.
+    for bad in [
+        set_roles(&["backend", "platform", "product", "sre"], None),
+        set_roles(&["storage engines please"], None),
+        set_roles(&[], None),
+        set_roles(&["backend"], Some(&"x".repeat(81))),
+    ] {
+        assert!(app.review_taste(&bad, later(3)).await.is_err(), "{bad:?}");
+    }
+    assert_eq!(
+        chosen(&app.taste_profile().await.unwrap()),
+        ["backend", "infrastructure"]
+    );
+}
+
+#[tokio::test]
+async fn a_custom_title_is_kept_as_written_and_is_not_a_kind_of_work() {
+    let app = app(None).await;
+    let r = app
+        .review_taste(
+            &set_roles(
+                &["backend"],
+                Some("  Infrastructure-focused   Product Engineer "),
+            ),
+            now(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        r.profile.roles.title.as_deref(),
+        Some("Infrastructure-focused Product Engineer")
+    );
+    assert_eq!(chosen(&r.profile), ["backend"]);
+    assert!(
+        items(&r.profile)
+            .iter()
+            .all(|i| i.dimension != "work_shape" && i.dimension != "other")
+    );
+    // A title alone answers the question, without a kind of work.
+    let r = app
+        .review_taste(&set_roles(&[], Some("Senior Product Engineer")), later(1))
+        .await
+        .unwrap();
+    assert!(r.profile.roles.answered);
+    assert!(r.profile.roles.chosen.is_empty());
+    // Removing it.
+    let r = app
+        .review_taste(&set_roles(&["data"], None), later(2))
+        .await
+        .unwrap();
+    assert_eq!(r.profile.roles.title, None);
+}
+
+#[tokio::test]
+async fn earlier_role_settings_are_the_answer_and_change_with_it() {
+    let app = app(None).await;
+    app.update_preferences(
+        &PreferenceUpdate {
+            statement: None,
+            set: vec![jobhunt_app::preferences::PreferenceInput::Role {
+                role: "backend".into(),
+                stance: StanceInput::Want,
+            }],
+            remove: Vec::new(),
+        },
+        now(),
+    )
+    .await
+    .unwrap();
+    let v = app.taste_profile().await.unwrap();
+    assert!(v.roles.answered, "a role they set themselves counts");
+    assert_eq!(chosen(&v), ["backend"]);
+    // Choosing differently removes the earlier setting too, so the settings
+    // and the answer agree.
+    app.review_taste(&set_roles(&["platform"], None), later(1))
+        .await
+        .unwrap();
+    let data = app.profiles().require().await.unwrap();
+    assert!(!data.preferences.iter().any(
+        |p| p.active && matches!(&p.value, PreferenceValue::Role { role } if role == "backend")
+    ),);
+    assert_eq!(chosen(&app.taste_profile().await.unwrap()), ["platform"]);
+}
+
+#[tokio::test]
+async fn a_chosen_role_outranks_what_the_words_say() {
+    // The model reads "no backend" against a role they chose: their choice
+    // stands, and the disagreement is said.
+    let app = app(Some(Fake::new(false))).await;
+    app.review_taste(&set_roles(&["backend"], None), now())
+        .await
+        .unwrap();
+    let r = app
+        .describe_taste("Small teams. no backend", later(1))
+        .await
+        .unwrap();
+    assert_eq!(chosen(&r.profile), ["backend"]);
+    assert!(r.profile.avoid.is_empty(), "{:?}", r.profile.avoid);
+    let ambiguities = &r.profile.interpretation.as_ref().unwrap().ambiguities;
+    assert!(
+        ambiguities
+            .iter()
+            .any(|a| a.contains("you chose backend engineering")),
+        "{ambiguities:?}"
     );
 }

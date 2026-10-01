@@ -57,7 +57,7 @@ use crate::signals::clip;
 
 /// Revision of the fit rules. Part of every stored ranking's key (through
 /// [`crate::RANKING_VERSION`]) and every semantic review's.
-pub const FIT_RULES: &str = "fit-rules/1";
+pub const FIT_RULES: &str = "fit-rules/2";
 
 /// How well a job fits what the person wants. Deliberately coarse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -299,7 +299,7 @@ pub struct FitAssessment {
     /// only the role.
     #[serde(default)]
     pub needs_company_fit: bool,
-    /// `fit-rules/1`.
+    /// `fit-rules/2`.
     pub assessor: String,
     #[serde(default)]
     pub review: ReviewState,
@@ -545,7 +545,10 @@ const RELATED: &[(&str, &str)] = &[
     ("full_stack", "frontend"),
     ("product", "full_stack"),
     ("product", "backend"),
-    ("product", "frontend"),
+    // Not ("product", "frontend"): frontend is its own kind of role to
+    // choose (BRU-324), so someone who chose product engineering and not
+    // frontend isn't sent design-system and UI-only roles as close to it.
+    // Full-stack work still is.
     ("product", "ml_product"),
     ("ml_product", "product"),
     ("database_internals", "distributed_systems"),

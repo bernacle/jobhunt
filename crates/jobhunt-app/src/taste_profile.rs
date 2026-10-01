@@ -29,8 +29,9 @@ use jobhunt_profile::ids::resolve_prefix;
 use jobhunt_profile::taste::edit::{self, TasteEditError};
 use jobhunt_profile::taste::reading::{TasteReading, TasteRequest, Words};
 use jobhunt_profile::taste::{
-    ComposedAssertion, InterpretationOutcome, LearnedSignal, Polarity, RulesInterpreter,
-    TasteDimension, TasteOrigin, TasteProfile, TasteReview, TasteSource, compose, vocab,
+    ComposedAssertion, InterpretationOutcome, LearnedSignal, Polarity, RoleChoice,
+    RulesInterpreter, TasteDimension, TasteOrigin, TasteProfile, TasteReview, TasteSource, compose,
+    roles, vocab,
 };
 use jobhunt_profile::{
     Preference, PreferenceValue, ProfileData, ProfileError, ProfileEventKind, Stance, TasteId,
@@ -103,6 +104,17 @@ pub enum TasteAction {
     Remove { id: String },
     /// Adds one sentence of the person's own.
     Add { text: String },
+    /// "What kind of role are you looking for?": the kinds of work they
+    /// want next (1 to 3 of `roles.options`: `backend`, `platform`, …), and
+    /// optionally a title in their words for a role the list misses. Stored
+    /// as their own statements in one step; kinds of work chosen before and
+    /// not now are removed. Replaces the previous answer.
+    SetRoles {
+        #[serde(default)]
+        roles: Vec<String>,
+        #[serde(default)]
+        title: Option<String>,
+    },
 }
 
 impl TasteAction {
@@ -115,6 +127,7 @@ impl TasteAction {
             Self::Neutral { .. } => "neutral",
             Self::Remove { .. } => "remove",
             Self::Add { .. } => "add",
+            Self::SetRoles { .. } => "set_roles",
         }
     }
 }
@@ -273,9 +286,96 @@ pub struct ReaderView {
     pub note: Option<String>,
 }
 
+/// A kind of role the person can choose.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RoleOptionView {
+    /// The canonical value (`backend`, `full_stack`): what `set_roles`
+    /// takes.
+    pub value: String,
+    /// "Backend", "Full stack".
+    pub label: String,
+}
+
+/// "What kind of role are you looking for?": what the person chose, and
+/// what they can choose from.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RolesView {
+    /// They answered (chose a kind of role, or wrote a title). Until then,
+    /// Narrow can only guess the kind of work from their words, and asks.
+    pub answered: bool,
+    /// The kinds of role they chose, in the order of `options`.
+    pub chosen: Vec<RoleOptionView>,
+    /// The role in their words, when they wrote one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Every kind of role offered, in the order to show.
+    pub options: Vec<RoleOptionView>,
+    /// At most this many can be chosen.
+    pub max: u32,
+    /// The longest title kept.
+    pub max_title: u32,
+    /// Kinds of role their career evidence shows they have done: a hint
+    /// for answering, never taken as what they want.
+    pub experience: Vec<String>,
+    /// Kinds of role Narrow read from their words or inferred (counted,
+    /// softly, while they haven't chosen; context once they have).
+    pub inferred: Vec<String>,
+}
+
+fn option(value: &str) -> RoleOptionView {
+    RoleOptionView {
+        value: value.to_owned(),
+        label: roles::display(value),
+    }
+}
+
+/// The roles part of the view.
+pub fn roles_view(data: &ProfileData, profile: &TasteProfile) -> RolesView {
+    let chosen: Vec<&ComposedAssertion> = profile.chosen_roles();
+    let mut chosen_values: Vec<&str> = chosen.iter().map(|a| a.value.as_str()).collect();
+    chosen_values.sort_by_key(|v| {
+        roles::CHOICES
+            .iter()
+            .position(|(c, _)| c == v)
+            .unwrap_or(usize::MAX)
+    });
+    let title = profile.role_title().map(|a| a.text.clone());
+    let inferred: Vec<String> = profile
+        .assertions
+        .iter()
+        .chain(&profile.supporting)
+        .filter(|a| {
+            a.dimension == TasteDimension::WorkShape
+                && a.polarity == Polarity::Prefer
+                && !a.is_explicit()
+                && a.origin != TasteOrigin::Learned
+                && roles::label(&a.value).is_some()
+                && !chosen_values.contains(&a.value.as_str())
+        })
+        .map(|a| a.value.clone())
+        .collect();
+    RolesView {
+        answered: !chosen.is_empty() || title.is_some(),
+        // Kinds of work not offered in the list (a specialist's
+        // `database_internals`) are shown, and kept, as chosen.
+        chosen: chosen_values.iter().map(|v| option(v)).collect(),
+        title,
+        options: roles::CHOICES.iter().map(|(v, _)| option(v)).collect(),
+        max: roles::MAX_CHOICES as u32,
+        max_title: roles::MAX_TITLE as u32,
+        experience: roles::demonstrated(data)
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        inferred,
+    }
+}
+
 /// The taste profile, as the Preferences page shows it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct TasteProfileView {
+    /// "What kind of role are you looking for?".
+    pub roles: RolesView,
     /// What the person is looking for, in their words.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub looking_for: Option<String>,
@@ -295,6 +395,14 @@ pub struct TasteProfileView {
     pub learned: Vec<TasteItemView>,
     /// Statements they removed (never read again).
     pub removed: Vec<TasteItemView>,
+    /// Kinds of work read or inferred that their choice of roles comes
+    /// before: context, not wanted.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub supporting: Vec<TasteItemView>,
+    /// Readings that go against a kind of role they chose ("avoid AI" when
+    /// they chose ML product work): not in effect, for them to settle.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub set_aside: Vec<TasteItemView>,
     /// Whether they can take a job: work setup, where they live and may
     /// work, relocation, pay floor.
     pub constraints: Vec<ConstraintView>,
@@ -457,10 +565,19 @@ pub fn view(data: &ProfileData, profile: &TasteProfile, reader: ReaderView) -> T
             && a.is_firm()
             && (a.origin != TasteOrigin::Learned || a.is_persons())
     };
+    // The kinds of role they chose, and their title, are shown as the
+    // answer to "What kind of role are you looking for?", not again here.
+    let chosen = |a: &&ComposedAssertion| {
+        roles::is_title(a.dimension, &a.value)
+            || (a.dimension == TasteDimension::WorkShape
+                && a.polarity == Polarity::Prefer
+                && a.is_explicit())
+    };
     let wanted: Vec<&ComposedAssertion> = profile
         .assertions
         .iter()
         .filter(firm)
+        .filter(|a| !chosen(a))
         .filter(|a| matches!(a.polarity, Polarity::Prefer | Polarity::Open))
         .collect();
     let avoided: Vec<&ComposedAssertion> = profile
@@ -487,6 +604,7 @@ pub fn view(data: &ProfileData, profile: &TasteProfile, reader: ReaderView) -> T
         None => (None, None),
     };
     TasteProfileView {
+        roles: roles_view(data, profile),
         looking_for,
         looking_for_source,
         understood: lines(&wanted),
@@ -513,6 +631,8 @@ pub fn view(data: &ProfileData, profile: &TasteProfile, reader: ReaderView) -> T
             .map(TasteItemView::of)
             .collect(),
         removed: profile.removed.iter().map(TasteItemView::of).collect(),
+        supporting: profile.supporting.iter().map(TasteItemView::of).collect(),
+        set_aside: profile.set_aside.iter().map(TasteItemView::of).collect(),
         constraints: constraints(data),
         needs_confirmation,
         confirmed_at: data
@@ -828,7 +948,13 @@ impl LocalApp {
         if let Ok(id) = input.parse::<TasteId>() {
             return Ok(id);
         }
-        let ids: Vec<TasteId> = profile.assertions.iter().map(|a| a.id).collect();
+        let ids: Vec<TasteId> = profile
+            .assertions
+            .iter()
+            .chain(&profile.set_aside)
+            .chain(&profile.supporting)
+            .map(|a| a.id)
+            .collect();
         resolve_prefix(input, &ids).ok_or_else(|| {
             AppError::InvalidArguments(format!(
                 "{input:?} is not a taste statement id (taste_…) of this profile"
@@ -956,6 +1082,28 @@ impl LocalApp {
                 }))
                 .await?;
                 None
+            }
+            TasteAction::SetRoles { roles, title } => {
+                let choice = RoleChoice::parse(roles, title.as_deref())
+                    .map_err(|e| AppError::InvalidArguments(e.to_string()))?;
+                let (chosen, _) = self
+                    .exclusive(retry_conflicts(|| {
+                        profiles.change_taste(kind, "chose the kinds of role they want", now, |d| {
+                            let p = compose(d, &learned);
+                            Ok(edit::set_roles(d, &p, &choice, now))
+                        })
+                    }))
+                    .await?;
+                // Earlier role settings for kinds of work no longer chosen
+                // go too, so the settings agree with the choice.
+                let decided = edit::Decided {
+                    now: Vec::new(),
+                    preferences: chosen.preferences,
+                    polarity: None,
+                };
+                self.exclusive(self.apply_to_preferences(&decided, now))
+                    .await?;
+                return self.result(action, chosen.changed, false, None).await;
             }
             TasteAction::Describe { .. } | TasteAction::Reinterpret => None,
         };

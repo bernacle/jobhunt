@@ -32,7 +32,7 @@ pub mod taxonomy;
 
 pub use fixture::{FixtureError, Fixtures, default_dir};
 pub use metrics::{Metrics, Ratio};
-pub use run::{CandidateRun, Case, Run, Verdict, run};
+pub use run::{CandidateRun, Case, Run, VariantRun, Verdict, run};
 pub use taxonomy::{Contradiction, Fit, Label, Practicality, Reason, TodayExpectation};
 
 /// Where the recorded baseline report lives.

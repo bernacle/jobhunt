@@ -329,6 +329,11 @@ export type TasteAction =
   | {
       action: "add";
       text: string;
+    }
+  | {
+      action: "set_roles";
+      roles?: string[];
+      title?: string | null;
     };
 /**
  * Which way a statement leans, as given.
@@ -2808,6 +2813,17 @@ export interface TasteProfileView {
    * Statements they removed (never read again).
    */
   removed: TasteItemView[];
+  roles: RolesView;
+  /**
+   * Readings that go against a kind of role they chose ("avoid AI" when
+   * they chose ML product work): not in effect, for them to settle.
+   */
+  set_aside?: TasteItemView[];
+  /**
+   * Kinds of work read or inferred that their choice of roles comes
+   * before: context, not wanted.
+   */
+  supporting?: TasteItemView[];
   /**
    * What Narrow understands they want, one line per dimension.
    */
@@ -2992,6 +3008,63 @@ export interface ReaderView {
   note?: string | null;
 }
 /**
+ * "What kind of role are you looking for?".
+ */
+export interface RolesView {
+  /**
+   * They answered (chose a kind of role, or wrote a title). Until then,
+   * Narrow can only guess the kind of work from their words, and asks.
+   */
+  answered: boolean;
+  /**
+   * The kinds of role they chose, in the order of `options`.
+   */
+  chosen: RoleOptionView[];
+  /**
+   * Kinds of role their career evidence shows they have done: a hint
+   * for answering, never taken as what they want.
+   */
+  experience: string[];
+  /**
+   * Kinds of role Narrow read from their words or inferred (counted,
+   * softly, while they haven't chosen; context once they have).
+   */
+  inferred: string[];
+  /**
+   * At most this many can be chosen.
+   */
+  max: number;
+  /**
+   * The longest title kept.
+   */
+  max_title: number;
+  /**
+   * Every kind of role offered, in the order to show.
+   */
+  options: RoleOptionView[];
+  /**
+   * The role in their words, when they wrote one.
+   */
+  title?: string | null;
+}
+/**
+ * A kind of role the person can choose.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "RoleOptionView".
+ */
+export interface RoleOptionView {
+  /**
+   * "Backend", "Full stack".
+   */
+  label: string;
+  /**
+   * The canonical value (`backend`, `full_stack`): what `set_roles`
+   * takes.
+   */
+  value: string;
+}
+/**
  * The answer of a change.
  *
  * This interface was referenced by `JobHuntApi`'s JSON-Schema
@@ -3063,6 +3136,17 @@ export interface TasteProfileView1 {
    * Statements they removed (never read again).
    */
   removed: TasteItemView[];
+  roles: RolesView;
+  /**
+   * Readings that go against a kind of role they chose ("avoid AI" when
+   * they chose ML product work): not in effect, for them to settle.
+   */
+  set_aside?: TasteItemView[];
+  /**
+   * Kinds of work read or inferred that their choice of roles comes
+   * before: context, not wanted.
+   */
+  supporting?: TasteItemView[];
   /**
    * What Narrow understands they want, one line per dimension.
    */
@@ -3569,4 +3653,48 @@ export interface PreferenceControls1 {
   location: LocationControls;
   pay: PayControls;
   work: WorkControls;
+}
+/**
+ * "What kind of role are you looking for?": what the person chose, and
+ * what they can choose from.
+ *
+ * This interface was referenced by `JobHuntApi`'s JSON-Schema
+ * via the `definition` "RolesView".
+ */
+export interface RolesView1 {
+  /**
+   * They answered (chose a kind of role, or wrote a title). Until then,
+   * Narrow can only guess the kind of work from their words, and asks.
+   */
+  answered: boolean;
+  /**
+   * The kinds of role they chose, in the order of `options`.
+   */
+  chosen: RoleOptionView[];
+  /**
+   * Kinds of role their career evidence shows they have done: a hint
+   * for answering, never taken as what they want.
+   */
+  experience: string[];
+  /**
+   * Kinds of role Narrow read from their words or inferred (counted,
+   * softly, while they haven't chosen; context once they have).
+   */
+  inferred: string[];
+  /**
+   * At most this many can be chosen.
+   */
+  max: number;
+  /**
+   * The longest title kept.
+   */
+  max_title: number;
+  /**
+   * Every kind of role offered, in the order to show.
+   */
+  options: RoleOptionView[];
+  /**
+   * The role in their words, when they wrote one.
+   */
+  title?: string | null;
 }

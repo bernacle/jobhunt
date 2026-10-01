@@ -79,9 +79,11 @@ crates/jobhunt-eval/fixtures/recommendation/
   jobs/contrastive.toml     pairs: postgres, kubernetes, ai, seniority, company-shape
   jobs/compensation.toml    below the floor, high pay on weak fit, a range for another location
   jobs/practicality.toml    on-site, other regions, US-only (read and unread)
+  jobs/intent.toml          the right company and level, the wrong kind of work (BRU-324)
   candidates/<id>/resume.md       the candidate's resume
   candidates/<id>/candidate.toml  preferences, what the model can't express, the
                                   taste profile ([taste], BRU-321), judgments
+  intent.toml               intent-capture variants of a candidate (BRU-324)
 ```
 
 Jobs are a compact form of the canonical `JobPosting` (compensation is the
@@ -106,6 +108,42 @@ a judgment for). Fit belongs to the candidate, never to the job.
 | `database-internals-specialist` | Storage-engine engineer (WAL, MVCC, C/C++/Rust, PostgreSQL contributor); Germany, EU-authorized | OrioleDB and StrataDB are Strong yes here |
 | `early-career-generalist` | One year out of university, TypeScript backend; Brazil | Airbnb Early Career and the Orbitly new-grad role are Strong yes here; senior roles are No |
 | `us-platform-engineer` | Kubernetes operators and control plane, upstream contributor; Denver, US-authorized | Stripe and US/Canada-only roles are practical here; the control-plane role is a Strong yes |
+
+### Intent capture (BRU-324)
+
+Career history says what someone has done, not what they want next. Each
+variant in `intent.toml` keeps a candidate's resume, practical
+constraints, company and team taste and pool, and says the kind of work
+differently: not at all, inferred from the career (origin `profile`,
+medium confidence: soft), or chosen ("What kind of role are you looking
+for?", stored through the production `taste::edit::set_roles`). A variant
+overrides a judgment only where the person's own statement changes it
+(someone who says they don't want full-stack work). Gate **full**: every
+case passes its judgment; gate **precision**: nothing wrong surfaces, and
+Strong yeses Narrow can't know they want may be missed (reported).
+
+| Variant (senior startup generalist) | The kind of work | Gate | Surfaced | Strict | Practical Strong yes surfaced | Obvious FP |
+| --- | --- | --- | --- | --- | --- | --- |
+| `no-role` (the dogfood condition) | nothing | precision | 0 | — | 0/11 | 0 |
+| `career-inferred` (Candidate A) | backend, platform inferred from the career | precision | 7 | 7/7 | 7/11 | 0 |
+| `chosen-backend-platform` (Candidate B) | chose Backend + Platform | full | 11 | 11/11 | 11/11 | 0 |
+| `chosen-over-history` | chose Backend + Platform; mobile and frontend inferred from earlier roles | full | 11 | 11/11 | 11/11 | 0 |
+| `avoid-wins` | chose Backend + Platform; avoids frontend and full-stack; full-stack inferred | full | 10 | 10/10 | 10/10 | 0 |
+| `neutral-wins` | mobile "doesn't matter"; mobile, backend, platform inferred | precision | 7 | 7/7 | 7/11 | 0 |
+| `multiple-roles` | chose Backend + Platform + Product | full | 11 | 11/11 | 11/11 | 0 |
+| `custom-title` | chose Backend + Platform, title "Infrastructure-focused Product Engineer" | full | 11 | 11/11 | 11/11 | 0 |
+
+The tests (`intent_capture_variants_meet_their_gates` and the four after
+it) also hold: an explicit choice is stronger than the same inference
+(role 1.00 against 0.60, and A never surfaces a job B doesn't); earlier
+mobile and web work doesn't make mobile or frontend wanted; avoid and
+"doesn't matter" win over inference; a title adds no kind of work and
+changes no ranking; and, with Backend and Platform chosen, Airbnb Early
+Career (seniority), Stripe US-only (eligibility), OrioleDB and StrataDB
+(database internals), the Kubernetes control plane and an iOS role on a
+team named "User Platform" all stay out, while OrioleDB still surfaces for
+the database-internals specialist. These are fixtures; the real-posting
+measurement is in [target-role-experiment.md](target-role-experiment.md).
 
 ### Judgments
 

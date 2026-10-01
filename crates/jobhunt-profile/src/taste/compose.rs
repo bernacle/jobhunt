@@ -13,6 +13,15 @@
 //! 4. a stored inference from the profile or from feedback;
 //! 5. a learned pattern (shown in its own section, never as something the
 //!    person said).
+//!
+//! The kind of work is special (BRU-324): once the person has chosen the
+//! kinds of work they want ("What kind of role are you looking for?", or
+//! a work shape they wrote, confirmed or set), kinds of work that were only
+//! read or inferred no longer count as wanted. They stay, with their
+//! provenance, as [`TasteProfile::supporting`]: what someone has done is
+//! not what they want next. A reading that avoids what they chose ("avoid
+//! AI" for someone choosing ML product work) is set aside
+//! ([`TasteProfile::set_aside`]) rather than holding their choice back.
 
 use std::collections::BTreeMap;
 
@@ -24,7 +33,7 @@ use crate::ids::TasteId;
 
 use super::{
     OriginalReading, Polarity, TasteAssertion, TasteConfidence, TasteDimension, TasteOrigin,
-    TasteReview, TasteSource, vocab,
+    TasteReview, TasteSource, roles, vocab,
 };
 
 /// A pattern learned from feedback, in taste terms (the app layer reads
@@ -79,6 +88,19 @@ impl ComposedAssertion {
             || matches!(self.review, TasteReview::Confirmed | TasteReview::Corrected)
     }
 
+    /// Explicitly theirs: written, confirmed or corrected by them, or an
+    /// earlier setting they entered themselves (not one the statement
+    /// parser read from their words: that is Narrow's reading).
+    pub fn is_explicit(&self) -> bool {
+        self.is_persons()
+            || (self.origin == TasteOrigin::Legacy
+                && self.confidence == TasteConfidence::High
+                && !self
+                    .sources
+                    .iter()
+                    .any(|s| matches!(s, TasteSource::Words { .. })))
+    }
+
     /// A firm part of the summary: the person's, or read from their words
     /// or settings with at least medium confidence. Learned patterns and
     /// weak inferences are not firm until the person confirms them.
@@ -119,6 +141,14 @@ pub struct TasteProfile {
     pub assertions: Vec<ComposedAssertion>,
     /// Statements the person removed (keys that never come back).
     pub removed: Vec<ComposedAssertion>,
+    /// Kinds of work read or inferred while the person chose the kinds of
+    /// work they want: context, not wanted (see the module docs).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub supporting: Vec<ComposedAssertion>,
+    /// Readings that avoid a kind of work the person chose: set aside, for
+    /// them to settle, rather than holding their choice back.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub set_aside: Vec<ComposedAssertion>,
 }
 
 impl TasteProfile {
@@ -152,8 +182,64 @@ impl TasteProfile {
         self.assertions
             .iter()
             .chain(&self.removed)
+            .chain(&self.supporting)
+            .chain(&self.set_aside)
             .find(|a| a.id == id)
     }
+
+    /// The kinds of work the person chose: explicit `work_shape`
+    /// statements they want. Empty when they haven't said.
+    pub fn chosen_roles(&self) -> Vec<&ComposedAssertion> {
+        self.about(TasteDimension::WorkShape)
+            .filter(|a| a.polarity == Polarity::Prefer && a.is_explicit())
+            .collect()
+    }
+
+    /// The role title in their words, when they gave one.
+    pub fn role_title(&self) -> Option<&ComposedAssertion> {
+        self.assertions
+            .iter()
+            .find(|a| roles::is_title(a.dimension, &a.value))
+    }
+}
+
+/// The person's choice of the kinds of work they want comes first: what
+/// was only read or inferred about the kind of work becomes supporting
+/// context, and readings avoiding what they chose are set aside.
+fn chosen_work_first(profile: &mut TasteProfile) {
+    let chosen: Vec<String> = profile
+        .chosen_roles()
+        .iter()
+        .map(|a| a.value.clone())
+        .collect();
+    if chosen.is_empty() {
+        return;
+    }
+    let against_choice = |a: &ComposedAssertion| {
+        a.polarity == Polarity::Avoid
+            && matches!(
+                a.dimension,
+                TasteDimension::Domain | TasteDimension::Technology | TasteDimension::WorkShape
+            )
+            && chosen
+                .iter()
+                .any(|c| roles::contradicting(c).contains(&a.value.as_str()))
+    };
+    let mut kept = Vec::with_capacity(profile.assertions.len());
+    for a in std::mem::take(&mut profile.assertions) {
+        if a.is_explicit() {
+            kept.push(a);
+        } else if a.dimension == TasteDimension::WorkShape
+            && matches!(a.polarity, Polarity::Prefer | Polarity::Open)
+        {
+            profile.supporting.push(a);
+        } else if against_choice(&a) {
+            profile.set_aside.push(a);
+        } else {
+            kept.push(a);
+        }
+    }
+    profile.assertions = kept;
 }
 
 fn rank(a: &ComposedAssertion) -> u8 {
@@ -296,6 +382,7 @@ pub fn compose(data: &ProfileData, learned: &[LearnedSignal]) -> TasteProfile {
     profile
         .assertions
         .sort_by_key(|a| (position(a.dimension), a.polarity));
+    chosen_work_first(&mut profile);
     profile
 }
 

@@ -430,6 +430,78 @@ fn golden_section(out: &mut String, run: &Run) {
     }
 }
 
+/// Intent capture (BRU-324): the same career and pool, with the kind of
+/// work said differently.
+fn intent_section(out: &mut String, run: &Run) {
+    if run.intent.is_empty() {
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "## Intent capture
+"
+    );
+    let _ = writeln!(
+        out,
+        "The same career and pool as the base candidate, with the kind of work they want said differently: not at all, inferred from the career (soft), or chosen (\"What kind of role are you looking for?\", stored as `taste::edit::set_roles` stores it). Gate *full*: every case passes its judgment; *precision*: nothing wrong surfaces, misses are reported.\n"
+    );
+    let _ = writeln!(
+        out,
+        "| Variant | Base | The kind of work | Gate | Surfaced | Strict | Practical Strong yes surfaced | Obvious FP | Feed | Failing the gate |"
+    );
+    let _ = writeln!(
+        out,
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+    );
+    for v in &run.intent {
+        let m = Metrics::of(&v.run.cases);
+        let _ = writeln!(
+            out,
+            "| `{}` | {} | {} | {} | {} | {} | {} | {} | {} | {} |",
+            v.id,
+            v.base,
+            cell(&v.intent),
+            match v.gate {
+                crate::fixture::VariantGate::Full => "full",
+                crate::fixture::VariantGate::Precision => "precision",
+            },
+            m.surfaced,
+            m.strict_precision,
+            m.strong_yes_surfaced,
+            m.obvious_false_positives,
+            v.run.feed.len(),
+            v.failing().len()
+        );
+    }
+    let _ = writeln!(out);
+    for v in &run.intent {
+        let surfaced: Vec<String> = v
+            .run
+            .cases
+            .iter()
+            .filter(|c| c.surfaced())
+            .map(|c| format!("`{}` ({})", c.job, c.label()))
+            .collect();
+        let _ = writeln!(
+            out,
+            "- `{}`: {}. Surfaced: {}.",
+            v.id,
+            v.run.summary.trim(),
+            list(&surfaced)
+        );
+        for c in v.failing() {
+            let _ = writeln!(
+                out,
+                "  - {} `{}`: {}",
+                c.verdict().as_str(),
+                c.job,
+                cell(&c.observed.fit)
+            );
+        }
+    }
+    let _ = writeln!(out);
+}
+
 /// The whole report.
 pub fn render(fixtures: &Fixtures, run: &Run, options: Options) -> String {
     let mut out = String::new();
@@ -480,6 +552,7 @@ pub fn render(fixtures: &Fixtures, run: &Run, options: Options) -> String {
         Group::Contrastive,
         Group::Compensation,
         Group::Practicality,
+        Group::Intent,
     ] {
         let m = Metrics::of(all.iter().copied().filter(|c| c.group == group));
         let _ = writeln!(
@@ -493,6 +566,7 @@ pub fn render(fixtures: &Fixtures, run: &Run, options: Options) -> String {
     }
     let _ = writeln!(out);
     golden_section(&mut out, run);
+    intent_section(&mut out, run);
     pairs_section(&mut out, run);
     for c in &run.candidates {
         candidate_section(&mut out, c, options);

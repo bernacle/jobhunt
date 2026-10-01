@@ -1,0 +1,132 @@
+# Intent capture (BRU-324). Career history says what someone has done, not
+# what they want next. Each variant keeps the senior startup generalist's
+# resume, practical constraints, company and team taste, and pool, and says
+# the kind of work they want differently. Their own role settings and
+# work-shape statements are dropped unless `keep_roles`.
+#
+# The dogfood failure (BRU-323) is `no-role`: words about the team and the
+# company only, so Today had no affirmative role to go on and stayed empty.
+
+[[variant]]
+id = "no-role"
+base = "senior-startup-generalist"
+summary = "Nothing said about the kind of work: the dogfood condition. Today stays conservative (empty), never filled with guesses"
+gate = "precision"
+
+[[variant]]
+id = "career-inferred"
+base = "senior-startup-generalist"
+summary = "Candidate A: a strong backend/platform career, the kind of work inferred from it (soft), never chosen"
+gate = "precision"
+
+[[variant.inferred]]
+dimension = "work_shape"
+value = "backend"
+polarity = "prefer"
+evidence = "Senior Software Engineer · 2022–present · work: backend, billing platform"
+
+[[variant.inferred]]
+dimension = "work_shape"
+value = "platform"
+polarity = "prefer"
+evidence = "Senior Software Engineer · 2022–present · work: backend, billing platform"
+
+[[variant]]
+id = "chosen-backend-platform"
+base = "senior-startup-generalist"
+summary = "Candidate B: the same career, and they chose Backend and Platform"
+roles = ["backend", "platform"]
+gate = "full"
+
+[[variant]]
+id = "chosen-over-history"
+base = "senior-startup-generalist"
+summary = "They chose Backend and Platform; their profile also shows earlier React Native and web work, inferred as mobile and frontend"
+roles = ["backend", "platform"]
+gate = "full"
+
+[[variant.inferred]]
+dimension = "work_shape"
+value = "mobile"
+polarity = "prefer"
+evidence = "Mobile Engineer · 2014–2016 · work: react native"
+
+[[variant.inferred]]
+dimension = "work_shape"
+value = "frontend"
+polarity = "prefer"
+evidence = "Software Engineer · 2016–2017 · work: web frontend"
+
+[[variant]]
+id = "avoid-wins"
+base = "senior-startup-generalist"
+summary = "They chose Backend and Platform and said they don't want frontend or full-stack work; their profile shows both"
+roles = ["backend", "platform"]
+gate = "full"
+
+[[variant.stated]]
+dimension = "work_shape"
+value = "frontend"
+polarity = "avoid"
+
+[[variant.stated]]
+dimension = "work_shape"
+value = "full_stack"
+polarity = "avoid"
+
+[[variant.inferred]]
+dimension = "work_shape"
+value = "full_stack"
+polarity = "prefer"
+evidence = "Software Engineer · 2016–2017 · work: full stack"
+
+[[variant.judgment]]
+job = "parcelwise-fullstack-unscoped-remote"
+fit = "no"
+practicality = "unknown"
+reasons = ["engineering_work_mismatch", "startup_match", "geography_unclear", "compensation_good"]
+why = "A full-stack role, which this person said they don't want, however startup-shaped."
+
+[[variant]]
+id = "neutral-wins"
+base = "senior-startup-generalist"
+summary = "No roles chosen; mobile work said not to matter, while their profile shows it (inferred mobile, backend, platform)"
+gate = "precision"
+
+[[variant.stated]]
+dimension = "work_shape"
+value = "mobile"
+polarity = "neutral"
+
+[[variant.inferred]]
+dimension = "work_shape"
+value = "mobile"
+polarity = "prefer"
+evidence = "Mobile Engineer · 2014–2016 · work: react native"
+
+[[variant.inferred]]
+dimension = "work_shape"
+value = "backend"
+polarity = "prefer"
+evidence = "Senior Software Engineer · 2022–present · work: backend"
+
+[[variant.inferred]]
+dimension = "work_shape"
+value = "platform"
+polarity = "prefer"
+evidence = "Senior Software Engineer · 2022–present · work: billing platform"
+
+[[variant]]
+id = "multiple-roles"
+base = "senior-startup-generalist"
+summary = "They chose Backend, Platform and Product engineering"
+roles = ["backend", "platform", "product"]
+gate = "full"
+
+[[variant]]
+id = "custom-title"
+base = "senior-startup-generalist"
+summary = "They chose Backend and Platform, with a hybrid title in their words; the title adds no kind of work"
+roles = ["backend", "platform"]
+title = "Infrastructure-focused Product Engineer"
+gate = "full"

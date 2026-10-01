@@ -6,6 +6,7 @@ import type {
   LearnedView,
   PreferenceControls,
   PreferenceView,
+  RolesView,
   TasteItemView,
   TasteProfileView,
   TasteView,
@@ -277,6 +278,36 @@ export function jobDetail(overrides: Partial<JobDetail> = {}): JobDetail {
 }
 
 /** A taste profile as the API returns it after "describe" (rules reader). */
+const ROLE_OPTIONS: [string, string][] = [
+  ["backend", "Backend"],
+  ["platform", "Platform"],
+  ["infrastructure", "Infrastructure"],
+  ["product", "Product engineering"],
+  ["full_stack", "Full stack"],
+  ["frontend", "Frontend"],
+  ["mobile", "Mobile"],
+  ["developer_tooling", "Developer tooling"],
+  ["sre", "SRE"],
+  ["security", "Security"],
+  ["data", "Data"],
+  ["ml_product", "ML product"],
+];
+
+/** "What kind of role are you looking for?": unanswered unless `chosen` or `title`. */
+export function roles(chosen: string[] = [], overrides: Partial<RolesView> = {}): RolesView {
+  const options = ROLE_OPTIONS.map(([value, label]) => ({ value, label }));
+  return {
+    answered: chosen.length > 0 || Boolean(overrides.title),
+    chosen: options.filter((o) => chosen.includes(o.value)),
+    options,
+    max: 3,
+    max_title: 80,
+    experience: ["backend", "platform"],
+    inferred: [],
+    ...overrides,
+  };
+}
+
 export function tasteProfile(overrides: Partial<TasteProfileView> = {}): TasteProfileView {
   const item = (id: string, dimension: string, value: string, text: string, extra: Partial<TasteItemView> = {}): TasteItemView => ({
     id,
@@ -303,6 +334,7 @@ export function tasteProfile(overrides: Partial<TasteProfileView> = {}): TastePr
   const platform = item("taste_platform", "work_shape", "platform", "Platform engineering");
   const early = item("taste_early", "seniority", "early_career", "Early-career roles", { polarity: "avoid" });
   return {
+    roles: roles(),
     looking_for: "I like small technical teams. Backend/platform work, remote. I don't want early-career roles.",
     looking_for_source: "description",
     understood: [
