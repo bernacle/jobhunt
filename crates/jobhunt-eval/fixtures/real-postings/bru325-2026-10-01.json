@@ -1,0 +1,5586 @@
+{
+ "about": "BRU-325 real-posting precision experiment: a frozen, judged set of real postings. Derived fields, identifiers and short quotes only; the full corpus stays outside the repository. See docs/real-posting-precision-experiment.md.",
+ "snapshot": {
+  "fetched": "2026-10-01T20:04:14Z/2026-10-01T20:04:50Z",
+  "ranked_at": "2026-10-01T20:05:00Z",
+  "postings": 4622,
+  "sources": 60,
+  "corpus_sha256": "251076834bb7dd2d4af235070ee14014b28013f0f2dad4eea53bffdfe118d224",
+  "binary": "narrow at main 8942300 (PR #37 merged), release build",
+  "verify": false,
+  "refresh": "never"
+ },
+ "candidate": {
+  "description": "BRU-323/324 synthetic senior startup generalist (São Paulo, remote only, no relocation, authorized in Brazil, no pay floor); roles Backend, Platform, Infrastructure",
+  "digest_with_roles": "924957be043cc85e307246d41a6ffcc6",
+  "digest_without_roles": "873b07bfc8766c32d2276953da56806f"
+ },
+ "judge": "one judge (Claude, for the persona; not the real person), from title, location fields and description text",
+ "cells": {
+  "A1": {
+   "considered": 2896,
+   "excluded": {
+    "below_minimum": 0,
+    "closed": 0,
+    "ineligible": 482,
+    "unmet_requirement": 2239
+   },
+   "actionable": 175,
+   "strong": 13,
+   "plausible": 26,
+   "insufficient": 22,
+   "poor": 114,
+   "today_companies": 4,
+   "today_jobs": 13,
+   "today": [
+    {
+     "company": "Supabase",
+     "lead": "Platform Engineer - Compute Capacity",
+     "opportunity": "opp_d49ae8ac380cabca7ebe850221b014bb",
+     "also": [
+      "Release Engineer",
+      "Supalite Engineer",
+      "Platform Engineer, Edge & Networking",
+      "Edge Functions Engineer",
+      "Platform Security Engineer (AMER/APAC)",
+      "FinOps Engineer",
+      "Multigres Deployment Engineer"
+     ]
+    },
+    {
+     "company": "Stripe",
+     "lead": "Backend Engineer, Core Technology",
+     "opportunity": "opp_b2752f6d59035e59eb04fce8217ab8c0",
+     "also": []
+    },
+    {
+     "company": "Anthropic",
+     "lead": "Senior+ Software Engineer, Legal Tech",
+     "opportunity": "opp_4c9b635338ed6b1e9d756b0a5d02f5cc",
+     "also": [
+      "Staff+ Software Engineer, Inference Velocity"
+     ]
+    },
+    {
+     "company": "PostHog",
+     "lead": "Product Engineer",
+     "opportunity": "opp_1abd37a0b14c68d349d5e9ddea30ff67",
+     "also": [
+      "ClickHouse Operations Engineer"
+     ]
+    }
+   ]
+  },
+  "B1": {
+   "considered": 4622,
+   "excluded": {
+    "below_minimum": 0,
+    "closed": 0,
+    "ineligible": 1487,
+    "unmet_requirement": 2648
+   },
+   "actionable": 487,
+   "strong": 33,
+   "plausible": 77,
+   "insufficient": 54,
+   "poor": 323,
+   "today_companies": 5,
+   "today_jobs": 14,
+   "today": [
+    {
+     "company": "clickhouse",
+     "lead": "Senior Curriculum Developer & Instructor",
+     "opportunity": "opp_fad35ece26258b5062b3a2eab34abe8b",
+     "also": []
+    },
+    {
+     "company": "oyster",
+     "lead": "Senior GTM Engineer",
+     "opportunity": "opp_35cf5195e69f6eb3217beb08e6e21896",
+     "also": [
+      "Senior Engineer (Platform)"
+     ]
+    },
+    {
+     "company": "Supabase",
+     "lead": "Platform Engineer - Compute Capacity",
+     "opportunity": "opp_d49ae8ac380cabca7ebe850221b014bb",
+     "also": [
+      "Release Engineer",
+      "Supalite Engineer",
+      "Platform Engineer, Edge & Networking",
+      "Edge Functions Engineer",
+      "Platform Security Engineer (AMER/APAC)",
+      "FinOps Engineer",
+      "Multigres Deployment Engineer"
+     ]
+    },
+    {
+     "company": "Sourcegraph",
+     "lead": "Software Engineer - Platform [IC3]",
+     "opportunity": "opp_7adf123f2bc943c81d81783e513599fd",
+     "also": []
+    },
+    {
+     "company": "Canonical",
+     "lead": "Software Developer (Backend SaaS)",
+     "opportunity": "opp_40a309ddc5a0382ffaad493659d9fb42",
+     "also": [
+      "Senior Software Engineer - MAAS"
+     ]
+    }
+   ]
+  },
+  "A0": {
+   "considered": 2896,
+   "excluded": {
+    "below_minimum": 0,
+    "closed": 0,
+    "ineligible": 482,
+    "unmet_requirement": 2239
+   },
+   "actionable": 175,
+   "strong": 0,
+   "plausible": 32,
+   "insufficient": 29,
+   "poor": 114,
+   "today_companies": 0,
+   "today_jobs": 0,
+   "today": []
+  },
+  "B0": {
+   "considered": 4622,
+   "excluded": {
+    "below_minimum": 0,
+    "closed": 0,
+    "ineligible": 1487,
+    "unmet_requirement": 2648
+   },
+   "actionable": 487,
+   "strong": 0,
+   "plausible": 70,
+   "insufficient": 94,
+   "poor": 323,
+   "today_companies": 0,
+   "today_jobs": 0,
+   "today": []
+  },
+  "A2_first_load": {
+   "considered": 2896,
+   "excluded": {
+    "below_minimum": 0,
+    "closed": 0,
+    "ineligible": 482,
+    "unmet_requirement": 2239
+   },
+   "actionable": 175,
+   "strong": 1,
+   "plausible": 31,
+   "insufficient": 22,
+   "poor": 121,
+   "today_companies": 1,
+   "today_jobs": 1,
+   "today": [
+    {
+     "company": "Anthropic",
+     "lead": "Staff+ Software Engineer, Inference Velocity",
+     "opportunity": "opp_4d3b583f4a58d2298d39c99fd35645bf",
+     "also": []
+    }
+   ]
+  },
+  "A2": {
+   "considered": 2896,
+   "excluded": {
+    "below_minimum": 0,
+    "closed": 0,
+    "ineligible": 482,
+    "unmet_requirement": 2239
+   },
+   "actionable": 175,
+   "strong": 0,
+   "plausible": 21,
+   "insufficient": 22,
+   "poor": 132,
+   "today_companies": 0,
+   "today_jobs": 0,
+   "today": [],
+   "passes": [
+    {
+     "calls": 12,
+     "cache_hits": 0,
+     "failures": 0,
+     "deferred": 18,
+     "input_tokens": 23336,
+     "output_tokens": 17724,
+     "review_ms": 58902,
+     "wall_ms": 69610,
+     "strong": 1
+    },
+    {
+     "calls": 12,
+     "cache_hits": 12,
+     "failures": 0,
+     "deferred": 6,
+     "input_tokens": 22394,
+     "output_tokens": 16239,
+     "review_ms": 52843,
+     "wall_ms": 55763,
+     "strong": 0
+    },
+    {
+     "calls": 6,
+     "cache_hits": 24,
+     "failures": 0,
+     "deferred": 0,
+     "input_tokens": 11172,
+     "output_tokens": 7523,
+     "review_ms": 29939,
+     "wall_ms": 33476,
+     "strong": 0
+    }
+   ]
+  },
+  "B2_first_load": {
+   "considered": 4622,
+   "excluded": {
+    "below_minimum": 0,
+    "closed": 0,
+    "ineligible": 1487,
+    "unmet_requirement": 2648
+   },
+   "actionable": 487,
+   "strong": 21,
+   "plausible": 84,
+   "insufficient": 54,
+   "poor": 328,
+   "today_companies": 5,
+   "today_jobs": 13,
+   "today": [
+    {
+     "company": "Canonical",
+     "lead": "Software Developer (Backend SaaS)",
+     "opportunity": "opp_40a309ddc5a0382ffaad493659d9fb42",
+     "also": [
+      "Senior Software Engineer - MAAS"
+     ]
+    },
+    {
+     "company": "railway",
+     "lead": "Senior Infra Engineer: Baremetal Orchestration",
+     "opportunity": "opp_969738c4ddc0eda164fb20928718dee6",
+     "also": [
+      "Senior Infra Engineer: Observability",
+      "Senior Platform Engineer: Storage",
+      "Senior Full-Stack Engineer - Product",
+      "Infra Engineer - Datacenters",
+      "Infrastructure Engineer",
+      "Senior Product Engineer, Scalability"
+     ]
+    },
+    {
+     "company": "socket",
+     "lead": "Senior Platform Engineer",
+     "opportunity": "opp_b27a3dce2fa593a3e06a2175729a3ec3",
+     "also": []
+    },
+    {
+     "company": "axiom",
+     "lead": "ZK Proof Engineer",
+     "opportunity": "opp_a22608d44596149ed675fb3c93e6fa03",
+     "also": [
+      "Distributed Systems Engineer"
+     ]
+    },
+    {
+     "company": "Stripe",
+     "lead": "Backend Engineer, Core Technology",
+     "opportunity": "opp_b2752f6d59035e59eb04fce8217ab8c0",
+     "also": []
+    }
+   ]
+  },
+  "B2": {
+   "considered": 4622,
+   "excluded": {
+    "below_minimum": 0,
+    "closed": 0,
+    "ineligible": 1487,
+    "unmet_requirement": 2648
+   },
+   "actionable": 487,
+   "strong": 5,
+   "plausible": 90,
+   "insufficient": 54,
+   "poor": 338,
+   "today_companies": 3,
+   "today_jobs": 5,
+   "today": [
+    {
+     "company": "railway",
+     "lead": "Senior Product Engineer, Scalability",
+     "opportunity": "opp_515f92b1eb9cf063cd9d07ad6d6eca25",
+     "also": []
+    },
+    {
+     "company": "temporal",
+     "lead": "Senior Software Engineer, Cloud Platform Foundations",
+     "opportunity": "opp_f73129d23d341c54d6fc24ccc1533e14",
+     "also": [
+      "Software Engineer II, Open Source Server",
+      "Staff Software Engineer, Traffic"
+     ]
+    },
+    {
+     "company": "Anthropic",
+     "lead": "Staff+ Software Engineer, Inference Velocity",
+     "opportunity": "opp_4d3b583f4a58d2298d39c99fd35645bf",
+     "also": []
+    }
+   ],
+   "passes": [
+    {
+     "calls": 12,
+     "cache_hits": 0,
+     "failures": 0,
+     "deferred": 18,
+     "input_tokens": 23532,
+     "output_tokens": 18757,
+     "review_ms": 58912,
+     "wall_ms": 76358,
+     "strong": 21
+    },
+    {
+     "calls": 12,
+     "cache_hits": 12,
+     "failures": 0,
+     "deferred": 6,
+     "input_tokens": 23154,
+     "output_tokens": 16026,
+     "review_ms": 45882,
+     "wall_ms": 50742,
+     "strong": 11
+    },
+    {
+     "calls": 6,
+     "cache_hits": 24,
+     "failures": 0,
+     "deferred": 0,
+     "input_tokens": 11994,
+     "output_tokens": 7355,
+     "review_ms": 32053,
+     "wall_ms": 37872,
+     "strong": 5
+    }
+   ]
+  }
+ },
+ "jobs": [
+  {
+   "job": "job_daaaaa17208d4d56170e0b0448d2e940",
+   "opportunity": "opp_daaaaa17208d4d56170e0b0448d2e940",
+   "source": "greenhouse:airbnb",
+   "source_job_id": "7380185",
+   "url": "https://careers.airbnb.com/positions/7380185?gh_jid=7380185",
+   "company": "Airbnb",
+   "title": "Senior Fullstack Engineer, Quality Engineering",
+   "location": "Brazil - Remote",
+   "workplace": "remote",
+   "posted_at": "2025-11-06T17:13:39+00:00",
+   "age_days": 329,
+   "content_fingerprint": "1e267e9e9efd70c1ef3a0f8e5880710dd2a3ee45cae6a423ea108b623ea52c25",
+   "in_cells": {
+    "A1": {
+     "tier": "worth_reviewing",
+     "position": 16
+    },
+    "B1": {
+     "tier": "worth_reviewing",
+     "position": 39
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 1.5,
+    "reasons": [
+     "Full-stack work that includes the backend, close to the work you want: “…JavaScript) and comfort working in a backend language (e.g., Java, Kotlin, Python, Go)”",
+     "Senior level, as you want",
+     "Individual-contributor work: “Strong hands-on experience with automation frameworks (e.g., Playwright, Cypress)”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_e597e680018c9d0b9c2ec70c96baf3ed",
+    "review_prompt_chars": 9199
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "valid",
+    "label": "no",
+    "reasons": [
+     "role_shape",
+     "company_shape"
+    ],
+    "note": "test automation / quality engineering",
+    "quote": "test automation strategy, covering the entire testing pyramid"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "mismatch",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "seniority",
+       "quote": "As a Senior Software Engineer - Fullstack"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Lead building, maintaining, and effective utilization of automated tests"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "thrive working across technologies and codebases"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "company",
+       "quote": "Airbnb’s massive codebase"
+      },
+      {
+       "aspect": "role",
+       "quote": "building and evolving comprehensive automation coverage for features and releases"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Strong hands-on experience with automation frameworks (e.g., Playwright, Cypress)"
+      }
+     ],
+     "uncertainties": 1,
+     "rejected_points": 0,
+     "input_tokens": 1852,
+     "output_tokens": 1123
+    }
+   }
+  },
+  {
+   "job": "job_3fc0acefeb5bfbd0b5c69ae3129aab7b",
+   "opportunity": "opp_3fc0acefeb5bfbd0b5c69ae3129aab7b",
+   "source": "greenhouse:airbnb",
+   "source_job_id": "7453190",
+   "url": "https://careers.airbnb.com/positions/7453190?gh_jid=7453190",
+   "company": "Airbnb",
+   "title": "Senior Mobile Software Engineer, Quality Engineering",
+   "location": "Brazil - Remote",
+   "workplace": "remote",
+   "posted_at": "2026-01-22T21:11:25+00:00",
+   "age_days": 251,
+   "content_fingerprint": "9f8100706fbd66f128976d3ec0c1fa1e053daf5d442496ecf4fd4f3a14f68869",
+   "in_cells": {
+    "A1": {
+     "tier": "worth_reviewing",
+     "position": 20
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.0,
+    "support": 1.5,
+    "reasons": [
+     "Senior level, as you want",
+     "Individual-contributor work: “Strong hands-on experience in one native mobile stack (Kotlin/Android SDK or Swift/iOS SDK) and working knowledge of the other, with…”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_aca368936f42e8bde01621b58a6b597a",
+    "review_prompt_chars": 9648
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "valid",
+    "label": "no",
+    "reasons": [
+     "role_shape",
+     "company_shape"
+    ],
+    "note": "mobile test automation",
+    "quote": "automation coverage for features and releases across both native mobile stacks"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "mismatch",
+     "company_fit": "mismatch",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "seniority",
+       "quote": "Senior Mobile Software Engineer"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Own the health and signal quality of the mobile automation suite"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "role",
+       "quote": "building and evolving comprehensive automation coverage for features and releases across both native mobile stacks"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Lead building, maintaining, and effective utilization of automated tests in Swift and Kotlin"
+      },
+      {
+       "aspect": "company",
+       "quote": "grown to over 5 million hosts"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1927,
+     "output_tokens": 842
+    }
+   }
+  },
+  {
+   "job": "job_13ca2b341602bb1e4bec9978af9f3231",
+   "opportunity": "opp_13ca2b341602bb1e4bec9978af9f3231",
+   "source": "greenhouse:airbnb",
+   "source_job_id": "8024057",
+   "url": "https://careers.airbnb.com/positions/8024057?gh_jid=8024057",
+   "company": "Airbnb",
+   "title": "Senior Software Engineer, Service Tools",
+   "location": "Brazil",
+   "workplace": "remote",
+   "posted_at": "2026-06-24T11:09:17+00:00",
+   "age_days": 99,
+   "content_fingerprint": "72108792cd9af2075d07edadc34fd1bf8acc56534721116e63f4ed6ea9fcea9f",
+   "in_cells": {
+    "A1": {
+     "tier": "worth_reviewing",
+     "position": 15
+    },
+    "B1": {
+     "tier": "worth_reviewing",
+     "position": 37
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 1.5,
+    "reasons": [
+     "Senior backend work, the kind of engineering you want: “…end to end developer experience for backend developers.”",
+     "Individual-contributor work: “Experience working directly on build systems, and even better if you have hands-on experience with Bazel.”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_5bd35e3b1bb8636ebc95aeb6aaf14f09",
+    "review_prompt_chars": 8105
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "company_shape"
+    ],
+    "note": "developer-productivity platform at a large company",
+    "quote": "This represents Airbnb's largest cohort of developers"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "match",
+     "company_fit": "mismatch",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "The Service Tools team’s mission is to enable Airbnb backend developers to develop, test, and maintain their code quickl"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Senior Software Engineer, Service Tools"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Want to tackle projects with large open-ended scope and drive significant business impact."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "company",
+       "quote": "grown to over 5 million hosts who have welcomed over 2 billion guest arrivals"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Experience working directly on build systems"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Extensive JVM experience."
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1680,
+     "output_tokens": 1464
+    }
+   }
+  },
+  {
+   "job": "job_4c9b635338ed6b1e9d756b0a5d02f5cc",
+   "opportunity": "opp_4c9b635338ed6b1e9d756b0a5d02f5cc",
+   "source": "greenhouse:anthropic",
+   "source_job_id": "5435665008",
+   "url": "https://job-boards.greenhouse.io/anthropic/jobs/5435665008",
+   "company": "Anthropic",
+   "title": "Senior+ Software Engineer, Legal Tech",
+   "location": "Remote-Friendly (Travel-Required) | San Francisco, CA | Seattle, WA | New York City, NY",
+   "workplace": "on_site",
+   "posted_at": "2026-09-29T01:56:42+00:00",
+   "age_days": 2,
+   "content_fingerprint": "27c5fc340b34bffe300434add1325304339356bec8e8fa8209b49d60d7d7d35f",
+   "in_cells": {
+    "A1": {
+     "tier": "strong_fit",
+     "position": 10
+    },
+    "B1": {
+     "tier": "strong_fit",
+     "position": 27
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing says “Remote” but publishes no geographic scope",
+    "practicality": "check",
+    "role_fit": 0.75,
+    "support": 2.0,
+    "reasons": [
+     "Senior infrastructure work, the kind of engineering you want: “You will own internal customer relationships as well: you'll gather, prioritize, and coordinate needs from colleagues on Privacy, Securit",
+     "Real ownership, as you want: “You will own your scope end to end: from raw requirements all the way through to large-scale production systems that satisfy legal…”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_7c28f36ec8b40389f961ea6e42d20719",
+    "review_prompt_chars": 11451
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "concern",
+    "label": "maybe",
+    "reasons": [
+     "company_shape"
+    ],
+    "note": "large company; legal-tech infrastructure; stakeholder-heavy",
+    "quote": "Remote-Friendly (Travel-Required) | San Francisco, CA"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "plausible",
+     "role_fit": "match",
+     "company_fit": "unknown",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Build and operate dedicated cloud infrastructure, storage, and data pipelines for specialized workloads"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "You will own your scope end to end"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Senior+ Software Engineer"
+      },
+      {
+       "aspect": "work_style",
+       "quote": "you'll build dedicated, highly secure, and reliable cloud environments"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Anthropic's Legal Tech engineers play a specialized and critical role"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 2266,
+     "output_tokens": 1495
+    },
+    "B2": {
+     "fit": "plausible",
+     "role_fit": "match",
+     "company_fit": "unknown",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "build dedicated, highly secure, and reliable cloud environments and data processing and storage capabilities"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "You will own your scope end to end"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Senior+ Software Engineer"
+      },
+      {
+       "aspect": "team",
+       "quote": "an essential member of a collaborative team"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Anthropic's Legal Tech engineers play a specialized and critical role"
+      }
+     ],
+     "uncertainties": 3,
+     "rejected_points": 0,
+     "input_tokens": 2266,
+     "output_tokens": 959
+    }
+   }
+  },
+  {
+   "job": "job_4d3b583f4a58d2298d39c99fd35645bf",
+   "opportunity": "opp_4d3b583f4a58d2298d39c99fd35645bf",
+   "source": "greenhouse:anthropic",
+   "source_job_id": "5257650008",
+   "url": "https://job-boards.greenhouse.io/anthropic/jobs/5257650008",
+   "company": "Anthropic",
+   "title": "Staff+ Software Engineer, Inference Velocity",
+   "location": "Remote-Friendly (Travel-Required) | San Francisco, CA | Seattle, WA | New York City, NY",
+   "workplace": "on_site",
+   "posted_at": "2026-06-12T20:17:38+00:00",
+   "age_days": 110,
+   "content_fingerprint": "76b71a9606b9f847295ca59790d8943ebfcaf9e236179bf3792e6ee880edfca9",
+   "in_cells": {
+    "A1": {
+     "tier": "strong_fit",
+     "position": 13
+    },
+    "B1": {
+     "tier": "strong_fit",
+     "position": 33
+    },
+    "A2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing says “Remote” but publishes no geographic scope",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 1.5,
+    "reasons": [
+     "Infrastructure work, the kind of engineering you want: “…closely with Anthropic's central Infrastructure org, where company-wide developer productivity lives, to make sure Inference's…”",
+     "Real ownership, as you want: “This is a senior IC role with broad technical ownership.”",
+     "Individual-contributor work: “Deep background in systems engineering, build/test infrastructure, or ML infrastructure, with the ability to go hands-on with toolchain…”",
+     "Uses Kubernetes the way you have (running services on Kubernetes), not Kubernetes control-plane internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_64a84ed98555bc89bbe5906c3fd6c019",
+    "review_prompt_chars": 12056
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "concern",
+    "label": "maybe",
+    "reasons": [
+     "specialization_depth",
+     "company_shape"
+    ],
+    "note": "staff tech lead for ML-accelerator toolchains at a large company",
+    "quote": "compilers, drivers, libraries, frameworks"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "unknown",
+     "seniority": "partial",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Set technical direction for Inference Developer Productivity, owning the architecture and roadmap for toolchains, dev en"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "This is a senior IC role with broad technical ownership."
+      },
+      {
+       "aspect": "work_style",
+       "quote": "raising the technical bar without owning headcount"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Real depth in at least one accelerator ecosystem (CUDA/GPU, TPU, or Trainium/AWS Neuron)"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 2384,
+     "output_tokens": 1102
+    }
+   }
+  },
+  {
+   "job": "job_50f682f10d5894326ed49d0706cbcc35",
+   "opportunity": "opp_50f682f10d5894326ed49d0706cbcc35",
+   "source": "ashby:axiom",
+   "source_job_id": "3f411517-8eaa-4136-bd4e-9b342b3a79b6",
+   "url": "https://jobs.ashbyhq.com/axiom/3f411517-8eaa-4136-bd4e-9b342b3a79b6",
+   "company": "axiom",
+   "title": "Distributed Systems Engineer",
+   "location": "New York",
+   "workplace": null,
+   "posted_at": "2024-06-07T02:43:09.002+00:00",
+   "age_days": 846,
+   "content_fingerprint": "920e3985ee7dd6df90553e882f47a4730a15c94a27470421940f1d6846c24037",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 26
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing says “Remote” but publishes no geographic scope",
+    "practicality": "concern",
+    "role_fit": 1.0,
+    "support": 2.0,
+    "reasons": [
+     "Backend work, the kind of engineering you want",
+     "A startup, the kind of company you want: “We are looking for a distributed systems engineer to join a startup using zero-knowledge proofs to scale smart contract applications.”",
+     "A small team, as you want: “We also value the ability to make pragmatic technology choices which empower our small team.”",
+     "Uses Kubernetes the way you have (running services on Kubernetes), not Kubernetes control-plane internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_5b4781d6013872da78ae1a6faef24399",
+    "review_prompt_chars": 8368
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "concern",
+    "label": "maybe",
+    "reasons": [
+     "domain",
+     "staleness"
+    ],
+    "note": "crypto rollup nodes; New York or remote; posted 2024-06-07",
+    "quote": "building Rust-based rollup nodes and sequencers"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "match",
+     "seniority": "unknown",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "building Rust-based rollup nodes and sequencers"
+      },
+      {
+       "aspect": "company",
+       "quote": "We are a small but incredibly strong team"
+      },
+      {
+       "aspect": "team",
+       "quote": "We also value the ability to make pragmatic technology choices which empower our small team."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "the ability to design and implement blockchain protocols"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1765,
+     "output_tokens": 674
+    }
+   }
+  },
+  {
+   "job": "job_a22608d44596149ed675fb3c93e6fa03",
+   "opportunity": "opp_a22608d44596149ed675fb3c93e6fa03",
+   "source": "ashby:axiom",
+   "source_job_id": "363ab5a7-499a-48b6-9ed1-ebb44df570a4",
+   "url": "https://jobs.ashbyhq.com/axiom/363ab5a7-499a-48b6-9ed1-ebb44df570a4",
+   "company": "axiom",
+   "title": "ZK Proof Engineer",
+   "location": "New York",
+   "workplace": null,
+   "posted_at": "2022-12-07T02:41:39.981+00:00",
+   "age_days": 1394,
+   "content_fingerprint": "be0c316b50cd71a80a1b65dec33f4c0a52848b62a2c7fb0a3ad39d7b0df4562a",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 22
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing says “Remote” but publishes no geographic scope",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 3.0,
+    "reasons": [
+     "Backend work, the kind of engineering you want: “- You have proficiency in Rust, C/C++, or a similarly performant backend language.”",
+     "A startup, the kind of company you want: “He was previously an advisor for Gauntlet and worked at an HFT startup from inception to profitable trading.”",
+     "A small team, as you want: “We also value the ability to make pragmatic technology choices which empower our small team without adding too much overhead.”",
+     "Real ownership, as you want: “- You’ll be one of the earliest employees with ownership to make key technical/product decisions.”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_445f8850e4c2168fe0bb0022b6a1e25a",
+    "review_prompt_chars": 8991
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "concern",
+    "label": "no",
+    "reasons": [
+     "specialization_depth",
+     "staleness"
+    ],
+    "note": "ZK cryptography and provers; posted 2022-12-07",
+    "quote": "implement and optimize cutting-edge cryptographic code for zero-knowledge proof generation"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "match",
+     "seniority": "unknown",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "building systems to interface between low-level computer systems like the RISC-V ISA, compiler frameworks like LLVM, and"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "one of the earliest employees with ownership to make key technical/product decisions"
+      },
+      {
+       "aspect": "company",
+       "quote": "You’ll be one of the earliest employees"
+      },
+      {
+       "aspect": "team",
+       "quote": "We are a small but incredibly strong team"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "implement and optimize cutting-edge cryptographic code for zero-knowledge proof generation"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "implementing novel ZK circuits"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1890,
+     "output_tokens": 1137
+    }
+   }
+  },
+  {
+   "job": "job_f9c4d5c856608a8c7ede9af0c2dc70fa",
+   "opportunity": "opp_f9c4d5c856608a8c7ede9af0c2dc70fa",
+   "source": "greenhouse:canonical",
+   "source_job_id": "6062471",
+   "url": "https://job-boards.greenhouse.io/canonical/jobs/6062471",
+   "company": "Canonical",
+   "title": "Linux Platform Integration - Ubuntu Systems Senior Engineer",
+   "location": "Home based - Worldwide",
+   "workplace": null,
+   "posted_at": "2024-06-23T21:18:20+00:00",
+   "age_days": 829,
+   "content_fingerprint": "739e882dffb146d0ed4985ef9a601fbec744ede2ec6a58c03080f3dcdf43481b",
+   "in_cells": {
+    "B1": {
+     "tier": "worth_reviewing",
+     "position": 42
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 1.0,
+    "support": 1.0,
+    "reasons": [
+     "Senior platform work, the kind of engineering you want",
+     "Uses Kubernetes the way you have (running services on Kubernetes), not Kubernetes control-plane internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_a64dc624fb92bf4429c30b564e65265e",
+    "review_prompt_chars": 8114
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "valid",
+    "label": "no",
+    "reasons": [
+     "specialization_depth",
+     "customer_facing",
+     "staleness"
+    ],
+    "note": "kernel/silicon enablement with customer engagements",
+    "quote": "work across the full Linux stack from kernel through networking"
+   }
+  },
+  {
+   "job": "job_30b105132f292a5dcac32617ea8801bd",
+   "opportunity": "opp_30b105132f292a5dcac32617ea8801bd",
+   "source": "greenhouse:canonical",
+   "source_job_id": "5517891",
+   "url": "https://job-boards.greenhouse.io/canonical/jobs/5517891",
+   "company": "Canonical",
+   "title": "Senior Site Reliability / Gitops Engineer",
+   "location": "Home based - Worldwide",
+   "workplace": null,
+   "posted_at": "2023-11-20T10:31:05+00:00",
+   "age_days": 1046,
+   "content_fingerprint": "fbddfcec6cd475fbc509ab4474198bb197b7fa959aecfdd42b700700eabd6c3e",
+   "in_cells": {
+    "B1": {
+     "tier": "worth_reviewing",
+     "position": 43
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.5,
+    "support": 1.5,
+    "reasons": [
+     "SRE work, close to the infrastructure work you want",
+     "Senior level, as you want",
+     "Individual-contributor work: “Hands-on experience administering enterprise Linux servers”",
+     "Uses Kubernetes the way you have (running services on Kubernetes), not Kubernetes control-plane internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_38b6429f47ae58483a18f59980194c85",
+    "review_prompt_chars": 9980
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "role_shape",
+     "company_shape",
+     "staleness"
+    ],
+    "note": "internal IT SRE at a large company; posted 2023-11-20",
+    "quote": "The IS team at Canonical supports and maintains all of Canonical's IT production services"
+   }
+  },
+  {
+   "job": "job_80d79e2232c4865f55ca6caa39afdb32",
+   "opportunity": "opp_80d79e2232c4865f55ca6caa39afdb32",
+   "source": "greenhouse:canonical",
+   "source_job_id": "3003389",
+   "url": "https://job-boards.greenhouse.io/canonical/jobs/3003389",
+   "company": "Canonical",
+   "title": "Senior Software Engineer - MAAS",
+   "location": "Home Based - Americas; Home based - EMEA",
+   "workplace": null,
+   "posted_at": "2021-03-29T09:18:26+00:00",
+   "age_days": 2012,
+   "content_fingerprint": "bc86df3cfb4ec1844bb8cbe0c8786ea10431a1f9932bb753b2042f7fc066fa0e",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 30
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing says remote, but it also expects office presence or travel (“Willingness to travel up to 4 times a year for internal events”); Narrow can't tell whether that applies to this role",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 2.0,
+    "reasons": [
+     "Senior infrastructure work (from what the description asks for), the kind of engineering you want",
+     "Real ownership, as you want: “Take personal ownership of problems and drive them to solutions.”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_c34c722de61593c31ff08d48d13c2f9f",
+    "review_prompt_chars": 8755
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "company_shape",
+     "specialization_depth",
+     "staleness"
+    ],
+    "note": "large company, bare-metal/BMC provisioning; posted 2021-03-29",
+    "quote": "Some experience with Baseboard Management Controllers"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "poor",
+     "role_fit": "match",
+     "company_fit": "mismatch",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Develop MAAS core components and features"
+      },
+      {
+       "aspect": "role",
+       "quote": "Shape the architecture of MAAS"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "written in Python and Go"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Senior Software Engineer - MAAS"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Take personal ownership of problems and drive them to solutions."
+      },
+      {
+       "aspect": "company",
+       "quote": "founder-led, profitable, and growing"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "company",
+       "quote": "with 1200+ colleagues in 75+ countries"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Strong experience with networking, storage technologies and Cloud hosting and infrastructure."
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Experience with Linux server technologies, including but not limited to Virtualization (KVM), Containers (LXC), etc."
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Some experience with Baseboard Management Controllers and Protocols (Redfish, IPMI, AMT and others)"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1806,
+     "output_tokens": 1585
+    }
+   }
+  },
+  {
+   "job": "job_40a309ddc5a0382ffaad493659d9fb42",
+   "opportunity": "opp_40a309ddc5a0382ffaad493659d9fb42",
+   "source": "greenhouse:canonical",
+   "source_job_id": "4647417",
+   "url": "https://job-boards.greenhouse.io/canonical/jobs/4647417",
+   "company": "Canonical",
+   "title": "Software Developer (Backend SaaS)",
+   "location": "Home Based - Americas",
+   "workplace": null,
+   "posted_at": "2022-10-20T18:30:54+00:00",
+   "age_days": 1442,
+   "content_fingerprint": "aab2c98a1ddea14b301c3fac32b236ced898597ee9aba814b5f6aeb4cc7e7689",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 13
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 1.0,
+    "support": 1.0,
+    "reasons": [
+     "Backend work, the kind of engineering you want",
+     "Real ownership, as you want: “Take personal ownership of problems and design and deliver solutions”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_7451b031ec7c3d7739e8ec74c6b1656e",
+    "review_prompt_chars": 7835
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "company_shape",
+     "staleness"
+    ],
+    "note": "1,200+ person company; posted 2022-10-20",
+    "quote": "1200+ colleagues in 75+ countries"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "poor",
+     "role_fit": "match",
+     "company_fit": "mismatch",
+     "seniority": "partial",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "proficiency developing public-facing APIs and web applications"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Take personal ownership of problems and design and deliver solutions"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "contributing on a distributed development team participating in all facets of the development process"
+      },
+      {
+       "aspect": "culture",
+       "quote": "strong commitment to code quality and automated testing"
+      },
+      {
+       "aspect": "company",
+       "quote": "The company is founder-led, profitable, and growing."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "company",
+       "quote": "with 1200+ colleagues in 75+ countries"
+      }
+     ],
+     "uncertainties": 3,
+     "rejected_points": 0,
+     "input_tokens": 1619,
+     "output_tokens": 1086
+    }
+   }
+  },
+  {
+   "job": "job_6dc959e1efe869ad6499b198849d042e",
+   "opportunity": "opp_6dc959e1efe869ad6499b198849d042e",
+   "source": "greenhouse:canonical",
+   "source_job_id": "6707885",
+   "url": "https://job-boards.greenhouse.io/canonical/jobs/6707885",
+   "company": "Canonical",
+   "title": "Ubuntu Engineering Lead",
+   "location": "Home based - Worldwide",
+   "workplace": null,
+   "posted_at": "2025-11-07T16:36:27+00:00",
+   "age_days": 328,
+   "content_fingerprint": "9fa9f965b9118e10f42e84aeabad1263928c16aadf31a7ae6f0086a030d39102",
+   "in_cells": {
+    "B1": {
+     "tier": "worth_reviewing",
+     "position": 38
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 1.5,
+    "reasons": [
+     "Senior backend work (from what the description asks for), the kind of engineering you want",
+     "Individual-contributor work: “Offering coaching, mentoring, technical feedback and hands-on career development”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_1808df4fda1bd9012edd0bf160f505b4",
+    "review_prompt_chars": 10193
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "valid",
+    "label": "no",
+    "reasons": [
+     "management",
+     "company_shape"
+    ],
+    "note": "engineering leadership track at a large company",
+    "quote": "a proven track record for building, nurturing and developing high performing engineering teams"
+   }
+  },
+  {
+   "job": "job_0bd1cc6c3382a05f555157dca820ab3f",
+   "opportunity": "opp_0bd1cc6c3382a05f555157dca820ab3f",
+   "source": "ashby:clickhouse",
+   "source_job_id": "acaa223a-663e-445f-85f7-a5a4eb7f4f05",
+   "url": "https://jobs.ashbyhq.com/clickhouse/acaa223a-663e-445f-85f7-a5a4eb7f4f05",
+   "company": "clickhouse",
+   "title": "Senior Consulting Engineer - AMER",
+   "location": "AMER",
+   "workplace": "remote",
+   "posted_at": "2026-08-11T00:29:49.489+00:00",
+   "age_days": 51,
+   "content_fingerprint": "8b43a7a67d3552a5ce4950124af4aba7db6ce1020ecd417894a11cdcde7c43e8",
+   "in_cells": {
+    "B1": {
+     "tier": "worth_reviewing",
+     "position": 36
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "check",
+    "role_fit": 0.75,
+    "support": 1.5,
+    "reasons": [
+     "Senior infrastructure work (from what the description asks for), the kind of engineering you want",
+     "Individual-contributor work: “The role uniquely blends hands-on engineering, development assistance, and high-tier support, performing functions across Consultative…”",
+     "Uses Kubernetes the way you have (running services on Kubernetes), not Kubernetes control-plane internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_be217f2a69cd35d74600a8a7a7e376d9",
+    "review_prompt_chars": 8692
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "valid",
+    "label": "no",
+    "reasons": [
+     "customer_facing"
+    ],
+    "note": "consultative support, L1-L3 cases, travel",
+    "quote": "provide Consultative Support to our ClickHouse enterprise customers"
+   }
+  },
+  {
+   "job": "job_fad35ece26258b5062b3a2eab34abe8b",
+   "opportunity": "opp_fad35ece26258b5062b3a2eab34abe8b",
+   "source": "ashby:clickhouse",
+   "source_job_id": "83b78f4d-7577-4416-a83e-43c085d977b4",
+   "url": "https://jobs.ashbyhq.com/clickhouse/83b78f4d-7577-4416-a83e-43c085d977b4",
+   "company": "clickhouse",
+   "title": "Senior Curriculum Developer & Instructor",
+   "location": "AMER",
+   "workplace": "remote",
+   "posted_at": "2026-07-27T19:24:21.964+00:00",
+   "age_days": 66,
+   "content_fingerprint": "61796116f97e02d0835542ef9ae4093b2cf3a38c4f59e30f2f9e90cf90db7a9c",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 1
+    },
+    "B2_first_load": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 4.5,
+    "reasons": [
+     "Senior infrastructure work (from what the description asks for), the kind of engineering you want",
+     "A startup, the kind of company you want: “- A self-motivated attitude that provides you with the desire and determination to complete projects in a fast-paced startup environment”",
+     "A small team, as you want: “As a member of a small team, you will have the opportunity to work on many different projects involving the development and delivery of…”",
+     "Real ownership, as you want: “- You have a high level of responsibility, ownership, and accountability”",
+     "Individual-contributor work: “- Developing ClickHouse training courses for both on-demand and instructor-led delivery, including slides, videos, and hands-on labs”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_6258b16e47ced8410be7aa7113c3dec0",
+    "review_prompt_chars": 8079
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "valid",
+    "label": "no",
+    "reasons": [
+     "non_engineering_role"
+    ],
+    "note": "curriculum development and instruction; travel",
+    "quote": "Developing ClickHouse training courses for both on-demand and instructor-led delivery"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "poor",
+     "role_fit": "mismatch",
+     "company_fit": "match",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "seniority",
+       "quote": "Senior Curriculum Developer & Instructor"
+      },
+      {
+       "aspect": "company",
+       "quote": "fast-paced startup environment"
+      },
+      {
+       "aspect": "team",
+       "quote": "a small team"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "high level of responsibility, ownership, and accountability"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "role",
+       "quote": "Developing ClickHouse training courses"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Proven experience developing curriculum for a highly technical audience like software engineers and database developers"
+      },
+      {
+       "aspect": "work_style",
+       "quote": "Teaching ClickHouse courses both virtually and in person"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1663,
+     "output_tokens": 1495
+    }
+   }
+  },
+  {
+   "job": "job_c3b82793add441c5b10bfb4fa73ac202",
+   "opportunity": "opp_c3b82793add441c5b10bfb4fa73ac202",
+   "source": "ashby:oyster",
+   "source_job_id": "440f7cfe-3649-411c-8009-3ad09213435d",
+   "url": "https://jobs.ashbyhq.com/oyster/440f7cfe-3649-411c-8009-3ad09213435d",
+   "company": "oyster",
+   "title": "Senior AI Solutions Engineer - GTM",
+   "location": "EMEA",
+   "workplace": null,
+   "posted_at": "2026-09-18T15:32:06.487+00:00",
+   "age_days": 13,
+   "content_fingerprint": "5aefae556dcdb8fceb10174e88b8c749dcc39f07aac30f9dd8bb7b4852deebb9",
+   "in_cells": {
+    "B1": {
+     "tier": "worth_reviewing",
+     "position": 40
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "check",
+    "role_fit": 0.0,
+    "support": 2.5,
+    "reasons": [
+     "Senior level, as you want",
+     "A startup, the kind of company you want: “- Named one of America's Greatest Startup Workplaces 2026 https://www.oysterhr.com/library/oyster-2026-newsweek-award by Newsweek”",
+     "Individual-contributor work: “This is a senior, hands on role.”"
+    ],
+    "contradictions": [
+     "holding work_shape: Customer-facing engineering (solutions, forward-deployed), not product or platform engineering"
+    ],
+    "review_key_default_model": "rev_a514b225b4be4754848e3d2044412d02",
+    "review_prompt_chars": 10751
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "valid",
+    "label": "no",
+    "reasons": [
+     "non_engineering_role"
+    ],
+    "note": "AI enablement for Sales/Marketing/CS",
+    "quote": "help make Sales, Marketing, Customer Success, Partnerships, and Revenue Operations AI native"
+   }
+  },
+  {
+   "job": "job_1c9f9fb7018bb84b51a5cb36440e9375",
+   "opportunity": "opp_1c9f9fb7018bb84b51a5cb36440e9375",
+   "source": "ashby:oyster",
+   "source_job_id": "7c2d418d-d817-4e9f-b73c-41fa5f6549af",
+   "url": "https://jobs.ashbyhq.com/oyster/7c2d418d-d817-4e9f-b73c-41fa5f6549af",
+   "company": "oyster",
+   "title": "Senior Data Engineer",
+   "location": "EMEA",
+   "workplace": "remote",
+   "posted_at": "2026-09-16T09:43:03.112+00:00",
+   "age_days": 15,
+   "content_fingerprint": "ef4bd0f77ac1a0ccd17a79ad498b33fd0b5bde5b91244d3ddac1e228ce052c82",
+   "in_cells": {
+    "B1": {
+     "tier": "worth_reviewing",
+     "position": 34
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "check",
+    "role_fit": 0.0,
+    "support": 2.5,
+    "reasons": [
+     "Senior level, as you want",
+     "A startup, the kind of company you want: “- Named one of America's Greatest Startup Workplaces 2026 https://www.oysterhr.com/library/oyster-2026-newsweek-award by Newsweek”",
+     "Individual-contributor work: “- Hands-on experience building or supporting production systems using LLMs / generative AI.”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_c893a87e20d74eeb111038e43d001470",
+    "review_prompt_chars": 11273
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "role_shape"
+    ],
+    "note": "data engineering for an AI platform",
+    "quote": "work at the intersection of data engineering, platform engineering, and applied AI"
+   }
+  },
+  {
+   "job": "job_2a142d6ff324e04188d345ed89153953",
+   "opportunity": "opp_2a142d6ff324e04188d345ed89153953",
+   "source": "ashby:oyster",
+   "source_job_id": "51d58fcb-8e1c-4570-84ad-8ee7b0220b7c",
+   "url": "https://jobs.ashbyhq.com/oyster/51d58fcb-8e1c-4570-84ad-8ee7b0220b7c",
+   "company": "oyster",
+   "title": "Senior Engineer (Platform)",
+   "location": "EMEA",
+   "workplace": "remote",
+   "posted_at": "2026-08-10T16:32:17.876+00:00",
+   "age_days": 52,
+   "content_fingerprint": "fa3fb53cd520e56a268502dad18b5456578d5a6bc3627d61c87563d7889d3300",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 6
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "check",
+    "role_fit": 1.0,
+    "support": 2.5,
+    "reasons": [
+     "Senior platform work, the kind of engineering you want",
+     "A startup, the kind of company you want: “- Named one of America's Greatest Startup Workplaces 2026 https://www.oysterhr.com/library/oyster-2026-newsweek-award by Newsweek”",
+     "Individual-contributor work: “- Hands-on experience building and operating CI/CD pipelines and deployment automation.”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_0580adb33349e58a814c5589af47e4ed",
+    "review_prompt_chars": 11538
+   },
+   "judgment": {
+    "fit": "strong_yes",
+    "practicality": "unknown",
+    "label": "strong_yes",
+    "reasons": [
+     "role_shape"
+    ],
+    "note": "platform engineering at a growth-stage remote company; UTC-4..+4 (Brazil fits) but Brazil absent from its country list",
+    "quote": "the platform capabilities that sit between code and production"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "plausible",
+     "role_fit": "match",
+     "company_fit": "partial",
+     "seniority": "partial",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "systems and tooling that allow our engineers to ship software quickly, safely, and reliably at scale"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "from CI/CD and cloud infrastructure to observability, developer tooling, and operational workflows"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Senior Platform Engineer"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Own the path from commit to production"
+      },
+      {
+       "aspect": "work_style",
+       "quote": "Strong software development experience, with the ability to build maintainable automation, tooling, and platform abstrac"
+      },
+      {
+       "aspect": "culture",
+       "quote": "We embrace asynchronous, collaborative work"
+      }
+     ],
+     "contradictions": [],
+     "uncertainties": 4,
+     "rejected_points": 1,
+     "input_tokens": 2371,
+     "output_tokens": 1136
+    }
+   }
+  },
+  {
+   "job": "job_35cf5195e69f6eb3217beb08e6e21896",
+   "opportunity": "opp_35cf5195e69f6eb3217beb08e6e21896",
+   "source": "ashby:oyster",
+   "source_job_id": "f4caa57f-bdb1-42d8-a884-12bf341f677c",
+   "url": "https://jobs.ashbyhq.com/oyster/f4caa57f-bdb1-42d8-a884-12bf341f677c",
+   "company": "oyster",
+   "title": "Senior GTM Engineer",
+   "location": "Spain",
+   "workplace": "remote",
+   "posted_at": "2026-09-18T16:08:55.847+00:00",
+   "age_days": 13,
+   "content_fingerprint": "ab6979eed260b8edd5dab21cd82d4c90c7179c2fa23aa36435dc2f1a41d18c4d",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 2
+    },
+    "B2_first_load": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "check",
+    "role_fit": 0.75,
+    "support": 3.5,
+    "reasons": [
+     "Senior backend work (from what the description asks for), the kind of engineering you want",
+     "A startup, the kind of company you want: “- Named one of America's Greatest Startup Workplaces 2026 https://www.oysterhr.com/library/oyster-2026-newsweek-award by Newsweek”",
+     "Real ownership, as you want: “It’s not only about installing Tech & AI, it is also about taking ownership and evolving the ways we generate revenue.”",
+     "Individual-contributor work: “- Deep, hands-on knowledge of the modern GTM stack.”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_36c5d0886fc110354d6353c3122e178d",
+    "review_prompt_chars": 11669
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "impossible",
+    "label": "impossible",
+    "reasons": [
+     "non_engineering_role",
+     "eligibility"
+    ],
+    "note": "revenue-operations tooling; EMEA only",
+    "quote": "this role requires you to be based within EMEA"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "poor",
+     "role_fit": "mismatch",
+     "company_fit": "unknown",
+     "seniority": "partial",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "ownership",
+       "quote": "taking ownership and evolving the ways we generate revenue"
+      },
+      {
+       "aspect": "work_style",
+       "quote": "A bias toward shipping."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "role",
+       "quote": "Sitting in Revenue Operations, you'll work alongside GTM Teams."
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Deep, hands-on knowledge of the modern GTM stack."
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Clear, proven examples of solutions you've implemented that drove measurable pipeline impact."
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 2457,
+     "output_tokens": 1260
+    }
+   }
+  },
+  {
+   "job": "job_6ccacbfcbbcc95f4bee9bdee0e340cd6",
+   "opportunity": "opp_6ccacbfcbbcc95f4bee9bdee0e340cd6",
+   "source": "ashby:posthog",
+   "source_job_id": "43dbf072-0fc1-48c9-8c1e-7416db7d4a14",
+   "url": "https://jobs.ashbyhq.com/posthog/43dbf072-0fc1-48c9-8c1e-7416db7d4a14",
+   "company": "PostHog",
+   "title": "ClickHouse Operations Engineer",
+   "location": "Remote",
+   "workplace": "remote",
+   "posted_at": "2026-08-25T07:00:51.155+00:00",
+   "age_days": 37,
+   "content_fingerprint": "43ce4a56478f1ff380795cea95f8575a43c5bedc3f2ca5ecd4295de1d4ffb8f7",
+   "in_cells": {
+    "A1": {
+     "tier": "strong_fit",
+     "position": 12
+    },
+    "B1": {
+     "tier": "strong_fit",
+     "position": 29
+    },
+    "A2_first_load": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing says “Remote” but publishes no geographic scope",
+    "practicality": "check",
+    "role_fit": 0.75,
+    "support": 2.0,
+    "reasons": [
+     "Infrastructure work (from what the description asks for), the kind of engineering you want",
+     "A startup, the kind of company you want: “We started with open-source product analytics, launched out of Y Combinator's W20 cohort https://posthog.com/handbook/story.”",
+     "Real ownership, as you want: “- Autonomy: We don’t tell anyone what to do.”",
+     "Uses Kubernetes the way you have (running services on Kubernetes), not Kubernetes control-plane internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_32ca5cb734cf484d72962288a3584e6d",
+    "review_prompt_chars": 10255
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "unknown",
+    "label": "maybe",
+    "reasons": [
+     "specialization_depth"
+    ],
+    "note": "database operations specialty at 100 PB scale",
+    "quote": "automate, manage, and maintain ClickHouse"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "match",
+     "seniority": "unknown",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "build systems and automations for the provisioning and scaling of our large ClickHouse clusters"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "autonomous, highly-efficient groups of cracked engineers"
+      },
+      {
+       "aspect": "team",
+       "quote": "We've built the company around small teams"
+      },
+      {
+       "aspect": "culture",
+       "quote": "We default to async communication"
+      },
+      {
+       "aspect": "company",
+       "quote": "Revenue is growing incredibly quickly"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "This role is focussed on ClickHouse"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "You bring OLAP Database Experience."
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 2202,
+     "output_tokens": 1559
+    },
+    "B2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "match",
+     "seniority": "unknown",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "automate, manage, and maintain ClickHouse as we grow"
+      },
+      {
+       "aspect": "team",
+       "quote": "small teams – autonomous, highly-efficient groups"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "they own their products end-to-end"
+      },
+      {
+       "aspect": "company",
+       "quote": "Revenue is growing incredibly quickly"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "You bring OLAP Database Experience."
+      },
+      {
+       "aspect": "specialization",
+       "quote": "We're also building a query optimizer for ClickHouse"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 2202,
+     "output_tokens": 1312
+    }
+   }
+  },
+  {
+   "job": "job_1abd37a0b14c68d349d5e9ddea30ff67",
+   "opportunity": "opp_1abd37a0b14c68d349d5e9ddea30ff67",
+   "source": "ashby:posthog",
+   "source_job_id": "20ab9628-20ff-4ae3-bd6a-46ae7e9dc6b8",
+   "url": "https://jobs.ashbyhq.com/posthog/20ab9628-20ff-4ae3-bd6a-46ae7e9dc6b8",
+   "company": "PostHog",
+   "title": "Product Engineer",
+   "location": "Remote",
+   "workplace": "remote",
+   "posted_at": "2026-09-24T16:56:29.377+00:00",
+   "age_days": 7,
+   "content_fingerprint": "18eac8ae451fe33a6ba28700d30cd97232fb255bbbb96cfbf04c0c1c2dc88343",
+   "in_cells": {
+    "A1": {
+     "tier": "strong_fit",
+     "position": 11
+    },
+    "B1": {
+     "tier": "strong_fit",
+     "position": 28
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing says “Remote” but publishes no geographic scope",
+    "practicality": "check",
+    "role_fit": 0.75,
+    "support": 2.0,
+    "reasons": [
+     "Product engineering that includes the backend, close to the work you want: “We want someone who's done it and has the scars: an API an agent can drive, an MCP server, evals, docs written for a machine",
+     "A startup, the kind of company you want: “We started with open-source product analytics, launched out of Y Combinator's W20 cohort https://posthog.com/handbook/story.”",
+     "Real ownership, as you want: “- Autonomy: We don’t tell anyone what to do.”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_33ace20e95915585bf63e6354cd63253",
+    "review_prompt_chars": 9844
+   },
+   "judgment": {
+    "fit": "strong_yes",
+    "practicality": "unknown",
+    "label": "strong_yes",
+    "reasons": [
+     "role_shape",
+     "team_shape",
+     "ownership"
+    ],
+    "note": "startup, small autonomous teams, product work including backend",
+    "quote": "small teams – autonomous, highly-efficient groups"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "plausible",
+     "role_fit": "partial",
+     "company_fit": "match",
+     "seniority": "unknown",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "ownership",
+       "quote": "own their products end-to-end"
+      },
+      {
+       "aspect": "team",
+       "quote": "small teams – autonomous, highly-efficient groups of cracked engineers"
+      },
+      {
+       "aspect": "work_style",
+       "quote": "We default to async communication – PRs > Issues > Slack."
+      },
+      {
+       "aspect": "company",
+       "quote": "launched out of Y Combinator's W20 cohort"
+      },
+      {
+       "aspect": "role",
+       "quote": "what you end up working on will depend on your exact skillset and preferences"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "focused on building an awesome product for end users"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 2144,
+     "output_tokens": 1643
+    },
+    "B2": {
+     "fit": "plausible",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "unknown",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "ownership",
+       "quote": "proactive people that can fully own projects and get them done"
+      },
+      {
+       "aspect": "team",
+       "quote": "small teams – autonomous, highly-efficient groups"
+      },
+      {
+       "aspect": "work_style",
+       "quote": "We default to async communication – PRs > Issues > Slack."
+      },
+      {
+       "aspect": "specialization",
+       "quote": "What you end up working on will depend on your exact skillset and preferences, so choose your own adventure."
+      },
+      {
+       "aspect": "company",
+       "quote": "Revenue is growing incredibly quickly, and we're very efficient."
+      }
+     ],
+     "contradictions": [],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 2144,
+     "output_tokens": 1500
+    }
+   }
+  },
+  {
+   "job": "job_fcf7f8748834d735e377c567f3bfdc82",
+   "opportunity": "opp_fcf7f8748834d735e377c567f3bfdc82",
+   "source": "ashby:railway",
+   "source_job_id": "541836a1-6d3f-47bf-845f-5f48fe547568",
+   "url": "https://jobs.ashbyhq.com/railway/541836a1-6d3f-47bf-845f-5f48fe547568",
+   "company": "railway",
+   "title": "Infra Engineer - Datacenters",
+   "location": "Remote (United States)",
+   "workplace": "remote",
+   "posted_at": "2025-02-03T20:01:07.475+00:00",
+   "age_days": 605,
+   "content_fingerprint": "3106dc287fd0235e086401028d1d40d95b102e5439e0aeff1ac8a37e56b2f09a",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 19
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The location fields exclude Brazil but the description includes it; Narrow can't tell which applies to this role",
+    "practicality": "concern",
+    "role_fit": 1.0,
+    "support": 3.0,
+    "reasons": [
+     "Infrastructure work, the kind of engineering you want",
+     "A startup, the kind of company you want: “For better or worse, we're a startup; our team dynamics are different from companies of different sizes and stages.”",
+     "A small team, as you want: “- We're a small team, with high ownership, who are not only passionate about what we do, but seek to be exceptional as well.”",
+     "Real ownership, as you want: “- We're a small team, with high ownership, who are not only passionate about what we do, but seek to be exceptional as well.”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_40966051efdba176d4b7dc4ba70fa48a",
+    "review_prompt_chars": 8352
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "unknown",
+    "label": "no",
+    "reasons": [
+     "role_shape",
+     "staleness"
+    ],
+    "note": "physical datacenter supply chain; field says 'Remote (United States)', text says anywhere",
+    "quote": "Managed and orchestrated supply chains globally"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "unknown",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "building datacenters all over the world"
+      },
+      {
+       "aspect": "role",
+       "quote": "Built application level code (Golang, GRPC, Postgres, etc)"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Delivered projects 0→N. Lead it, scaled it"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Operated with agency and urgency"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Made use of OS primitives (syscalls, cgroups, etc)"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1925,
+     "output_tokens": 1423
+    }
+   }
+  },
+  {
+   "job": "job_53fb18f76aa6926b8499cf7b7cffa936",
+   "opportunity": "opp_53fb18f76aa6926b8499cf7b7cffa936",
+   "source": "ashby:railway",
+   "source_job_id": "b8072f95-043f-404d-a313-f0bdf8dd3c81",
+   "url": "https://jobs.ashbyhq.com/railway/b8072f95-043f-404d-a313-f0bdf8dd3c81",
+   "company": "railway",
+   "title": "Infrastructure Engineer",
+   "location": "Global",
+   "workplace": "remote",
+   "posted_at": "2024-06-03T19:11:47.266+00:00",
+   "age_days": 850,
+   "content_fingerprint": "37f22df2c63e281cd852e4bacfdf4adb2e844a9719a27ba7589a4c833ba15bb7",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 20
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The posting mentions time-zone overlap without saying which zones",
+    "practicality": "concern",
+    "role_fit": 1.0,
+    "support": 3.0,
+    "reasons": [
+     "Infrastructure work, the kind of engineering you want",
+     "A startup, the kind of company you want: “- A great sense of direction and prioritization when it comes to dealing with the ambiguity of an early stage startup”",
+     "A small team, as you want: “- We're a small team, with high ownership, who are not only passionate about what we do, but seek to be exceptional as well.”",
+     "Real ownership, as you want: “- This is a high impact, high agency role with direct effect on company culture, trajectory, and outcome”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_00080c947badf657a1896ebf140fdc53",
+    "review_prompt_chars": 8309
+   },
+   "judgment": {
+    "fit": "strong_yes",
+    "practicality": "valid",
+    "label": "strong_yes",
+    "reasons": [
+     "role_shape",
+     "ownership",
+     "staleness"
+    ],
+    "note": "small-startup infrastructure; posted 2024-06-03 (evergreen)",
+    "quote": "This is a remote position available anywhere in the world!"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "match",
+     "seniority": "unknown",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Building the infrastructure which powers the Railway engine"
+      },
+      {
+       "aspect": "company",
+       "quote": "we're a startup"
+      },
+      {
+       "aspect": "team",
+       "quote": "We're a small team"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "We're a small team, with high ownership"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Build system-level software: our challenges aren't your usual kube-fits-all variety, so be prepared to build things from"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Have a strong understanding or curiosity of OS level primitives"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1788,
+     "output_tokens": 1585
+    }
+   }
+  },
+  {
+   "job": "job_85ae46cbf1864c7710abcaef5d13c2ba",
+   "opportunity": "opp_85ae46cbf1864c7710abcaef5d13c2ba",
+   "source": "ashby:railway",
+   "source_job_id": "6ddcfe47-6cce-469b-ba6d-4f0e83440c9d",
+   "url": "https://jobs.ashbyhq.com/railway/6ddcfe47-6cce-469b-ba6d-4f0e83440c9d",
+   "company": "railway",
+   "title": "Senior Full-Stack Engineer - Product",
+   "location": "Global",
+   "workplace": "remote",
+   "posted_at": "2024-02-07T20:30:20.299+00:00",
+   "age_days": 966,
+   "content_fingerprint": "4cc6d36ae11672d230c3ecf01d55a81635bc52fe2cc944a9753f6e4518b91641",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 17
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The posting mentions time-zone overlap without saying which zones",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 4.0,
+    "reasons": [
+     "Full-stack work that includes the backend, close to the work you want: “- Experience managing complex asynchronous backend jobs for something like a build/deploy pipeline.”",
+     "Senior level, as you want",
+     "A startup, the kind of company you want: “For better or worse, we're a startup; our team dynamics are different from companies of different sizes and stages.”",
+     "A small team, as you want: “- We're a small team, with high ownership, who are not only passionate about what we do, but seek to be exceptional as well.”",
+     "Real ownership, as you want: “This is a high impact, high agency role with direct effect on company culture, trajectory, and outcome.”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_d25eead77a98008794568e64b72f4106",
+    "review_prompt_chars": 9252
+   },
+   "judgment": {
+    "fit": "strong_yes",
+    "practicality": "valid",
+    "label": "strong_yes",
+    "reasons": [
+     "role_shape",
+     "ownership",
+     "staleness"
+    ],
+    "note": "product + backend at a small startup; posted 2024-02-07 (evergreen)",
+    "quote": "This is a remote position available anywhere in the world!"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "plausible",
+     "role_fit": "partial",
+     "company_fit": "match",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "orchestrating workflows that interact with our microservices using Temporal"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Build a tool for building user code into a deployable image using Nix packages."
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Senior Full-Stack Engineer"
+      },
+      {
+       "aspect": "company",
+       "quote": "we're a startup"
+      },
+      {
+       "aspect": "team",
+       "quote": "we're a small team, with high ownership"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "high impact, high agency role"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "role",
+       "quote": "Craft intuitive interfaces that allow our users to interface with powerful computing paradigms"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1983,
+     "output_tokens": 1578
+    }
+   }
+  },
+  {
+   "job": "job_969738c4ddc0eda164fb20928718dee6",
+   "opportunity": "opp_969738c4ddc0eda164fb20928718dee6",
+   "source": "ashby:railway",
+   "source_job_id": "d93c8794-6058-4295-83a0-092b05664f34",
+   "url": "https://jobs.ashbyhq.com/railway/d93c8794-6058-4295-83a0-092b05664f34",
+   "company": "railway",
+   "title": "Senior Infra Engineer: Baremetal Orchestration",
+   "location": "Global",
+   "workplace": "remote",
+   "posted_at": "2026-05-08T22:14:58.650+00:00",
+   "age_days": 145,
+   "content_fingerprint": "0ba796613da0bd6212d38dde4e2759a897e7f01a7d9667dd951c52704974e245",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 14
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The posting mentions time-zone overlap without saying which zones",
+    "practicality": "concern",
+    "role_fit": 1.0,
+    "support": 4.5,
+    "reasons": [
+     "Senior infrastructure work, the kind of engineering you want",
+     "A startup, the kind of company you want: “- A great sense of direction and prioritization when it comes to dealing with the ambiguity of an early stage startup”",
+     "A small team, as you want: “- We're a small team, with high ownership, who are not only passionate about what we do, but seek to be exceptional as well.”",
+     "Real ownership, as you want: “This is a high impact, high agency role with direct effect on company culture, trajectory, and outcome.”",
+     "Individual-contributor work: “- Hands-on experience with bare metal provisioning, configuration management, and the unglamorous-but-critical work of getting hardware…”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_f162522513e66454b4f1869030433a0a",
+    "review_prompt_chars": 9372
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "specialization_depth"
+    ],
+    "note": "bare-metal provisioning specialty",
+    "quote": "Hands-on experience with bare metal provisioning"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "match",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "seniority",
+       "quote": "Senior Infra Engineer: Baremetal Orchestration"
+      },
+      {
+       "aspect": "role",
+       "quote": "The arc of this role is more internal-facing than user-facing."
+      },
+      {
+       "aspect": "company",
+       "quote": "For better or worse, we're a startup"
+      },
+      {
+       "aspect": "team",
+       "quote": "We're a small team, with high ownership"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "This is a high impact, high agency role"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Hands-on experience with bare metal provisioning, configuration management, and the unglamorous-but-critical work of get"
+      },
+      {
+       "aspect": "role",
+       "quote": "Build and maintain our host provisioning stack: PXE boot, Ansible, and burn-in agents"
+      }
+     ],
+     "uncertainties": 1,
+     "rejected_points": 0,
+     "input_tokens": 1982,
+     "output_tokens": 1247
+    }
+   }
+  },
+  {
+   "job": "job_c9ff2411407cda083a88165e7b44918c",
+   "opportunity": "opp_c9ff2411407cda083a88165e7b44918c",
+   "source": "ashby:railway",
+   "source_job_id": "4856389c-44d8-4635-ba51-5fc1b8a49ca8",
+   "url": "https://jobs.ashbyhq.com/railway/4856389c-44d8-4635-ba51-5fc1b8a49ca8",
+   "company": "railway",
+   "title": "Senior Infra Engineer: Observability",
+   "location": "Global",
+   "workplace": "remote",
+   "posted_at": "2026-05-01T22:29:07.525+00:00",
+   "age_days": 152,
+   "content_fingerprint": "d721baa3e9edf32b43b43e3e67d22f2147d58bd60a248c177ab685cb55ef8841",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 15
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The posting mentions time-zone overlap without saying which zones",
+    "practicality": "concern",
+    "role_fit": 1.0,
+    "support": 4.0,
+    "reasons": [
+     "Senior infrastructure work, the kind of engineering you want",
+     "A startup, the kind of company you want: “- A great sense of direction and prioritization when it comes to dealing with the ambiguity of an early stage startup”",
+     "A small team, as you want: “- We're a small team, with high ownership, who are not only passionate about what we do, but seek to be exceptional as well.”",
+     "Real ownership, as you want: “This is a high impact, high agency role with direct effect on company culture, trajectory, and outcome.”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_2c1e60468af8544008ad6ec9824158b8",
+    "review_prompt_chars": 9148
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "specialization_depth"
+    ],
+    "note": "observability specialty at a small startup",
+    "quote": "Senior Infra Engineer: Observability"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "plausible",
+     "role_fit": "partial",
+     "company_fit": "match",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Build Golang/Rust GRPC services from scratch"
+      },
+      {
+       "aspect": "work_style",
+       "quote": "you’re probably going to do a lot of non-networking + platform things"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Senior Infra Engineer: Observability"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "This is a high impact, high agency role"
+      },
+      {
+       "aspect": "company",
+       "quote": "For better or worse, we're a startup"
+      },
+      {
+       "aspect": "team",
+       "quote": "We're a small team, with high ownership"
+      }
+     ],
+     "contradictions": [],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1959,
+     "output_tokens": 1435
+    }
+   }
+  },
+  {
+   "job": "job_272c1fd30c81b78f10bdc66dbba818e3",
+   "opportunity": "opp_272c1fd30c81b78f10bdc66dbba818e3",
+   "source": "ashby:railway",
+   "source_job_id": "25d8444a-47dc-4084-ae56-29a0f0b19b74",
+   "url": "https://jobs.ashbyhq.com/railway/25d8444a-47dc-4084-ae56-29a0f0b19b74",
+   "company": "railway",
+   "title": "Senior Platform Engineer: Storage",
+   "location": "Global",
+   "workplace": "remote",
+   "posted_at": "2025-08-01T16:03:13.900+00:00",
+   "age_days": 426,
+   "content_fingerprint": "dabcc4578e15f5f9cc2dc07dc8a2884a45d04322ce9b1b906a64494a22771861",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 16
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The posting mentions time-zone overlap without saying which zones",
+    "practicality": "concern",
+    "role_fit": 1.0,
+    "support": 4.0,
+    "reasons": [
+     "Senior platform work, the kind of engineering you want",
+     "A startup, the kind of company you want: “For better or worse, we're a startup; our team dynamics are different from companies of different sizes and stages.”",
+     "A small team, as you want: “- We're a small team, with high ownership, who are not only passionate about what we do, but seek to be exceptional as well.”",
+     "Real ownership, as you want: “This is a high impact, high agency role with direct effect on company culture, trajectory, and outcome.”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_e77b01640547e7bd749091306242357f",
+    "review_prompt_chars": 9665
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "valid",
+    "label": "no",
+    "reasons": [
+     "specialization_depth"
+    ],
+    "note": "block-storage engine and kernel I/O (BRU-323 judged Maybe; re-judged on the requirement)",
+    "quote": "filesystems, block devices, kernel I/O paths, SPDK, io_uring"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "match",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "build, evolve and operate the systems that allow Railway to host stateful workloads"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Senior Platform Engineer: Storage"
+      },
+      {
+       "aspect": "company",
+       "quote": "For better or worse, we're a startup"
+      },
+      {
+       "aspect": "team",
+       "quote": "We're a small team"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "This is a high impact, high agency role"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "our new log structured block-storage system"
+      },
+      {
+       "aspect": "role",
+       "quote": "You've built and operated distributed storage systems and have a strong grasp of first-principles."
+      }
+     ],
+     "uncertainties": 1,
+     "rejected_points": 0,
+     "input_tokens": 2077,
+     "output_tokens": 1150
+    }
+   }
+  },
+  {
+   "job": "job_515f92b1eb9cf063cd9d07ad6d6eca25",
+   "opportunity": "opp_515f92b1eb9cf063cd9d07ad6d6eca25",
+   "source": "ashby:railway",
+   "source_job_id": "5f51771e-339f-49f9-8da2-e3c7179c7bad",
+   "url": "https://jobs.ashbyhq.com/railway/5f51771e-339f-49f9-8da2-e3c7179c7bad",
+   "company": "railway",
+   "title": "Senior Product Engineer, Scalability",
+   "location": "Global",
+   "workplace": "remote",
+   "posted_at": "2026-06-11T19:42:15.346+00:00",
+   "age_days": 112,
+   "content_fingerprint": "affeb5b9e743a5a70b49ae2bdfc809e6caa940bef2a440df66ce7db24ff9ed6e",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 21
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The posting mentions time-zone overlap without saying which zones",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 3.0,
+    "reasons": [
+     "Product engineering that includes the backend, close to the work you want: “This is a backend-leaning role focused on scaling systems.”",
+     "Senior level, as you want",
+     "A startup, the kind of company you want: “For better or worse, we're a startup; our team dynamics are different from companies of different sizes and stages.”",
+     "Real ownership, as you want: “You'll own your work end-to-end, including when a feature reaches the UI.”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_4267ad6b540a87048b027128a2eebdbb",
+    "review_prompt_chars": 10672
+   },
+   "judgment": {
+    "fit": "strong_yes",
+    "practicality": "valid",
+    "label": "strong_yes",
+    "reasons": [
+     "role_shape",
+     "ownership"
+    ],
+    "note": "backend correctness and scale at a small startup",
+    "quote": "lead, design, and implement backend systems where correctness, consistency, and auditability are first-class"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "strong",
+     "role_fit": "match",
+     "company_fit": "match",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "This is a backend-leaning role focused on scaling systems."
+      },
+      {
+       "aspect": "specialization",
+       "quote": "your remit spans every high-throughput system at Railway — workers, queues, event pipelines, and the databases underneat"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "An ability to autonomously lead, design, and implement backend systems"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "You'll own real outcomes."
+      },
+      {
+       "aspect": "company",
+       "quote": "For better or worse, we're a startup;"
+      },
+      {
+       "aspect": "team",
+       "quote": "We're a small, high-ownership team"
+      }
+     ],
+     "contradictions": [],
+     "uncertainties": 2,
+     "rejected_points": 1,
+     "input_tokens": 2236,
+     "output_tokens": 1259
+    }
+   }
+  },
+  {
+   "job": "job_7f6daf9d54d7a52a14c810ff3f911aa9",
+   "opportunity": "opp_7f6daf9d54d7a52a14c810ff3f911aa9",
+   "source": "ashby:resend",
+   "source_job_id": "01e6eb42-142b-4f33-9944-ca153bd3ae86",
+   "url": "https://jobs.ashbyhq.com/resend/01e6eb42-142b-4f33-9944-ca153bd3ae86",
+   "company": "resend",
+   "title": "Customer Success Engineer",
+   "location": "Americas",
+   "workplace": "remote",
+   "posted_at": "2026-07-20T16:31:59.978+00:00",
+   "age_days": 73,
+   "content_fingerprint": "744892edb5c8ee6f27d7326e8552086ba93912b71a57e12fa352584decab2c13",
+   "in_cells": {
+    "B1": {
+     "tier": "worth_reviewing",
+     "position": 41
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.0,
+    "support": 2.0,
+    "reasons": [
+     "A startup, the kind of company you want: “We're backed by a16z, Y Combinator, and others.”",
+     "Real ownership, as you want: “- Autonomy to “just ship it””"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_82225003264543b670bd28e558cdb6d4",
+    "review_prompt_chars": 7416
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "valid",
+    "label": "no",
+    "reasons": [
+     "customer_facing"
+    ],
+    "note": "front-line customer support",
+    "quote": "Be the front-line of customer requests"
+   }
+  },
+  {
+   "job": "job_b27a3dce2fa593a3e06a2175729a3ec3",
+   "opportunity": "opp_b27a3dce2fa593a3e06a2175729a3ec3",
+   "source": "ashby:socket",
+   "source_job_id": "8f9f4b7a-5933-4c07-8fec-900fe2e425c6",
+   "url": "https://jobs.ashbyhq.com/socket/8f9f4b7a-5933-4c07-8fec-900fe2e425c6",
+   "company": "socket",
+   "title": "Senior Platform Engineer",
+   "location": "Remote",
+   "workplace": null,
+   "posted_at": "2026-02-12T18:32:25.197+00:00",
+   "age_days": 231,
+   "content_fingerprint": "332ca125522c21b8e4711981509f55040b5646f577ca2aba86d30ea662ee5132",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 18
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing says “Remote” but publishes no geographic scope",
+    "practicality": "concern",
+    "role_fit": 1.0,
+    "support": 3.5,
+    "reasons": [
+     "Senior platform work, the kind of engineering you want",
+     "A growth-stage company, the kind of company you want: “…has raised $ https://socket.dev/blog/series-b125M in funding https://socket.dev/blog/series-c from top angels, operators, and security…”",
+     "Real ownership, as you want: “Feel a strong sense of ownership: We wear many hats and feel a strong sense of overall ownership of the company and we're non-territorial…”",
+     "Individual-contributor work: “- Hands-on experience building and using observability systems (Prometheus/Mimir, OpenTelemetry, Grafana)”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_ace0d863d6615d62567c5f8473a4debd",
+    "review_prompt_chars": 9272
+   },
+   "judgment": {
+    "fit": "strong_yes",
+    "practicality": "unknown",
+    "label": "strong_yes",
+    "reasons": [
+     "role_shape",
+     "ownership"
+    ],
+    "note": "early platform hire at a funded startup",
+    "quote": "Own and evolve Socket's infrastructure"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "plausible",
+     "role_fit": "match",
+     "company_fit": "partial",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Own and evolve Socket’s infrastructure, with a focus on reliability, performance, and cost as we scale"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Senior Platform Engineer"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "We wear many hats and feel a strong sense of overall ownership of the company"
+      },
+      {
+       "aspect": "team",
+       "quote": "As an early member of the team"
+      },
+      {
+       "aspect": "culture",
+       "quote": "Think rigorously: We care about being right and it often takes reasoning from first principles"
+      }
+     ],
+     "contradictions": [],
+     "uncertainties": 3,
+     "rejected_points": 0,
+     "input_tokens": 1968,
+     "output_tokens": 1265
+    }
+   }
+  },
+  {
+   "job": "job_7adf123f2bc943c81d81783e513599fd",
+   "opportunity": "opp_7adf123f2bc943c81d81783e513599fd",
+   "source": "greenhouse:sourcegraph91",
+   "source_job_id": "6103628004",
+   "url": "https://job-boards.greenhouse.io/sourcegraph91/jobs/6103628004",
+   "company": "Sourcegraph",
+   "title": "Software Engineer - Platform [IC3]",
+   "location": "Remote",
+   "workplace": null,
+   "posted_at": "2026-07-09T16:15:18+00:00",
+   "age_days": 84,
+   "content_fingerprint": "573a797a2cf215bbf962062ca8ca41d6aff78ba875f7d21e8b7afd1cb1bb00b4",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 12
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 1.0,
+    "support": 1.0,
+    "reasons": [
+     "Platform work, the kind of engineering you want",
+     "Real ownership, as you want: “…distributed team that values high agency, direct communication, and customer love.”",
+     "Uses Kubernetes the way you have (running services on Kubernetes), not Kubernetes control-plane internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_a6b2906ef3e83a75ceb07a4514c18526",
+    "review_prompt_chars": 11075
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "seniority",
+     "customer_facing"
+    ],
+    "note": "IC3, a step below senior; enterprise-customer connectivity",
+    "quote": "Software Engineer - Platform [IC3]"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "plausible",
+     "role_fit": "match",
+     "company_fit": "unknown",
+     "seniority": "partial",
+     "specialization": "match",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Build a control plane to orchestrate a fleet of single-tenant Sourcegraph Cloud instances."
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Expose complex infrastructure as API to support internal customers to iterate faster."
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Be defining long-term technical vision and strategies for new product development, scaling existing services, and managi"
+      },
+      {
+       "aspect": "culture",
+       "quote": "values high agency, direct communication, and customer love."
+      },
+      {
+       "aspect": "work_style",
+       "quote": "solve problems by writing code rather than through one-off operations."
+      }
+     ],
+     "contradictions": [],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 2212,
+     "output_tokens": 1514
+    }
+   }
+  },
+  {
+   "job": "job_b2752f6d59035e59eb04fce8217ab8c0",
+   "opportunity": "opp_b2752f6d59035e59eb04fce8217ab8c0",
+   "source": "greenhouse:stripe",
+   "source_job_id": "6042172",
+   "url": "https://stripe.com/jobs/search?gh_jid=6042172",
+   "company": "Stripe",
+   "title": "Backend Engineer, Core Technology",
+   "location": "US-Remote, Chicago, Seattle, San Francisco",
+   "workplace": null,
+   "posted_at": "2024-06-14T22:04:50+00:00",
+   "age_days": 838,
+   "content_fingerprint": "d8b692a75d3cbbff831841d19ec796beb4c7758479e31852e38011ab1d9cfd09",
+   "in_cells": {
+    "A1": {
+     "tier": "strong_fit",
+     "position": 9
+    },
+    "B1": {
+     "tier": "strong_fit",
+     "position": 23
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing says “Remote” but publishes no geographic scope",
+    "practicality": "concern",
+    "role_fit": 1.0,
+    "support": 2.5,
+    "reasons": [
+     "Senior backend work, the kind of engineering you want",
+     "Real ownership, as you want: “Have the ability to thrive on a high level of autonomy and responsibility, and think of yourself as entrepreneurial”",
+     "Individual-contributor work: “2–12+ years of professional hands-on software development experience, able to write well-factored algorithms and have experience with…”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_cafedef534ff98a3b9802eb8c164a656",
+    "review_prompt_chars": 9456
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "impossible",
+    "label": "impossible",
+    "reasons": [
+     "eligibility",
+     "company_shape",
+     "staleness"
+    ],
+    "note": "US-only remote at a large company; posted 2024-06-14",
+    "quote": "US-Remote, Chicago, Seattle, San Francisco"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "plausible",
+     "role_fit": "match",
+     "company_fit": "unknown",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Stripe Infrastructure is responsible for the reliability, scale, performance, and cost of Stripe's systems"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "You may work on a wide variety of critical business areas"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "2–12+ years of professional hands-on software development experience"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "thrive on a high level of autonomy and responsibility"
+      }
+     ],
+     "contradictions": [],
+     "uncertainties": 3,
+     "rejected_points": 0,
+     "input_tokens": 1895,
+     "output_tokens": 1413
+    },
+    "B2": {
+     "fit": "poor",
+     "role_fit": "match",
+     "company_fit": "mismatch",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Stripe Infrastructure is responsible for the reliability, scale, performance, and cost of Stripe's systems"
+      },
+      {
+       "aspect": "role",
+       "quote": "You'll work on projects that span technologies, systems, and processes"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "2–12+ years of professional hands-on software development experience"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "thrive on a high level of autonomy and responsibility"
+      },
+      {
+       "aspect": "work_style",
+       "quote": "design, build, test, and ship great code every day"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "company",
+       "quote": "thousands of individual Stripes across the company"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1895,
+     "output_tokens": 1409
+    }
+   }
+  },
+  {
+   "job": "job_3782a4c5defe034291998c15566dd7f3",
+   "opportunity": "opp_3782a4c5defe034291998c15566dd7f3",
+   "source": "greenhouse:stripe",
+   "source_job_id": "8175647",
+   "url": "https://stripe.com/jobs/search?gh_jid=8175647",
+   "company": "Stripe",
+   "title": "Integration Engineer (Metronome)",
+   "location": "Remote",
+   "workplace": null,
+   "posted_at": "2026-09-22T21:16:20+00:00",
+   "age_days": 8,
+   "content_fingerprint": "a9421709ada10c8651327cf0a5b4e09077809bf1a06939b787d01b1a110ebf56",
+   "in_cells": {
+    "A1": {
+     "tier": "worth_reviewing",
+     "position": 23
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing says “Remote” but publishes no geographic scope",
+    "practicality": "check",
+    "role_fit": 0.0,
+    "support": 3.0,
+    "reasons": [
+     "Senior level, as you want",
+     "A startup, the kind of company you want: “Metronome operates with a startup mindset within Stripe.”",
+     "Real ownership, as you want: “Experience working in fast-moving environments that value initiative and ownership.”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_8c7f38ab7e9d07f5e6a6a1450ca52660",
+    "review_prompt_chars": 9541
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "impossible",
+    "label": "impossible",
+    "reasons": [
+     "customer_facing",
+     "eligibility"
+    ],
+    "note": "post-sale customer implementation; US",
+    "quote": "help customers implement Metronome successfully"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "plausible",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Design integrations between Metronome’s APIs and customers’ business systems"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "You’ll lead technical work across requirements gathering, solution and integration design, configuration, testing, data "
+      },
+      {
+       "aspect": "ownership",
+       "quote": "There is a significant opportunity for people with initiative to influence our direction, build processes from zero to o"
+      },
+      {
+       "aspect": "company",
+       "quote": "Metronome operates with a startup mindset within Stripe."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "role",
+       "quote": "Support customers throughout the implementation lifecycle, including requirements gathering, technical design, integrati"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Configure Metronome’s platform on behalf of customers."
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1891,
+     "output_tokens": 1496
+    }
+   }
+  },
+  {
+   "job": "job_372d7c5929546e985876b566fe8b6a44",
+   "opportunity": "opp_372d7c5929546e985876b566fe8b6a44",
+   "source": "ashby:supabase",
+   "source_job_id": "d5573afa-636c-4219-832f-386f498243bf",
+   "url": "https://jobs.ashbyhq.com/supabase/d5573afa-636c-4219-832f-386f498243bf",
+   "company": "Supabase",
+   "title": "Customer Solution Architect (AMER)",
+   "location": "Remote, AMER",
+   "workplace": "remote",
+   "posted_at": "2024-11-14T17:58:07.662+00:00",
+   "age_days": 686,
+   "content_fingerprint": "2033dcd1a2730c6aa5b9fefcd2a09d14da62f43cb765b00386bd7fd9874d89e4",
+   "in_cells": {
+    "A1": {
+     "tier": "worth_reviewing",
+     "position": 21
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.0,
+    "support": 2.0,
+    "reasons": [
+     "Senior level, as you want",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [
+     "holding work_shape: Customer-facing engineering (solutions, forward-deployed), not product or platform engineering"
+    ],
+    "review_key_default_model": "rev_96a21c72a596ef8d656b334d67d77af2",
+    "review_prompt_chars": 10173
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "valid",
+    "label": "no",
+    "reasons": [
+     "customer_facing",
+     "staleness"
+    ],
+    "note": "customer solutions architect",
+    "quote": "Work with customers to lead proof-of-value implementations"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "plausible",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "partial",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Design and architect technical solutions built on the Supabase platform."
+      },
+      {
+       "aspect": "ownership",
+       "quote": "CSA’s are responsible for the entire customer journey"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "6+ years of relevant work experience in Solutions Architecture, Database Engineering, or similar."
+      },
+      {
+       "aspect": "company",
+       "quote": "Supabase was born-remote and open-source-first."
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Strong background with relational database management systems such as PostgreSQL or MySQL."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "role",
+       "quote": "Deliver on synchronous and asynchronous engagements with Supabase customers"
+      },
+      {
+       "aspect": "work_style",
+       "quote": "Well-organized and effective storyteller with meaningful interpersonal skills."
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 2049,
+     "output_tokens": 1434
+    }
+   }
+  },
+  {
+   "job": "job_0f26d5c1b7218af571ed3d102a4ad4eb",
+   "opportunity": "opp_0f26d5c1b7218af571ed3d102a4ad4eb",
+   "source": "ashby:supabase",
+   "source_job_id": "3ab0b926-c9b5-4197-aff2-88d5bf009e13",
+   "url": "https://jobs.ashbyhq.com/supabase/3ab0b926-c9b5-4197-aff2-88d5bf009e13",
+   "company": "Supabase",
+   "title": "Edge Functions Engineer",
+   "location": "Remote, Global",
+   "workplace": "remote",
+   "posted_at": "2026-05-13T09:45:06.011+00:00",
+   "age_days": 141,
+   "content_fingerprint": "3f3f5edaa8722363d8555668c4aaddb086511c66840ec2d29806afb5bd03dfa9",
+   "in_cells": {
+    "A1": {
+     "tier": "strong_fit",
+     "position": 5
+    },
+    "B1": {
+     "tier": "strong_fit",
+     "position": 8
+    },
+    "A2_first_load": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 2.0,
+    "reasons": [
+     "Infrastructure work (from what the description asks for), the kind of engineering you want",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "Real ownership, as you want: “What You’ll Own”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_2ad635798cdda8ac0132c63ea84704ea",
+    "review_prompt_chars": 8303
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "specialization_depth"
+    ],
+    "note": "Rust/Deno runtime specialty",
+    "quote": "Rust-based host that runs the Deno isolate"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Implementing monitoring, alerting, and OpenTelemetry tracing across the runtime"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "What You’ll Own"
+      },
+      {
+       "aspect": "culture",
+       "quote": "We believe deeply in the open-source ecosystem and strive to support—not replace—existing tools and communities."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "At least 5 years of backend or systems engineering experience, with strong fluency in Rust and TypeScript."
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Experience with V8 Isolates, Deno and the JavaScript runtimes in general."
+      },
+      {
+       "aspect": "company",
+       "quote": "~400 team members"
+      }
+     ],
+     "uncertainties": 1,
+     "rejected_points": 0,
+     "input_tokens": 1775,
+     "output_tokens": 885
+    },
+    "B2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Infrastructure concerns like regions, cold starts, CPU and memory provisioning"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "What You’ll Own"
+      },
+      {
+       "aspect": "role",
+       "quote": "Help manage and improve features like scheduled functions, background tasks, WebSockets streaming, ephemeral file storag"
+      },
+      {
+       "aspect": "culture",
+       "quote": "We move fast, build in public, and use what we ship."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "At least 5 years of backend or systems engineering experience, with strong fluency in Rust and TypeScript."
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Experience with V8 Isolates, Deno and the JavaScript runtimes in general."
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1775,
+     "output_tokens": 1723
+    }
+   }
+  },
+  {
+   "job": "job_95bcdb6219ae86c491d2a828ae4a7eba",
+   "opportunity": "opp_95bcdb6219ae86c491d2a828ae4a7eba",
+   "source": "ashby:supabase",
+   "source_job_id": "fab1525f-3d89-4d1c-9094-84d21647415e",
+   "url": "https://jobs.ashbyhq.com/supabase/fab1525f-3d89-4d1c-9094-84d21647415e",
+   "company": "Supabase",
+   "title": "FinOps Engineer",
+   "location": "Remote, Global",
+   "workplace": "remote",
+   "posted_at": "2026-09-16T18:40:09.760+00:00",
+   "age_days": 15,
+   "content_fingerprint": "2668274237e273ff33839668b9c87c8ff35f25292c7ee855fc6bd61655029152",
+   "in_cells": {
+    "A1": {
+     "tier": "strong_fit",
+     "position": 7
+    },
+    "B1": {
+     "tier": "strong_fit",
+     "position": 10
+    },
+    "A2_first_load": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "check",
+    "role_fit": 0.75,
+    "support": 1.5,
+    "reasons": [
+     "Infrastructure work (from what the description asks for), the kind of engineering you want",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "Individual-contributor work: “This is a hands-on engineering role, not an analyst seat.”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_144fa37f10d582044dcca0cff3ededc4",
+    "review_prompt_chars": 8838
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "role_shape"
+    ],
+    "note": "cloud-cost engineering with Finance; adjacent, not the work",
+    "quote": "prior experience in a FinOps, cloud cost management, or cloud governance role"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "unknown",
+     "seniority": "unknown",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "This is a hands-on engineering role, not an analyst seat."
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Take ideas from identification through to a realized dollar figure, not just a recommendation."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Have prior experience in a FinOps, cloud cost management, or cloud governance role."
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Build and maintain cost attribution: Tagging policies, cost allocation, and chargeback/showback"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1873,
+     "output_tokens": 1631
+    },
+    "B2": {
+     "fit": "plausible",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "unknown",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "drive cost optimization and cloud financial governance across our AWS infrastructure and GCP footprint"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Take ideas from identification through to a realized dollar figure, not just a recommendation."
+      },
+      {
+       "aspect": "work_style",
+       "quote": "This is a hands-on engineering role, not an analyst seat."
+      },
+      {
+       "aspect": "culture",
+       "quote": "Supabase is the Postgres development platform, built by developers for developers."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Have prior experience in a FinOps, cloud cost management, or cloud governance role."
+      },
+      {
+       "aspect": "company",
+       "quote": "~400 team members"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1873,
+     "output_tokens": 1588
+    }
+   }
+  },
+  {
+   "job": "job_4bd4867204b6ffa164d79c2ea5706cde",
+   "opportunity": "opp_4bd4867204b6ffa164d79c2ea5706cde",
+   "source": "ashby:supabase",
+   "source_job_id": "f035bda1-b5d3-4c5b-8736-b9c335fe1c3b",
+   "url": "https://jobs.ashbyhq.com/supabase/f035bda1-b5d3-4c5b-8736-b9c335fe1c3b",
+   "company": "Supabase",
+   "title": "Multigres Deployment Engineer",
+   "location": "Remote, Global",
+   "workplace": null,
+   "posted_at": "2026-04-15T20:52:02.563+00:00",
+   "age_days": 168,
+   "content_fingerprint": "74c4f5d6d0dc5141cc9386c4b08e3b648b5ed465cfa374497eb2410f732569fb",
+   "in_cells": {
+    "A1": {
+     "tier": "strong_fit",
+     "position": 8
+    },
+    "B1": {
+     "tier": "strong_fit",
+     "position": 11
+    },
+    "A2_first_load": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 1.5,
+    "reasons": [
+     "Infrastructure work, the kind of engineering you want: “…that powers our Kubernetes-based infrastructure.”",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "Individual-contributor work: “- Deep Kubernetes expertise - Hands-on experience with Kubernetes internals, custom resources, and cloud-managed Kubernetes services (EKS…”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_22fc893495e7f795f4a330b2f3ffee18",
+    "review_prompt_chars": 8073
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "valid",
+    "label": "no",
+    "reasons": [
+     "specialization_depth"
+    ],
+    "note": "Kubernetes operator/CSI internals",
+    "quote": "Hands-on experience with Kubernetes internals, custom resources"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "match",
+     "company_fit": "partial",
+     "seniority": "partial",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "own the deployment and operational infrastructure of Multigres"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "You'll be responsible for building and maintaining the Multigres Operator"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Go-based Kubernetes operator"
+      },
+      {
+       "aspect": "culture",
+       "quote": "We move fast, build in public, and use what we ship."
+      },
+      {
+       "aspect": "company",
+       "quote": "All services are deeply integrated and designed for growth."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Proficiency in Go and experience building production-grade operators or controllers"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Deep Kubernetes expertise"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Work with CSI drivers, persistent volumes, and cross-cloud networking"
+      },
+      {
+       "aspect": "team",
+       "quote": "~400 team members"
+      }
+     ],
+     "uncertainties": 3,
+     "rejected_points": 0,
+     "input_tokens": 1678,
+     "output_tokens": 1831
+    },
+    "B2": {
+     "fit": "plausible",
+     "role_fit": "match",
+     "company_fit": "partial",
+     "seniority": "partial",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "own the deployment and operational infrastructure of Multigres, our distributed Postgres platform"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Develop deployment tooling - Create internal tools and automation for provisioning, scaling, and managing Multigres clus"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "You'll be responsible for building and maintaining the Multigres Operator"
+      },
+      {
+       "aspect": "culture",
+       "quote": "We move fast, build in public, and use what we ship."
+      }
+     ],
+     "contradictions": [],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1678,
+     "output_tokens": 1787
+    }
+   }
+  },
+  {
+   "job": "job_0fb13f19838c0fd92d9feadcbbfcf797",
+   "opportunity": "opp_0fb13f19838c0fd92d9feadcbbfcf797",
+   "source": "ashby:supabase",
+   "source_job_id": "2e718684-4f75-4a99-8d6b-3b6bd44e4228",
+   "url": "https://jobs.ashbyhq.com/supabase/2e718684-4f75-4a99-8d6b-3b6bd44e4228",
+   "company": "Supabase",
+   "title": "Multigres Engineer",
+   "location": "Remote, Global",
+   "workplace": null,
+   "posted_at": "2025-06-04T00:35:34.670+00:00",
+   "age_days": 484,
+   "content_fingerprint": "4218c4e467c48e0aeb0aa1260bedc9340930d9bc34505360c15b142529435f05",
+   "in_cells": {
+    "A1": {
+     "tier": "worth_reviewing",
+     "position": 19
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 1.0,
+    "reasons": [
+     "Backend work (from what the description asks for), the kind of engineering you want",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_80efd219e7d6f1b931e1e9744a388a47",
+    "review_prompt_chars": 7302
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "valid",
+    "label": "no",
+    "reasons": [
+     "specialization_depth",
+     "staleness"
+    ],
+    "note": "distributed database internals (avoided)",
+    "quote": "Database sharding, relational algebra, and Postgres internals"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "partial",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "critical distributed database infrastructure"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "You'll architect and implement"
+      },
+      {
+       "aspect": "company",
+       "quote": "We move fast, build in public"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Database sharding, relational algebra, and Postgres internals"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "This role requires deep technical expertise in distributed databases and systems."
+      },
+      {
+       "aspect": "company",
+       "quote": "~400 team members"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1552,
+     "output_tokens": 1476
+    }
+   }
+  },
+  {
+   "job": "job_dbcb3f7022c4d9189980d052ec4593b3",
+   "opportunity": "opp_dbcb3f7022c4d9189980d052ec4593b3",
+   "source": "ashby:supabase",
+   "source_job_id": "11beb619-0c25-4b11-9818-3f18e278c65b",
+   "url": "https://jobs.ashbyhq.com/supabase/11beb619-0c25-4b11-9818-3f18e278c65b",
+   "company": "Supabase",
+   "title": "Performance Engineer - Benchmarking",
+   "location": "Remote, Global",
+   "workplace": null,
+   "posted_at": "2026-07-28T09:49:44.361+00:00",
+   "age_days": 65,
+   "content_fingerprint": "f7e916092d57d790c7c801b092b71b89347d98e59ce633b210f80ca00b65d526",
+   "in_cells": {
+    "A1": {
+     "tier": "worth_reviewing",
+     "position": 17
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 1.0,
+    "reasons": [
+     "Backend work (from what the description asks for), the kind of engineering you want",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_188e90e51813bb6dcf146bdb2ad35274",
+    "review_prompt_chars": 8471
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "specialization_depth"
+    ],
+    "note": "benchmarking/performance specialty",
+    "quote": "owns the benchmarking and profiling systems"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "seniority",
+       "quote": "We’re hiring experienced performance engineers"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "There’s no legacy process to inherit — you’ll help define how we measure and communicate performance metrics at Supabase"
+      },
+      {
+       "aspect": "team",
+       "quote": "You’d join a new performance team as one of its first members"
+      },
+      {
+       "aspect": "work_style",
+       "quote": "You’ll build the tooling and the methodology and make it easy for product teams to use it correctly."
+      },
+      {
+       "aspect": "company",
+       "quote": "Supabase was born-remote and open-source-first."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Deep experience in performance engineering, benchmarking, and profiling of complex distributed systems."
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Partner closely with database teams (e.g. Multigres, OrioleDB) to identify bottlenecks and land concrete performance imp"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1762,
+     "output_tokens": 973
+    }
+   }
+  },
+  {
+   "job": "job_d49ae8ac380cabca7ebe850221b014bb",
+   "opportunity": "opp_d49ae8ac380cabca7ebe850221b014bb",
+   "source": "ashby:supabase",
+   "source_job_id": "4eb14408-51e6-4c58-812a-3782d5c0b045",
+   "url": "https://jobs.ashbyhq.com/supabase/4eb14408-51e6-4c58-812a-3782d5c0b045",
+   "company": "Supabase",
+   "title": "Platform Engineer - Compute Capacity",
+   "location": "Remote, Global",
+   "workplace": "remote",
+   "posted_at": "2026-09-02T10:03:09.472+00:00",
+   "age_days": 29,
+   "content_fingerprint": "e98dd884dc4cd0c0d600d8095bb2e4ac26e9a5cd29b3cf2e4dc0abe934078c91",
+   "in_cells": {
+    "A1": {
+     "tier": "strong_fit",
+     "position": 1
+    },
+    "B1": {
+     "tier": "strong_fit",
+     "position": 3
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "check",
+    "role_fit": 1.0,
+    "support": 3.0,
+    "reasons": [
+     "Senior platform work, the kind of engineering you want",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "Real ownership, as you want: “…observability for systems you own — metrics that answer real questions and alerting people trust (Prometheus/Grafana, CloudWatch, or…”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_4068121f5067ce79e7753026242bedd0",
+    "review_prompt_chars": 9201
+   },
+   "judgment": {
+    "fit": "strong_yes",
+    "practicality": "valid",
+    "label": "strong_yes",
+    "reasons": [
+     "role_shape"
+    ],
+    "note": "platform/infrastructure at a growth-stage company, owned systems",
+    "quote": "design, build, and operate systems that are both robust and highly automated"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "plausible",
+     "role_fit": "match",
+     "company_fit": "partial",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "systems that turn a capacity plan into provisioned reality"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Have 5+ years across infrastructure engineering, SRE, platform, or capacity engineering"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "You'll design, build, and operate systems"
+      },
+      {
+       "aspect": "company",
+       "quote": "Supabase was born-remote and open-source-first."
+      }
+     ],
+     "contradictions": [],
+     "uncertainties": 3,
+     "rejected_points": 0,
+     "input_tokens": 1913,
+     "output_tokens": 1421
+    },
+    "B2": {
+     "fit": "plausible",
+     "role_fit": "partial",
+     "company_fit": "match",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "You'll work on the systems that turn a capacity plan into provisioned reality: reservation acquisition, fleet reconcilia"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Have 5+ years across infrastructure engineering, SRE, platform, or capacity engineering"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "You'll design, build, and operate systems that are both robust and highly automated"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Have experience with Infrastructure as Code (Pulumi or Terraform)"
+      },
+      {
+       "aspect": "company",
+       "quote": "Supabase was born-remote and open-source-first."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Support buffer policy by modeling headroom targets and their cost tradeoffs for review and sign-off"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Have solid working knowledge of AWS EC2: instance families and generations, purchase options, capacity reservations, and"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1913,
+     "output_tokens": 2172
+    }
+   }
+  },
+  {
+   "job": "job_578c4b8e926ac7a63a2747ec640cfe8d",
+   "opportunity": "opp_578c4b8e926ac7a63a2747ec640cfe8d",
+   "source": "ashby:supabase",
+   "source_job_id": "6c9de03c-e289-4612-9045-492985d0274b",
+   "url": "https://jobs.ashbyhq.com/supabase/6c9de03c-e289-4612-9045-492985d0274b",
+   "company": "Supabase",
+   "title": "Platform Engineer, Edge & Networking",
+   "location": "Remote, Global",
+   "workplace": null,
+   "posted_at": "2026-09-14T13:27:23.742+00:00",
+   "age_days": 17,
+   "content_fingerprint": "b25d42c127c4c9bfde4b30607fca7a254ae812f7a4cf8b6593b2868ad0951866",
+   "in_cells": {
+    "A1": {
+     "tier": "strong_fit",
+     "position": 4
+    },
+    "B1": {
+     "tier": "strong_fit",
+     "position": 7
+    },
+    "A2_first_load": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "check",
+    "role_fit": 1.0,
+    "support": 2.0,
+    "reasons": [
+     "Senior platform work, the kind of engineering you want",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_a695dc6bd4366cf86a423ba643c1b741",
+    "review_prompt_chars": 8534
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "specialization_depth"
+    ],
+    "note": "networking/edge specialty",
+    "quote": "4+ years experience building and operating high-scale networking or edge infrastructure"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "We are seeking a platform engineer to join our Edge & Networking squad."
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Design and implement Supabase’s global edge router platform;"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "5+ years experience in SRE/DevOps/Cloud Infrastructure;"
+      },
+      {
+       "aspect": "culture",
+       "quote": "Supabase was born-remote and open-source-first."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Work with DNS, WAF, IP networking, TLS termination, CDN integrations, and global load balancing;"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "4+ years experience building and operating high-scale networking or edge infrastructure;"
+      },
+      {
+       "aspect": "company",
+       "quote": "~400 team members"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1799,
+     "output_tokens": 1294
+    },
+    "B2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "join our Edge & Networking squad"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Design and implement Supabase’s global edge router platform"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "5+ years experience in SRE/DevOps/Cloud Infrastructure"
+      },
+      {
+       "aspect": "culture",
+       "quote": "We move fast, build in public, and use what we ship."
+      },
+      {
+       "aspect": "company",
+       "quote": "Supabase was born-remote and open-source-first."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "4+ years experience building and operating high-scale networking or edge infrastructure"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Work with DNS, WAF, IP networking, TLS termination, CDN integrations, and global load balancing"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1799,
+     "output_tokens": 1755
+    }
+   }
+  },
+  {
+   "job": "job_1abe6bd0b6d9b35046bcf037fcf22784",
+   "opportunity": "opp_1abe6bd0b6d9b35046bcf037fcf22784",
+   "source": "ashby:supabase",
+   "source_job_id": "8fa1c7a0-a85c-4562-a1f5-4dd22cadae27",
+   "url": "https://jobs.ashbyhq.com/supabase/8fa1c7a0-a85c-4562-a1f5-4dd22cadae27",
+   "company": "Supabase",
+   "title": "Platform Security Engineer (AMER/APAC)",
+   "location": "Remote, Global",
+   "workplace": "remote",
+   "posted_at": "2026-09-02T20:44:27.045+00:00",
+   "age_days": 28,
+   "content_fingerprint": "d08631b04ff85b30ce1c7736e9314d94c42f4e60624c8695b4b57f45d1ffeaf9",
+   "in_cells": {
+    "A1": {
+     "tier": "strong_fit",
+     "position": 6
+    },
+    "B1": {
+     "tier": "strong_fit",
+     "position": 9
+    },
+    "A2_first_load": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "check",
+    "role_fit": 1.0,
+    "support": 1.5,
+    "reasons": [
+     "Platform work, the kind of engineering you want",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "Individual-contributor work: “This role is ideal for someone who has deep hands-on experience with AWS, Kubernetes, containers, Linux, and large cloud environments and…”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_7ff2bb6be1479b32c2378f8bd3c1493e",
+    "review_prompt_chars": 9026
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "specialization_depth"
+    ],
+    "note": "security specialty the persona didn't choose",
+    "quote": "senior-level experience in platform security, cloud security"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "strengthen the security of Supabase’s infrastructure, cloud platform, Kubernetes environments, and containerized workloa"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Have senior-level experience in platform security, cloud security, infrastructure security, container security, or secur"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Build scalable mechanisms such as automation, guardrails, paved paths, detection, secure defaults, and review frameworks"
+      },
+      {
+       "aspect": "company",
+       "quote": "Supabase was born-remote and open-source-first."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Have deep practical experience with AWS, Kubernetes, containers, and Linux security fundamentals."
+      },
+      {
+       "aspect": "team",
+       "quote": "~400 team members"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1856,
+     "output_tokens": 1117
+    },
+    "B2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "strengthen the security of Supabase’s infrastructure, cloud platform, Kubernetes environments, and containerized workloa"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Have senior-level experience"
+      },
+      {
+       "aspect": "company",
+       "quote": "as we continue to scale"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "senior-level experience in platform security, cloud security, infrastructure security, container security, or security e"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "deep practical experience with AWS, Kubernetes, containers, and Linux security fundamentals"
+      }
+     ],
+     "uncertainties": 1,
+     "rejected_points": 0,
+     "input_tokens": 1856,
+     "output_tokens": 1212
+    }
+   }
+  },
+  {
+   "job": "job_fc763bb234bb18718ee27d68a62cd859",
+   "opportunity": "opp_fc763bb234bb18718ee27d68a62cd859",
+   "source": "ashby:supabase",
+   "source_job_id": "48950725-e0d9-4025-92d9-f75e1b60ce45",
+   "url": "https://jobs.ashbyhq.com/supabase/48950725-e0d9-4025-92d9-f75e1b60ce45",
+   "company": "Supabase",
+   "title": "Postgres Deployment Engineer (Nix)",
+   "location": "Remote, Global",
+   "workplace": null,
+   "posted_at": "2026-06-26T15:11:07.016+00:00",
+   "age_days": 97,
+   "content_fingerprint": "12f7e418679f589155a4c220a552c93c0453110ebb5d63b5efb80c832fea0f00",
+   "in_cells": {
+    "A1": {
+     "tier": "worth_reviewing",
+     "position": 22
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 1.0,
+    "reasons": [
+     "Infrastructure work, the kind of engineering you want: “You will act as a bridge between product and infrastructure teams to improve the reliability of deployments and upgrades.”",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [
+     "holding seniority: Mid level, a step below the senior level you want"
+    ],
+    "review_key_default_model": "rev_90c63bc89cf3a5547d2733c0dda5df6e",
+    "review_prompt_chars": 8315
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "specialization_depth",
+     "customer_facing"
+    ],
+    "note": "Nix/Postgres packaging and deployment specialty",
+    "quote": "Package software into our supabase/postgres repo using Nix"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "match",
+     "company_fit": "partial",
+     "seniority": "partial",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "owning the stability and deployment of our products"
+      },
+      {
+       "aspect": "role",
+       "quote": "Expand platform release systems to allow developers to increasingly self-service."
+      },
+      {
+       "aspect": "ownership",
+       "quote": "playing an instrumental role in technical decision-making"
+      },
+      {
+       "aspect": "culture",
+       "quote": "born-remote and open-source-first"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "proficient in the Nix package management system (including flakes)"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1752,
+     "output_tokens": 1769
+    }
+   }
+  },
+  {
+   "job": "job_0fa476937b300165e5c22209cc41d93a",
+   "opportunity": "opp_0fa476937b300165e5c22209cc41d93a",
+   "source": "ashby:supabase",
+   "source_job_id": "f6035bf8-4f44-4425-9944-d5509a3c8652",
+   "url": "https://jobs.ashbyhq.com/supabase/f6035bf8-4f44-4425-9944-d5509a3c8652",
+   "company": "Supabase",
+   "title": "Release Engineer",
+   "location": "Remote, Global",
+   "workplace": null,
+   "posted_at": "2026-07-27T11:06:59.312+00:00",
+   "age_days": 66,
+   "content_fingerprint": "4b8743940231d26304336be304571c69d1f8ffb597632a230821d75e7e245e6a",
+   "in_cells": {
+    "A1": {
+     "tier": "strong_fit",
+     "position": 2
+    },
+    "B1": {
+     "tier": "strong_fit",
+     "position": 4
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 3.0,
+    "reasons": [
+     "Senior infrastructure work (from what the description asks for), the kind of engineering you want",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "Real ownership, as you want: “…with SLOs, error budgets, and on-call ownership — and you'll be the person teams lean on when reliability is on the line.”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_2ed9e4babe9e2a8373d5fde6af4c6567",
+    "review_prompt_chars": 9323
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "specialization_depth"
+    ],
+    "note": "release/SRE reliability specialty, on-call heavy",
+    "quote": "Participate in on-call, lead blameless postmortems"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "plausible",
+     "role_fit": "match",
+     "company_fit": "partial",
+     "seniority": "partial",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Own the reliability of Supabase's deployment and release systems"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "you'll be the person teams lean on when reliability is on the line"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Have 5+ years in SRE, production operations, platform engineering, or release engineering"
+      },
+      {
+       "aspect": "company",
+       "quote": "open-source-first"
+      },
+      {
+       "aspect": "culture",
+       "quote": "We move fast, build in public, and use what we ship."
+      },
+      {
+       "aspect": "work_style",
+       "quote": "standardizing and instrumenting today's fragmented, ad-hoc deployment workflows"
+      }
+     ],
+     "contradictions": [],
+     "uncertainties": 3,
+     "rejected_points": 0,
+     "input_tokens": 2008,
+     "output_tokens": 1182
+    },
+    "B2": {
+     "fit": "plausible",
+     "role_fit": "match",
+     "company_fit": "partial",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "making deploys safe, observable, and recoverable at scale"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Have 5+ years in SRE, production operations, platform engineering, or release engineering"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Own the reliability of Supabase's deployment and release systems"
+      },
+      {
+       "aspect": "company",
+       "quote": "Over $1B raised (including our $500M Series F)"
+      },
+      {
+       "aspect": "culture",
+       "quote": "Supabase was born-remote and open-source-first."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "a production-operations expert"
+      }
+     ],
+     "uncertainties": 3,
+     "rejected_points": 0,
+     "input_tokens": 2008,
+     "output_tokens": 1925
+    }
+   }
+  },
+  {
+   "job": "job_634dd38637dbbd4568ebbdc946cb4666",
+   "opportunity": "opp_634dd38637dbbd4568ebbdc946cb4666",
+   "source": "ashby:supabase",
+   "source_job_id": "e569b7f7-fa8f-4139-86f6-4f52b456882d",
+   "url": "https://jobs.ashbyhq.com/supabase/e569b7f7-fa8f-4139-86f6-4f52b456882d",
+   "company": "Supabase",
+   "title": "Software Engineer - Auth",
+   "location": "Remote, Global",
+   "workplace": "remote",
+   "posted_at": "2026-04-08T14:16:04.915+00:00",
+   "age_days": 176,
+   "content_fingerprint": "528de2abcefa40f0a6903b921f2cc00d60e990fa305e75d6013318ad1066c090",
+   "in_cells": {
+    "A1": {
+     "tier": "worth_reviewing",
+     "position": 18
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 1.5,
+    "reasons": [
+     "Infrastructure work (from what the description asks for), the kind of engineering you want",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "Individual-contributor work: “- Have hands-on experience building and operating services at significant scale.”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [
+     "holding seniority: Mid level, a step below the senior level you want"
+    ],
+    "review_key_default_model": "rev_3a5e33f6bc13c99d572d7288c7f42c9d",
+    "review_prompt_chars": 8856
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "valid",
+    "label": "maybe",
+    "reasons": [
+     "specialization_depth"
+    ],
+    "note": "backend Go, but requires an auth-protocol specialty",
+    "quote": "2+ years of professional experience working on an authentication system"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "partial",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Designing and implementing secure, scalable authentication features in Go and TypeScript."
+      },
+      {
+       "aspect": "ownership",
+       "quote": "Owning the performance, reliability, and scalability of the Auth server across Supabase's infrastructure."
+      },
+      {
+       "aspect": "work_style",
+       "quote": "Working across the stack: from server-side protocols to client-side libraries for frameworks like Next.js."
+      },
+      {
+       "aspect": "culture",
+       "quote": "Supabase was born-remote and open-source-first."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "Have 2+ years of professional experience working on an authentication system (implementing protocol support, maintenance"
+      },
+      {
+       "aspect": "role",
+       "quote": "Contributing to the evolution of our Auth architecture, including support for OAuth, OIDC, SAML, and other protocols."
+      },
+      {
+       "aspect": "company",
+       "quote": "~400 team members"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1879,
+     "output_tokens": 1908
+    }
+   }
+  },
+  {
+   "job": "job_db539adfc1d67f89427b009a9014a106",
+   "opportunity": "opp_db539adfc1d67f89427b009a9014a106",
+   "source": "ashby:supabase",
+   "source_job_id": "06752423-eebb-472c-95b5-c7ff2559fd60",
+   "url": "https://jobs.ashbyhq.com/supabase/06752423-eebb-472c-95b5-c7ff2559fd60",
+   "company": "Supabase",
+   "title": "Software Engineer - Branching",
+   "location": "Remote, Global",
+   "workplace": null,
+   "posted_at": "2026-09-02T10:25:03.190+00:00",
+   "age_days": 29,
+   "content_fingerprint": "46e3c94d383d9616ac107b6a4951e4cca08b4952787a98bfee17e98d8ca15b73",
+   "in_cells": {
+    "A1": {
+     "tier": "worth_reviewing",
+     "position": 14
+    },
+    "B1": {
+     "tier": "worth_reviewing",
+     "position": 35
+    },
+    "A2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "A2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "plausible",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "check",
+    "role_fit": 0.75,
+    "support": 2.0,
+    "reasons": [
+     "Infrastructure work (from what the description asks for), the kind of engineering you want",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "Real ownership, as you want: “- Have an ownership mindset - you thrive in being able to operate independently with high-level guidance”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [
+     "holding seniority: Mid level, a step below the senior level you want"
+    ],
+    "review_key_default_model": "rev_281225f27c63b0765c28a14d21726b00",
+    "review_prompt_chars": 8483
+   },
+   "judgment": {
+    "fit": "strong_yes",
+    "practicality": "valid",
+    "label": "strong_yes",
+    "reasons": [
+     "role_shape",
+     "ownership"
+    ],
+    "note": "distributed CI/CD orchestration platform, ownership mindset",
+    "quote": "design and build the distributed systems responsible for running CI/CD pipelines"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "plausible",
+     "role_fit": "match",
+     "company_fit": "partial",
+     "seniority": "partial",
+     "specialization": "match",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "design and build the distributed systems responsible for running CI/CD pipelines securely and efficiently"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Have strong software engineering skills (Go and Typescript required);"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "you thrive in being able to operate independently with high-level guidance"
+      },
+      {
+       "aspect": "company",
+       "quote": "Supabase was born-remote and open-source-first."
+      },
+      {
+       "aspect": "work_style",
+       "quote": "We move fast, build in public, and use what we ship."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "team",
+       "quote": "~400 team members"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1775,
+     "output_tokens": 1225
+    }
+   }
+  },
+  {
+   "job": "job_c1b6a0761ece46c6346070d31d0ffaa2",
+   "opportunity": "opp_c1b6a0761ece46c6346070d31d0ffaa2",
+   "source": "ashby:supabase",
+   "source_job_id": "b75ba81e-54cc-4393-a575-bc41776b0113",
+   "url": "https://jobs.ashbyhq.com/supabase/b75ba81e-54cc-4393-a575-bc41776b0113",
+   "company": "Supabase",
+   "title": "Supalite Engineer",
+   "location": "Remote, Global",
+   "workplace": null,
+   "posted_at": "2026-07-17T10:25:35.625+00:00",
+   "age_days": 76,
+   "content_fingerprint": "b8b69ed75d1c8d5e95704bf413d93abd0b95371f77e28f9bdcba0545c5ef85fc",
+   "in_cells": {
+    "A1": {
+     "tier": "strong_fit",
+     "position": 3
+    },
+    "B1": {
+     "tier": "strong_fit",
+     "position": 5
+    },
+    "A2_first_load": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "A2": {
+     "final_fit": "poor",
+     "tier": "low_priority"
+    },
+    "B2_first_load": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "VerifyFirst",
+    "gate_why": "the listing has not been verified",
+    "practicality": "concern",
+    "role_fit": 0.75,
+    "support": 3.0,
+    "reasons": [
+     "Infrastructure work (from what the description asks for), the kind of engineering you want",
+     "A growth-stage company, the kind of company you want: “- Over $1B raised (including our $500M Series F)”",
+     "A small team, as you want: “Small team, working product, patterns still to be set - you'll own large areas end to end and make real decisions from day one.”",
+     "Real ownership, as you want: “Small team, working product, patterns still to be set - you'll own large areas end to end and make real decisions from day one.”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_6062660b34b9b8090d60932965bfa272",
+    "review_prompt_chars": 8954
+   },
+   "judgment": {
+    "fit": "strong_yes",
+    "practicality": "valid",
+    "label": "strong_yes",
+    "reasons": [
+     "role_shape",
+     "ownership",
+     "team_shape"
+    ],
+    "note": "small team, broad generalist, owns large areas",
+    "quote": "Small team, working product, patterns still to be set"
+   },
+   "reviews": {
+    "A2": {
+     "fit": "poor",
+     "role_fit": "match",
+     "company_fit": "partial",
+     "seniority": "match",
+     "specialization": "mismatch",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "a lightweight, TypeScript-native implementation of Supabase"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "you'll own large areas end to end and make real decisions from day one"
+      },
+      {
+       "aspect": "team",
+       "quote": "Small team, working product, patterns still to be set"
+      },
+      {
+       "aspect": "culture",
+       "quote": "We move fast, build in public, and use what we ship."
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Have substantial backend or full-stack experience"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "comfortable moving across the stack from API design to storage internals to infrastructure"
+      },
+      {
+       "aspect": "company",
+       "quote": "~400 team members"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 0,
+     "input_tokens": 1927,
+     "output_tokens": 2253
+    },
+    "B2": {
+     "fit": "plausible",
+     "role_fit": "partial",
+     "company_fit": "partial",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "Grow API compatibility with the Supabase client"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "Are a strong generalist, comfortable moving across the stack from API design to storage internals to infrastructure"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Have substantial backend or full-stack experience"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "you'll own large areas end to end and make real decisions from day one"
+      },
+      {
+       "aspect": "team",
+       "quote": "This is a founding role on a brand-new team"
+      },
+      {
+       "aspect": "culture",
+       "quote": "We move fast, build in public, and use what we ship."
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "specialization",
+       "quote": "from API design to storage internals to infrastructure"
+      },
+      {
+       "aspect": "company",
+       "quote": "~400 team members"
+      }
+     ],
+     "uncertainties": 2,
+     "rejected_points": 1,
+     "input_tokens": 1927,
+     "output_tokens": 1190
+    }
+   }
+  },
+  {
+   "job": "job_62a13793be6e8b8db5b6ecf55c721505",
+   "opportunity": "opp_62a13793be6e8b8db5b6ecf55c721505",
+   "source": "ashby:temporal",
+   "source_job_id": "e75ff82a-19e2-470e-ac4b-49f0a87acd76",
+   "url": "https://jobs.ashbyhq.com/temporal/e75ff82a-19e2-470e-ac4b-49f0a87acd76",
+   "company": "temporal",
+   "title": "Senior Platform Architect",
+   "location": "London, England",
+   "workplace": "remote",
+   "posted_at": "2026-08-17T13:03:43.839+00:00",
+   "age_days": 45,
+   "content_fingerprint": "18df4b2056c79968929ced3680702e8d4c3a0f28038863ad91b35d197cc51ffb",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 25
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "plausible",
+     "tier": "worth_reviewing"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing is remote but names only London, England; it doesn't say where remote work is allowed",
+    "practicality": "check",
+    "role_fit": 1.0,
+    "support": 2.0,
+    "reasons": [
+     "Senior platform work, the kind of engineering you want",
+     "Real ownership, as you want: “- Act as the single owner of customers' scale-proof production readiness”",
+     "Uses Kubernetes the way you have (running services on Kubernetes), not Kubernetes control-plane internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_0db99a94679ffeed9356806d99682559",
+    "review_prompt_chars": 9033
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "impossible",
+    "label": "impossible",
+    "reasons": [
+     "customer_facing",
+     "eligibility"
+    ],
+    "note": "customer-facing technical services; London/Manchester",
+    "quote": "Work on your assigned customers' most difficult tickets"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "plausible",
+     "role_fit": "partial",
+     "company_fit": "unknown",
+     "seniority": "match",
+     "specialization": "partial",
+     "affirmative": [
+      {
+       "aspect": "ownership",
+       "quote": "Act as the single owner of customers' scale-proof production readiness"
+      },
+      {
+       "aspect": "role",
+       "quote": "Establish guardrails and best practices for reliability, failure handling, scaling, and upgrades"
+      },
+      {
+       "aspect": "seniority",
+       "quote": "6+ years of professional software engineering or solutions engineering experience"
+      }
+     ],
+     "contradictions": [
+      {
+       "aspect": "role",
+       "quote": "Lead cross-functional coordination of Professional Services, Support, Partners, and internal teams"
+      }
+     ],
+     "uncertainties": 3,
+     "rejected_points": 0,
+     "input_tokens": 1811,
+     "output_tokens": 1325
+    }
+   }
+  },
+  {
+   "job": "job_f73129d23d341c54d6fc24ccc1533e14",
+   "opportunity": "opp_f73129d23d341c54d6fc24ccc1533e14",
+   "source": "ashby:temporal",
+   "source_job_id": "ddbc1916-39a0-47ff-b868-c9e8b90569f1",
+   "url": "https://jobs.ashbyhq.com/temporal/ddbc1916-39a0-47ff-b868-c9e8b90569f1",
+   "company": "temporal",
+   "title": "Senior Software Engineer, Cloud Platform Foundations",
+   "location": "Seattle, Washington",
+   "workplace": "remote",
+   "posted_at": "2026-09-04T23:21:05.513+00:00",
+   "age_days": 26,
+   "content_fingerprint": "5e5be1321f6fb09508ecd8f529519274f125f3719b06ea7048a5095bd2b769a4",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 24
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing is remote but names only Seattle, Washington; it doesn't say where remote work is allowed",
+    "practicality": "check",
+    "role_fit": 1.0,
+    "support": 2.0,
+    "reasons": [
+     "Senior infrastructure work, the kind of engineering you want",
+     "Real ownership, as you want: “- High-impact ownership over systems tied directly to revenue, customer lifecycle, and platform scalability”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_cae42e7e641cf07483f13443cca02a2f",
+    "review_prompt_chars": 8917
+   },
+   "judgment": {
+    "fit": "strong_yes",
+    "practicality": "impossible",
+    "label": "impossible",
+    "reasons": [
+     "eligibility"
+    ],
+    "note": "control-plane platform work; US cities only",
+    "quote": "Seattle, Washington; Austin, Texas; San Francisco, California"
+   },
+   "reviews": {
+    "B2": {
+     "fit": "strong",
+     "role_fit": "match",
+     "company_fit": "unknown",
+     "seniority": "match",
+     "specialization": "match",
+     "affirmative": [
+      {
+       "aspect": "role",
+       "quote": "builds and operates the core infrastructure behind Temporal Cloud"
+      },
+      {
+       "aspect": "specialization",
+       "quote": "High Availability & Disaster Recovery (HA/DR) — Enabling continuous regional failover and improving platform resilience."
+      },
+      {
+       "aspect": "seniority",
+       "quote": "Senior Software Engineer, Cloud Platform Foundations"
+      },
+      {
+       "aspect": "ownership",
+       "quote": "High-impact ownership over systems tied directly to revenue, customer lifecycle, and platform scalability"
+      },
+      {
+       "aspect": "culture",
+       "quote": "Lean processes and autonomy without unnecessary bureaucracy"
+      },
+      {
+       "aspect": "team",
+       "quote": "Exceptional technical colleagues and a feedback-rich environment"
+      }
+     ],
+     "contradictions": [],
+     "uncertainties": 2,
+     "rejected_points": 1,
+     "input_tokens": 1832,
+     "output_tokens": 1452
+    }
+   }
+  },
+  {
+   "job": "job_e8ea7fab276acd3c5264b12c08f7dcd6",
+   "opportunity": "opp_e8ea7fab276acd3c5264b12c08f7dcd6",
+   "source": "ashby:temporal",
+   "source_job_id": "81cc8698-59f8-418a-85fd-1fc154b33ee4",
+   "url": "https://jobs.ashbyhq.com/temporal/81cc8698-59f8-418a-85fd-1fc154b33ee4",
+   "company": "temporal",
+   "title": "Software Engineer II, Open Source Server",
+   "location": "Seattle, Washington",
+   "workplace": "remote",
+   "posted_at": "2026-09-29T16:50:12.148+00:00",
+   "age_days": 2,
+   "content_fingerprint": "0af3c56936bc4dac53af440e7788868be7bed4d050e9da259e63f2330063784f",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 31
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing is remote but names only Seattle, Washington; it doesn't say where remote work is allowed",
+    "practicality": "check",
+    "role_fit": 0.75,
+    "support": 1.5,
+    "reasons": [
+     "Infrastructure work (from what the description asks for), the kind of engineering you want",
+     "Real ownership, as you want: “You take ownership of your work, follow through, and collaborate well with teammates.”",
+     "Individual-contributor work: “This is a hands-on engineering role where you’ll collaborate with experienced engineers to design, build, and operate components of…”",
+     "Uses PostgreSQL the way you have (using a database in applications), not database-engine internals"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_898b62265835d251f6e69a24baf9874d",
+    "review_prompt_chars": 9324
+   },
+   "judgment": {
+    "fit": "no",
+    "practicality": "impossible",
+    "label": "impossible",
+    "reasons": [
+     "seniority",
+     "eligibility"
+    ],
+    "note": "mid-level growth role; Seattle/San Francisco",
+    "quote": "while growing your skills in distributed systems engineering"
+   }
+  },
+  {
+   "job": "job_06a8f475b9c6ad7a5a9788fe4bfbe380",
+   "opportunity": "opp_06a8f475b9c6ad7a5a9788fe4bfbe380",
+   "source": "ashby:temporal",
+   "source_job_id": "05507d71-51c9-455c-80b4-2da9699a0e77",
+   "url": "https://jobs.ashbyhq.com/temporal/05507d71-51c9-455c-80b4-2da9699a0e77",
+   "company": "temporal",
+   "title": "Staff Software Engineer, Traffic",
+   "location": "Seattle, Washington",
+   "workplace": "remote",
+   "posted_at": "2026-08-18T20:20:41.231+00:00",
+   "age_days": 43,
+   "content_fingerprint": "308051ff85d488a00babaead9f6517fc6350dd067412d7a8a2b1f0be5a39b09a",
+   "in_cells": {
+    "B1": {
+     "tier": "strong_fit",
+     "position": 32
+    },
+    "B2_first_load": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    },
+    "B2": {
+     "final_fit": "strong",
+     "tier": "strong_fit"
+    }
+   },
+   "ranker": {
+    "ranking_version": "v6 (main 8942300)",
+    "fit": "strong",
+    "gate": "EligibilityUnclear",
+    "gate_why": "The listing is remote but names only Seattle, Washington; it doesn't say where remote work is allowed",
+    "practicality": "check",
+    "role_fit": 0.75,
+    "support": 1.5,
+    "reasons": [
+     "Infrastructure work (from what the description asks for), the kind of engineering you want",
+     "Real ownership, as you want: “- A strong sense of ownership and the ability to balance short-term priorities with long-term strategic goals.”",
+     "Individual-contributor work: “- Hands-on experience with cloud providers such as AWS, GCP, or Azure, and the ability to optimize cost, performance, and scalability.”"
+    ],
+    "contradictions": [],
+    "review_key_default_model": "rev_2364e8b70b04edc65582f3ecf9105c8e",
+    "review_prompt_chars": 8613
+   },
+   "judgment": {
+    "fit": "maybe",
+    "practicality": "impossible",
+    "label": "impossible",
+    "reasons": [
+     "specialization_depth",
+     "eligibility"
+    ],
+    "note": "staff networking/traffic lead; Seattle",
+    "quote": "network traffic management, network optimization, and cloud orchestration"
+   }
+  }
+ ],
+ "reviewer": {
+  "provider": "openai (OpenAI-compatible adapter, response_format json_schema strict)",
+  "model": "gpt-6-luna",
+  "name": "model/openai:gpt-6-luna",
+  "review_version": "fit-review/1",
+  "budget": "shortlist 30, 12 new reviews per ranking, concurrency 4, deadline 45 s",
+  "timeout_secs": 40,
+  "max_retries": 1,
+  "run": "2026-10-01, cold (empty review cache) per cell"
+ }
+}
