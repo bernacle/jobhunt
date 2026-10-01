@@ -76,7 +76,7 @@ fn profile(statements: &[S]) -> TasteProfile {
                 stored: true,
             })
             .collect(),
-        removed: Vec::new(),
+        ..TasteProfile::default()
     }
 }
 

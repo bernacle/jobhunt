@@ -256,7 +256,7 @@ async fn ranks_learns_and_explains() {
             "Why it may be worth your time",
             "+ Touches infrastructure (the team: “Cloud”), close to the infrastructure work you want",
             "How the fit was assessed",
-            "Fit plausible: the work 0.50, the rest 0.60 · fit-rules/1 · not reviewed by a model",
+            "Fit plausible: the work 0.50, the rest 0.60 · fit-rules/2 · not reviewed by a model",
             "Practicality",
             "• Reaches your target of USD 250,000 per year at the top of the range",
             "Every signal",

@@ -13,6 +13,11 @@
 //!                                  [[judgment]] per job in their pool
 //!   candidates/<id>/resume.md      their resume, read by the production
 //!                                  resume parser
+//!   intent.toml                    [[variant]] intent capture (BRU-324):
+//!                                  a candidate's career and pool with a
+//!                                  different statement of the kind of
+//!                                  work they want (none, inferred from
+//!                                  the career, or chosen)
 //! ```
 //!
 //! Everything is synthetic or paraphrased from public postings: no real
@@ -59,6 +64,9 @@ pub enum Group {
     Compensation,
     /// Geography, relocation and time zones.
     Practicality,
+    /// Kinds of work a career may show but the person may not want next
+    /// (intent capture, BRU-324).
+    Intent,
 }
 
 impl Group {
@@ -69,6 +77,7 @@ impl Group {
             Self::Contrastive => "contrastive",
             Self::Compensation => "compensation",
             Self::Practicality => "practicality",
+            Self::Intent => "intent",
         }
     }
 }
@@ -163,6 +172,71 @@ pub struct TasteFixture {
     pub looking_for: String,
     #[serde(default)]
     pub statement: Vec<TasteStatementFixture>,
+}
+
+/// A statement Narrow inferred from the candidate's career (as a model
+/// reading their profile would): origin `profile`, medium confidence, never
+/// reviewed.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InferredFixture {
+    pub dimension: TasteDimension,
+    pub value: String,
+    pub polarity: Polarity,
+    /// The career evidence it rests on ("Mobile Engineer · 2016–2017").
+    pub evidence: String,
+}
+
+/// How strictly a variant is held to its judgments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VariantGate {
+    /// Every case passes its judgment: nothing wrong surfaces, and no
+    /// practical Strong yes is missed.
+    Full,
+    /// Nothing wrong surfaces (no No, Impossible or Maybe on Today); Strong
+    /// yeses Narrow can't know they want may be missed (reported).
+    Precision,
+}
+
+/// The same career and pool as a candidate, with a different statement of
+/// the kind of work they want: what intent capture (BRU-324) changes.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VariantFixture {
+    pub id: String,
+    /// The candidate whose resume, preferences, taste and pool it starts
+    /// from.
+    pub base: String,
+    pub summary: String,
+    /// Keep the base's own statements of the kind of work (its `work_shape`
+    /// taste and role settings). By default they are dropped: the variant
+    /// says the kind of work its own way.
+    #[serde(default)]
+    pub keep_roles: bool,
+    /// Their answer to "What kind of role are you looking for?", stored the
+    /// way the app stores it (`taste::edit::set_roles`). Empty: not asked.
+    #[serde(default)]
+    pub roles: Vec<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    /// More of their own statements (an avoid, a "doesn't matter").
+    #[serde(default)]
+    pub stated: Vec<TasteStatementFixture>,
+    /// What Narrow inferred from their career.
+    #[serde(default)]
+    pub inferred: Vec<InferredFixture>,
+    /// Judgments that differ from the base's for this person.
+    #[serde(default)]
+    pub judgment: Vec<Judgment>,
+    pub gate: VariantGate,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IntentFile {
+    #[serde(default)]
+    variant: Vec<VariantFixture>,
 }
 
 /// The benchmark's expectation for one candidate and one job.
@@ -292,6 +366,8 @@ pub struct Fixtures {
     pub jobs: BTreeMap<String, JobFixture>,
     /// In id order.
     pub candidates: Vec<CandidateFixture>,
+    /// Intent-capture variants, in file order.
+    pub variants: Vec<VariantFixture>,
 }
 
 fn read(path: &Path) -> Result<String, FixtureError> {
@@ -361,7 +437,17 @@ impl Fixtures {
             }
             candidates.push(candidate);
         }
-        let fixtures = Self { jobs, candidates };
+        let intent = dir.join("intent.toml");
+        let variants = if intent.is_file() {
+            parse::<IntentFile>(&intent)?.variant
+        } else {
+            Vec::new()
+        };
+        let fixtures = Self {
+            jobs,
+            candidates,
+            variants,
+        };
         problems.extend(fixtures.problems());
         if problems.is_empty() {
             Ok(fixtures)
@@ -467,6 +553,36 @@ impl Fixtures {
                     ));
                 }
                 _ => {}
+            }
+        }
+        let mut variant_ids: BTreeSet<&str> = BTreeSet::new();
+        for v in &self.variants {
+            let who = format!("variant {}", v.id);
+            if !variant_ids.insert(&v.id) {
+                out.push(format!("{who} is defined twice"));
+            }
+            let Some(base) = self.candidate(&v.base) else {
+                out.push(format!("{who}: no candidate {}", v.base));
+                continue;
+            };
+            if let Err(e) = jobhunt_profile::taste::RoleChoice::parse(&v.roles, v.title.as_deref())
+                && !(v.roles.is_empty() && v.title.is_none())
+            {
+                out.push(format!("{who}: roles: {e}"));
+            }
+            for i in &v.inferred {
+                if normalize_value(&i.value) != i.value {
+                    out.push(format!(
+                        "{who}: inferred value {:?} is not a token",
+                        i.value
+                    ));
+                }
+            }
+            for j in &v.judgment {
+                if !base.judgment.iter().any(|b| b.job == j.job) {
+                    out.push(format!("{who}: {} is not in {}'s pool", j.job, v.base));
+                }
+                out.extend(j.problems().into_iter().map(|p| format!("{who}: {p}")));
             }
         }
         let mut pairs: BTreeMap<&str, usize> = BTreeMap::new();

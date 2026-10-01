@@ -21,6 +21,7 @@ import {
   WorkControls,
 } from "@/components/preference-controls";
 import { AddPreferenceRow, InYourWords, RemovePreference } from "@/components/preferences";
+import { TargetRoles } from "@/components/roles";
 import { Disclosure, RowGroup, SummaryRow } from "@/components/summary";
 import { TasteReview } from "@/components/taste";
 import { Constraints, LearnedOverTime, LookingFor, TasteSummary } from "@/components/taste-profile";
@@ -71,8 +72,9 @@ function Questions({ id, title, questions }: { id: string; title: string; questi
 }
 
 /**
- * What Narrow understands about the person, not ranking settings: what
- * they're looking for in their words, a short summary of the kind of role
+ * What Narrow understands about the person, not ranking settings: the
+ * kinds of role they're looking for (asked until they answer), anything
+ * else they care about in their words, a short summary of the kind of role
  * and company they want (and avoid) to confirm or correct, their practical
  * constraints, and what was learned. Every structured setting is still
  * there, under Fine-tune, for whoever wants it.
@@ -102,6 +104,8 @@ export default async function PreferencesPage() {
       />
       <PreferenceEditing>
         <div className="flex flex-col gap-10 max-sm:gap-8">
+          <TargetRoles profile={profile} review={reviewTaste} />
+
           <LookingFor profile={profile} describe={describeTaste} review={reviewTaste} />
 
           <TasteSummary profile={profile} review={reviewTaste} />

@@ -356,10 +356,13 @@ fn cli_taste_profile_from_one_sentence() {
     let env = Env::new();
     env.ok(&["init", fixture("marina_costa.pdf").to_str().unwrap()]);
     let out = env.ok(&["preferences"]);
-    assert!(
-        out.contains("What kind of job are you looking for?"),
-        "{out}"
-    );
+    for expected in [
+        "What kind of role are you looking for?",
+        "narrow preferences roles backend platform",
+        "Anything else you care about?",
+    ] {
+        assert!(out.contains(expected), "missing {expected:?} in:\n{out}");
+    }
 
     let out = env.ok(&[
         "preferences",
@@ -368,7 +371,8 @@ fn cli_taste_profile_from_one_sentence() {
          startups. I don't want early-career roles or giant process-heavy companies. Remote only.",
     ]);
     for expected in [
-        "What you're looking for",
+        "What kind of role are you looking for?",
+        "Anything else you care about",
         "What Narrow understands",
         "Small technical teams",
         "High ownership and autonomy",
@@ -410,6 +414,47 @@ fn cli_taste_profile_from_one_sentence() {
     );
     let err = env.fails(&["preferences", "correct", "taste_ffffffff"]);
     assert!(err.contains("--polarity"), "{err}");
+
+    // "What kind of role are you looking for?" (BRU-324).
+    let out = env.ok(&[
+        "preferences",
+        "roles",
+        "backend",
+        "platform",
+        "--title",
+        "Backend / Platform Engineer",
+    ]);
+    for expected in [
+        "What you're looking for",
+        "Backend · Platform",
+        "“Backend / Platform Engineer”",
+    ] {
+        assert!(out.contains(expected), "missing {expected:?} in:\n{out}");
+    }
+    assert!(
+        !out.contains("What kind of role are you looking for?"),
+        "{out}"
+    );
+    let choices = env.ok(&["preferences", "roles"]);
+    assert!(choices.contains("[x] Backend"), "{choices}");
+    assert!(choices.contains("[ ] Mobile"), "{choices}");
+    // A new choice keeps the title unless it's replaced or removed.
+    let out = env.ok(&["preferences", "roles", "product"]);
+    assert!(out.contains("Product engineering"), "{out}");
+    assert!(out.contains("Backend / Platform Engineer"), "{out}");
+    let out = env.ok(&["preferences", "roles", "product", "--no-title"]);
+    assert!(!out.contains("Backend / Platform Engineer"), "{out}");
+    let err = env.fails(&[
+        "preferences",
+        "roles",
+        "backend",
+        "platform",
+        "product",
+        "sre",
+    ]);
+    assert!(err.contains("at most 3"), "{err}");
+    let err = env.fails(&["preferences", "roles", "storage-engines-please"]);
+    assert!(err.contains("not a kind of role"), "{err}");
 }
 
 #[test]

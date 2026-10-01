@@ -35,6 +35,7 @@
 pub mod compose;
 pub mod edit;
 pub mod reading;
+pub mod roles;
 pub mod rules;
 pub mod vocab;
 
@@ -47,6 +48,7 @@ use crate::ids::{PreferenceId, StatementId, TasteBriefId, TasteId};
 
 pub use compose::{ComposedAssertion, LearnedSignal, TasteProfile, compose};
 pub use reading::{InterpretError, ReadAssertion, TasteInterpreter, TasteReading, TasteRequest};
+pub use roles::RoleChoice;
 pub use rules::RulesInterpreter;
 
 /// What a taste statement is about. Deliberately few: values are open

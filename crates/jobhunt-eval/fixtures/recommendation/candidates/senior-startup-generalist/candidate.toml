@@ -324,3 +324,26 @@ fit = "maybe"
 practicality = "impossible"
 reasons = ["engineering_work_match", "seniority_match", "large_company_mismatch", "remote_scope_invalid", "work_authorization_invalid", "compensation_good"]
 why = "The golden Stripe posting with its US-only scope stated as 'US-Remote': the same judgment."
+
+# --- Intent capture (BRU-324): the right company, level and place, the wrong kind of work ---
+
+[[judgment]]
+job = "tidewater-senior-mobile"
+fit = "no"
+practicality = "valid"
+reasons = ["engineering_work_mismatch", "startup_match", "team_shape_match", "geography_valid", "compensation_good"]
+why = "React Native app work at a 20-person startup: the company is right, the work is mobile, not the backend or platform work this candidate wants."
+
+[[judgment]]
+job = "fernlight-senior-frontend"
+fit = "no"
+practicality = "valid"
+reasons = ["engineering_work_mismatch", "startup_match", "team_shape_match", "geography_valid", "compensation_good"]
+why = "Frontend and design-system work at a small startup: the right kind of company, the wrong kind of engineering."
+
+[[judgment]]
+job = "kitebrook-ios-user-platform"
+fit = "no"
+practicality = "valid"
+reasons = ["engineering_work_mismatch", "startup_match", "geography_valid", "compensation_good"]
+why = "Native iOS work on a team named User Platform: the team's name says platform, the work is an iOS app."

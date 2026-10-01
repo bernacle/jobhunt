@@ -633,3 +633,218 @@ fn the_ranker_meets_the_recommendation_gate() {
     // Pay unpublished doesn't hold a strong fit back.
     assert!(case(&result, SENIOR, "lanternfish-platform-no-pay").surfaced());
 }
+
+// --- Intent capture (BRU-324) ---------------------------------------------
+
+fn variant<'a>(result: &'a jobhunt_eval::Run, id: &str) -> &'a jobhunt_eval::VariantRun {
+    result
+        .intent
+        .iter()
+        .find(|v| v.id == id)
+        .unwrap_or_else(|| panic!("no variant {id}"))
+}
+
+fn variant_case<'a>(v: &'a jobhunt_eval::VariantRun, job: &str) -> &'a Case {
+    v.run
+        .cases
+        .iter()
+        .find(|c| c.job == job)
+        .unwrap_or_else(|| panic!("no case {}/{job}", v.id))
+}
+
+fn surfaced(v: &jobhunt_eval::VariantRun) -> Vec<&str> {
+    v.run
+        .cases
+        .iter()
+        .filter(|c| c.surfaced())
+        .map(|c| c.job.as_str())
+        .collect()
+}
+
+/// The kinds of work the variant's composed profile wants.
+fn wanted_shapes(f: &Fixtures, id: &str) -> Vec<String> {
+    let v = f
+        .variants
+        .iter()
+        .find(|v| v.id == id)
+        .unwrap_or_else(|| panic!("no variant {id}"));
+    let (_, data) =
+        jobhunt_eval::run::variant_profile(f, v).unwrap_or_else(|e| panic!("{id}: {e}"));
+    jobhunt_profile::taste::compose(&data, &[])
+        .wanted(jobhunt_profile::TasteDimension::WorkShape)
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn intent_capture_variants_meet_their_gates() {
+    let f = fixtures();
+    assert!(f.variants.len() >= 7, "the intent cases are there");
+    let result = run(&f).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(result.intent.len(), f.variants.len());
+    for v in &result.intent {
+        let failing: Vec<String> = v
+            .failing()
+            .iter()
+            .map(|c| format!("{} {}: {}", c.verdict().as_str(), c.job, c.observed.fit))
+            .collect();
+        assert!(failing.is_empty(), "{}: {failing:#?}", v.id);
+        // Nothing wrong surfaces, whatever was said about the work.
+        let m = Metrics::of(&v.run.cases);
+        assert_eq!(m.obvious_false_positives.hits, 0, "{}", v.id);
+        assert_eq!(m.maybes_surfaced, 0, "{}", v.id);
+        assert_eq!(m.surfaced_on_pay, 0, "{}: pay never creates fit", v.id);
+    }
+}
+
+#[test]
+fn without_a_stated_kind_of_work_today_stays_empty() {
+    // The dogfood condition: the words name only the team and company.
+    let f = fixtures();
+    let result = run(&f).unwrap_or_else(|e| panic!("{e}"));
+    let none = variant(&result, "no-role");
+    assert!(surfaced(none).is_empty(), "{:?}", surfaced(none));
+    assert!(
+        none.run.feed.is_empty(),
+        "Today may be empty; nothing pads it"
+    );
+}
+
+#[test]
+fn an_explicit_choice_is_stronger_than_career_inference() {
+    let f = fixtures();
+    let result = run(&f).unwrap_or_else(|e| panic!("{e}"));
+    let inferred = variant(&result, "career-inferred");
+    let chosen = variant(&result, "chosen-backend-platform");
+    // Candidate B surfaces every practical Strong yes of the pool.
+    let b = Metrics::of(&chosen.run.cases);
+    assert_eq!(b.strong_yes_surfaced.hits, b.strong_yes_surfaced.of);
+    assert!(b.strong_yes_surfaced.of >= 10);
+    // Candidate A: what the career shows stays soft, and Today conservative.
+    let a = Metrics::of(&inferred.run.cases);
+    assert!(a.surfaced < b.surfaced, "{} vs {}", a.surfaced, b.surfaced);
+    for job in surfaced(inferred) {
+        assert!(
+            surfaced(chosen).contains(&job),
+            "{job}: A never surfaces more"
+        );
+    }
+    let quarry = "quarrybird-senior-backend";
+    assert!(
+        variant_case(inferred, quarry)
+            .observed
+            .fit
+            .contains("role 0.60"),
+        "inferred work counts softly: {}",
+        variant_case(inferred, quarry).observed.fit
+    );
+    assert!(
+        variant_case(chosen, quarry)
+            .observed
+            .fit
+            .contains("role 1.00"),
+        "{}",
+        variant_case(chosen, quarry).observed.fit
+    );
+    assert!(variant_case(chosen, quarry).surfaced());
+}
+
+#[test]
+fn a_chosen_role_beats_conflicting_history_avoid_and_neutral() {
+    let f = fixtures();
+    let result = run(&f).unwrap_or_else(|e| panic!("{e}"));
+    let chosen = variant(&result, "chosen-backend-platform");
+    let history = variant(&result, "chosen-over-history");
+    // Earlier React Native and web work doesn't make mobile or frontend
+    // wanted: the choice comes first, and Today is the same.
+    assert_eq!(
+        wanted_shapes(&f, "chosen-over-history"),
+        ["backend", "platform"]
+    );
+    assert_eq!(surfaced(history), surfaced(chosen));
+    for job in ["tidewater-senior-mobile", "fernlight-senior-frontend"] {
+        assert!(!variant_case(history, job).surfaced(), "{job}");
+    }
+    // "I don't want full-stack work" holds against the profile's inference.
+    let avoid = variant(&result, "avoid-wins");
+    let parcel = variant_case(avoid, "parcelwise-fullstack-unscoped-remote");
+    assert!(!parcel.surfaced());
+    assert!(
+        parcel
+            .observed
+            .against
+            .iter()
+            .any(|a| a.to_lowercase().contains("full-stack")),
+        "{:?}",
+        parcel.observed.against
+    );
+    assert!(variant_case(chosen, "parcelwise-fullstack-unscoped-remote").surfaced());
+    // "Mobile doesn't matter" is never inferred back into a preference.
+    assert!(!wanted_shapes(&f, "neutral-wins").contains(&"mobile".to_owned()));
+    let neutral = variant(&result, "neutral-wins");
+    assert!(!variant_case(neutral, "tidewater-senior-mobile").surfaced());
+}
+
+#[test]
+fn several_roles_and_a_custom_title() {
+    let f = fixtures();
+    let result = run(&f).unwrap_or_else(|e| panic!("{e}"));
+    let chosen = variant(&result, "chosen-backend-platform");
+    assert_eq!(
+        wanted_shapes(&f, "multiple-roles"),
+        ["backend", "platform", "product"]
+    );
+    let several = variant(&result, "multiple-roles");
+    for job in surfaced(chosen) {
+        assert!(surfaced(several).contains(&job), "{job}");
+    }
+    // The title is context: it adds no kind of work and changes no ranking.
+    assert_eq!(wanted_shapes(&f, "custom-title"), ["backend", "platform"]);
+    let titled = variant(&result, "custom-title");
+    assert_eq!(surfaced(titled), surfaced(chosen));
+}
+
+#[test]
+fn ranking_invariants_hold_with_an_explicit_choice() {
+    let f = fixtures();
+    let result = run(&f).unwrap_or_else(|e| panic!("{e}"));
+    let chosen = variant(&result, "chosen-backend-platform");
+    // An explicit role never bypasses seniority: Early Career stays out.
+    let airbnb = variant_case(chosen, "airbnb-early-career");
+    assert!(!airbnb.surfaced());
+    assert!(airbnb.observed.detected.contains(&Contradiction::Seniority));
+    // US-only stays out.
+    let stripe = variant_case(chosen, "stripe-payments-us-remote");
+    assert!(
+        stripe.observed.gate.starts_with("excluded"),
+        "{}",
+        stripe.observed.gate
+    );
+    // Backend isn't database internals, Platform isn't Kubernetes internals
+    // or a team merely named "Platform".
+    for job in [
+        "supabase-orioledb",
+        "stratadb-storage-engine",
+        "helmsman-k8s-control-plane",
+        "kitebrook-ios-user-platform",
+    ] {
+        let c = variant_case(chosen, job);
+        assert!(!c.surfaced(), "{job}: {}", c.observed.fit);
+    }
+    assert!(
+        variant_case(chosen, "supabase-orioledb")
+            .observed
+            .detected
+            .contains(&Contradiction::RoleDepth)
+    );
+    // OrioleDB is still right for the database-internals specialist.
+    assert!(
+        case(
+            &result,
+            "database-internals-specialist",
+            "supabase-orioledb"
+        )
+        .surfaced()
+    );
+}

@@ -21,21 +21,24 @@ import { Button, Notice, buttonClass, helpClass, inlineActionClass, inputClass, 
 export type Describe = (state: DescribeState, form: FormData) => Promise<DescribeState>;
 export type Review = (action: TasteAction) => Promise<ActionResult<TasteUpdateResult>>;
 
-const EXAMPLE = "Small technical teams, high ownership, backend or platform work at startups. No early-career roles or process-heavy big companies.";
+const EXAMPLE = "Small technical teams, high ownership, startups. No early-career roles or process-heavy big companies.";
 
-/** The one question, in a form. */
+/** "Anything else you care about?", in a form: the person's words. */
 export function DescribeForm({
   describe,
   initial,
   submitLabel = "Save",
   onCancel,
   onDone,
+  skip,
 }: {
   describe: Describe;
   initial?: string;
   submitLabel?: string;
   onCancel?: () => void;
   onDone?: (result: TasteUpdateResult) => void;
+  /** A way past the question (onboarding: it is optional). */
+  skip?: ReactNode;
 }) {
   const [state, action, pending] = useActionState(async (previous: DescribeState, form: FormData) => {
     const next = await describe(previous, form);
@@ -46,8 +49,9 @@ export function DescribeForm({
   const help = useId();
   return (
     <form action={action}>
-      <label htmlFor={id} className={labelClass}>
-        What kind of job are you looking for?
+      {/* Always under a heading asking the same question: said once, for the eye. */}
+      <label htmlFor={id} className="sr-only">
+        Anything else you care about?
       </label>
       <textarea
         id={id}
@@ -61,7 +65,7 @@ export function DescribeForm({
         className={textareaClass}
       />
       <p id={help} className={helpClass}>
-        In your own words; what you&apos;d avoid, too. Narrow keeps them as written.
+        The team, the company, how you like to work; what you&apos;d avoid, too. In your own words: Narrow keeps them as written.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         <Button type="submit" variant="primary" disabled={pending} loading={pending} className="max-sm:h-11">
@@ -72,6 +76,7 @@ export function DescribeForm({
             Cancel
           </Button>
         )}
+        {skip}
       </div>
       {state.error && (
         <div aria-live="polite" className="mt-3">
@@ -84,7 +89,7 @@ export function DescribeForm({
   );
 }
 
-/** "What you're looking for": their words, and a way to change them. */
+/** "Anything else you care about?": their words, and a way to change them. */
 export function LookingFor({ profile, describe, review }: { profile: TasteProfileView; describe: Describe; review: Review }) {
   const [editing, setEditing] = useState(!profile.looking_for);
   const [pending, startTransition] = useTransition();
@@ -94,11 +99,11 @@ export function LookingFor({ profile, describe, review }: { profile: TasteProfil
     <section id="looking-for" aria-labelledby="looking-for-heading" className="scroll-mt-20">
       <div className="mb-1.5 flex items-baseline justify-between gap-4">
         <h2 id="looking-for-heading" className="text-[15px] leading-[1.4] font-semibold tracking-[-0.005em]">
-          What you&apos;re looking for
+          Anything else you care about?
         </h2>
         {!editing && !earlier && (
           <button type="button" onClick={() => setEditing(true)} className={`${inlineActionClass} max-sm:min-h-11`}>
-            Edit <span className="sr-only">what you&apos;re looking for</span>
+            Edit <span className="sr-only">what else you care about</span>
           </button>
         )}
       </div>
@@ -275,18 +280,20 @@ function Corrections({ profile, review, onUpdated }: { profile: TasteProfileView
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [sentence, setSentence] = useState("");
+  const [added, setAdded] = useState("");
   const addId = useId();
   const run = (action: TasteAction) =>
-    new Promise<boolean>((resolve) =>
+    new Promise<TasteProfileView | null>((resolve) =>
       startTransition(async () => {
         setError(null);
+        setAdded("");
         const r = await review(action);
         if (r.ok) onUpdated(r.data.profile);
         else setError(`${r.title}. ${r.message}`);
-        resolve(r.ok);
+        resolve(r.ok ? r.data.profile : null);
       }),
     );
-  const items = [...profile.understood, ...profile.avoid].flatMap((l) => l.items).concat(profile.unsure, profile.neutral);
+  const items = [...profile.understood, ...profile.avoid].flatMap((l) => l.items).concat(profile.set_aside ?? [], profile.unsure, profile.neutral);
   return (
     <SheetBody className="gap-4 pb-6">
       {error && (
@@ -297,7 +304,7 @@ function Corrections({ profile, review, onUpdated }: { profile: TasteProfileView
       {items.length > 0 ? (
         <ul>
           {items.map((item) => (
-            <Correctable key={`${item.id}:${item.polarity}:${item.text}`} item={item} run={run} busy={pending} />
+            <Correctable key={`${item.id}:${item.polarity}:${item.text}`} item={item} run={async (a) => (await run(a)) !== null} busy={pending} />
           ))}
         </ul>
       ) : (
@@ -308,7 +315,14 @@ function Corrections({ profile, review, onUpdated }: { profile: TasteProfileView
         onSubmit={async (e) => {
           e.preventDefault();
           if (!sentence.trim()) return;
-          if (await run({ action: "add", text: sentence.trim() })) setSentence("");
+          const before = profile.roles.chosen.map((c) => c.value);
+          const after = await run({ action: "add", text: sentence.trim() });
+          if (!after) return;
+          setSentence("");
+          // A kind of role in their words is their choice of role: shown
+          // under What you're looking for, not in this list.
+          const roles = after.roles.chosen.filter((c) => !before.includes(c.value)).map((c) => c.label);
+          setAdded(roles.length > 0 ? `Added ${roles.join(", ")} to the kinds of role you're looking for.` : "Added.");
         }}
       >
         <label htmlFor={addId} className={labelClass}>
@@ -327,6 +341,9 @@ function Corrections({ profile, review, onUpdated }: { profile: TasteProfileView
             Add
           </Button>
         </div>
+        <p role="status" className="mt-1.5 text-caption text-fg-muted empty:hidden">
+          {added}
+        </p>
       </form>
     </SheetBody>
   );
@@ -384,9 +401,14 @@ export function TasteSummary({ profile: initial, review }: { profile: TasteProfi
             )}
           </>
         )}
-        {interpretation && interpretation.ambiguities.length > 0 && (
+        {((interpretation?.ambiguities.length ?? 0) > 0 || (profile.set_aside ?? []).length > 0) && (
           <ul className="mt-2 space-y-0.5">
-            {interpretation.ambiguities.map((a) => (
+            {(profile.set_aside ?? []).map((a) => (
+              <li key={a.id} className="text-[13px] text-fg-secondary">
+                <span className="nr-inferred">Unclear:</span> Narrow read “{a.text}” as something you&apos;d avoid, which goes against the kind of role you chose. Your choice counts; remove it under Edit if it&apos;s wrong.
+              </li>
+            ))}
+            {(interpretation?.ambiguities ?? []).map((a) => (
               <li key={a} className="text-[13px] text-fg-secondary">
                 <span className="nr-inferred">Unclear:</span> {a}
               </li>
@@ -423,7 +445,7 @@ export function TasteSummary({ profile: initial, review }: { profile: TasteProfi
             {error}
           </p>
         )}
-        {(all.length > 0 || interpretation) && (
+        {(all.length > 0 || interpretation || (profile.supporting ?? []).length > 0) && (
           <Disclosure label="How Narrow read this" className="mt-3">
             <div className="text-[13px] text-fg-secondary">
               {interpretation && (
@@ -439,6 +461,11 @@ export function TasteSummary({ profile: initial, review }: { profile: TasteProfi
                   <Provenance key={item.id} item={item} />
                 ))}
               </ul>
+              {(profile.supporting ?? []).length > 0 && (
+                <p className="mt-2">
+                  Also read or inferred, not counted because you chose the kind of role yourself: {(profile.supporting ?? []).map((n) => `${n.text} (${n.basis.charAt(0).toLowerCase()}${n.basis.slice(1)})`).join(", ")}.
+                </p>
+              )}
               {profile.neutral.length > 0 && <p className="mt-2">Doesn&apos;t matter to you: {profile.neutral.map((n) => n.text.replace(/: doesn't matter$/, "")).join(", ")}.</p>}
               {profile.removed.length > 0 && <p className="mt-1">Removed, never read again: {profile.removed.map((n) => n.text).join(", ")}.</p>}
               {profile.looking_for_source === "description" && (
@@ -479,12 +506,15 @@ export function TasteSummary({ profile: initial, review }: { profile: TasteProfi
 }
 
 /** "Practical constraints": whether you can take a job, not whether you'd want it. */
-export function Constraints({ items, noted, children }: { items: ConstraintView[]; noted: string[]; children?: ReactNode }) {
+export function Constraints({ items, noted, heading = true, children }: { items: ConstraintView[]; noted: string[]; heading?: boolean; children?: ReactNode }) {
   return (
-    <section id="constraints" aria-labelledby="constraints-heading" className="scroll-mt-20">
-      <h2 id="constraints-heading" className="mb-1.5 text-[15px] leading-[1.4] font-semibold tracking-[-0.005em]">
-        Practical constraints
-      </h2>
+    <section id="constraints" aria-labelledby={heading ? "constraints-heading" : undefined} aria-label={heading ? undefined : "Practical constraints"} className="scroll-mt-20">
+      {/* Under a step already titled so (onboarding), the heading isn't repeated. */}
+      {heading && (
+        <h2 id="constraints-heading" className="mb-1.5 text-[15px] leading-[1.4] font-semibold tracking-[-0.005em]">
+          Practical constraints
+        </h2>
+      )}
       <div className="border-t border-line-subtle pt-2">
         {items.length > 0 ? (
           <ul aria-label="Your practical constraints">

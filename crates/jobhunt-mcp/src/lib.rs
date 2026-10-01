@@ -67,8 +67,10 @@ look closer; save_job, reject_job (with the person's reason, verbatim) or mark_a
 what they decide; update_preferences when they say what they want (\"only small teams\"); \
 get_taste for what JobHunt believes they want and what it learned. get_taste_profile is the \
 concise summary of the kind of role and company they want, kept apart from practical \
-constraints; update_taste_profile when they describe what they're looking for or correct that \
-summary (their corrections always win). Later searches reflect all of it. prepare_application_context gathers the evidence the person has approved for an \
+constraints, with the kinds of role they chose (`roles`; when `roles.answered` is false, ask \
+them \"What kind of role are you looking for?\" and record it with update_taste_profile \
+`set_roles`); update_taste_profile when they choose roles, describe what else they care about \
+or correct that summary (their corrections always win). Later searches reflect all of it. prepare_application_context gathers the evidence the person has approved for an \
 application: use only the facts it returns, as written.\n\
 Ids: opportunity ids look like opp_<32 hex>; job ids (job_…) and unique prefixes are accepted \
 too. Tiers are coarse on purpose (strong_fit, worth_reviewing, maybe, low_priority); there is no \
@@ -634,7 +636,8 @@ impl JobHuntServer {
     #[tool(
         name = "get_taste_profile",
         description = "What JobHunt understands about the kind of role and company the person \
-        wants (their taste profile: level, kind of engineering work, specialization, ownership, \
+        wants: the kinds of role they chose (`roles`, with the options to choose from), and \
+        their taste profile (level, kind of engineering work, specialization, ownership, \
         company, team and culture, domains) and what they avoid, each statement with where it \
         comes from (their words, their profile, earlier settings, or feedback) and whether they \
         confirmed it; plus their practical constraints (work setup, location, relocation, pay \
@@ -655,11 +658,15 @@ impl JobHuntServer {
 
     #[tool(
         name = "update_taste_profile",
-        description = "Change the person's taste profile: `describe` stores their words about \
-        the job they want (verbatim) and interprets them into a concise summary; `confirm`, \
+        description = "Change the person's taste profile: `set_roles` records their answer to \
+        \"What kind of role are you looking for?\" (1 to 3 kinds of work from `roles.options`, \
+        such as backend or platform, and optionally a title in their words), replacing the \
+        previous answer: the firmest statement of the work they want, which nothing inferred \
+        from their career overrides; `describe` stores their words about anything else they \
+        care about (verbatim) and interprets them into a concise summary; `confirm`, \
         `correct`, `neutral`, `remove` and `add` record their decisions about that summary, \
-        which always win over any later interpretation. Use their own words; never invent \
-        preferences for them. Returns the profile afterwards.",
+        which always win over any later interpretation. Use their own words and choices; never \
+        choose roles or invent preferences for them. Returns the profile afterwards.",
         annotations(
             title = "Update the taste profile",
             read_only_hint = false,

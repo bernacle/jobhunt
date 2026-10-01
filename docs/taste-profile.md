@@ -88,7 +88,63 @@ sources when they agree or are kept as `against` when they don't:
 5. a learned pattern (shown in "Learned over time", never as something the
    person said, and not "firm" until they confirm it).
 
-## Provenance and wording
+## What kind of role (BRU-324)
+
+(The before/after measurement on real postings is in
+[target-role-experiment.md](target-role-experiment.md).)
+
+Career history says what someone **has done**, not what they **want to do
+next**, and free text alone depends on how it's read. On the same 2,900
+jobs, a description naming the work gave 13 strong fits and one naming
+only company and team taste gave none (BRU-323). So Narrow asks one
+structured question, once: **What kind of role are you looking for?**
+
+- **The choice**: up to 3 kinds of work from a short list, the
+  `work_shape` vocabulary's role families (`taste::roles::CHOICES`):
+  Backend, Platform, Infrastructure, Product engineering, Full stack,
+  Frontend, Mobile, Developer tooling, SRE, Security, Data, ML product.
+  Specialties (`database_internals`, `distributed_systems`, `research`,
+  `ml_research`) are not offered: choosing Backend never implies
+  storage-engine work, nor Platform Kubernetes internals. Someone who
+  wants exactly a specialty can say so through the API or the CLI.
+- **An optional title** in their words ("Infrastructure-focused Product
+  Engineer"), for hybrid roles the list misses: kept verbatim as one
+  statement (`other:target_role`), never parsed into kinds of work, not
+  read by ranking; context for the person and the semantic reviewer.
+- **Stored as taste** (`taste::edit::set_roles`), in one step: each kind of
+  work chosen is the person's statement (`stated`, `confirmed`, `prefer`,
+  firm); one they had chosen and no longer do is removed (a tombstone);
+  the title replaces the previous one. No separate target-role model:
+  ranking reads the same composed profile, and a choice counts as any of
+  the person's statements does. Nothing about Today's threshold changes.
+
+### Precedence of the kind of work
+
+For the kind of work, the composed profile applies (`taste::compose`):
+
+1. the person's chosen, stated, confirmed or corrected kinds of work (and
+   role settings they entered themselves);
+2. their explicit avoid and "doesn't matter" decisions (per key, as for
+   every dimension);
+3. Narrow's reading of their words;
+4. what was inferred from their profile;
+5. what was learned from feedback.
+
+Once they have chosen at least one kind of work, kinds of work that were
+only read or inferred (from their words, their career, a setting read
+with doubts, or feedback) stop counting as wanted: they are kept, with
+their provenance, as `supporting` (shown under "How Narrow read this").
+Earlier React Native work never makes Mobile wanted for someone who
+chose Backend and Platform. A reading that avoids what they chose ("avoid
+AI" read from "no ML model-training roles", for someone choosing ML
+product work) is set aside (`set_aside`), shown as unclear, and not used;
+the same disagreement on one key (words read as not wanting a kind of
+work they chose) is noted as an ambiguity of the interpretation. Their
+choice is never reinterpreted. Until they answer, nothing changes: what
+was read or inferred counts as before (soft), and Preferences asks the
+question.
+
+
 
 What the person sees is short; where each line comes from is one tap away
 ("How Narrow read this"). Each statement says, in a few words:
@@ -246,10 +302,10 @@ its words set); statements added before the taste profile are left alone.
 
 | Where | What |
 | --- | --- |
-| Web | Preferences: What you're looking for, What Narrow understands (Looks right, Edit), Practical constraints (Edit constraints), Learned over time, Fine-tune. Onboarding: one question, then the summary |
-| API | `GET /api/v1/taste/profile` → `TasteProfileView`; `POST /api/v1/taste/profile` with a `TasteAction` (`describe`, `reinterpret`, `confirm`, `correct`, `neutral`, `remove`, `add`) → `TasteUpdateResult` |
-| MCP | `get_taste_profile`, `update_taste_profile` |
-| CLI | `narrow preferences` (the summary and constraints; `--all` adds every setting), `describe "…"`, `confirm [ids]`, `correct <taste_…> ["…"] [--polarity …]`, `reinterpret`, `remove <taste_…>` |
+| Web | Preferences: What you're looking for (the kinds of role; the question until answered, Change in a sheet), Anything else you care about? (their words), What Narrow understands (Looks right, Edit), Practical constraints (Edit constraints), Learned over time, Fine-tune. Onboarding: resume, the kind of role, anything else (optional), practical constraints, Today |
+| API | `GET /api/v1/taste/profile` → `TasteProfileView` (with `roles`: answered, chosen, title, options, experience); `POST /api/v1/taste/profile` with a `TasteAction` (`set_roles`, `describe`, `reinterpret`, `confirm`, `correct`, `neutral`, `remove`, `add`) → `TasteUpdateResult` |
+| MCP | `get_taste_profile`, `update_taste_profile` (`set_roles` included) |
+| CLI | `narrow preferences` (the kinds of role, the summary and constraints; `--all` adds every setting), `roles [backend platform …] [--title "…" \| --no-title]`, `describe "…"`, `confirm [ids]`, `correct <taste_…> ["…"] [--polarity …]`, `reinterpret`, `remove <taste_…>` |
 
 ## What ranking reads
 

@@ -338,6 +338,12 @@ specialty, "Wrong kind of work" its work shape, "Company stage" its stage,
 
 ## Compatibility
 
+- Ranking `RANKING_VERSION` 7, `fit-rules/2` (BRU-324): product engineering
+  is no longer "related" to frontend work. Frontend is its own kind of role
+  to choose, so someone who chose product engineering and not frontend
+  isn't sent design-system and UI-only roles as close to what they want
+  (full-stack work still is). Nothing else in the rules changed; stored
+  rankings and reviews are keyed anew.
 - Ranking `RANKING_VERSION` 6: every stored ranking key changes; old rows
   stay as a record.
 - No onboarding again: structured preferences compose live into the taste

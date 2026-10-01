@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { TasteAction, TasteItemView, TasteProfileView, TasteUpdateResult } from "@/lib/api-types";
 
-import { tasteProfile } from "../../test/fixtures";
+import { roles, tasteProfile } from "../../test/fixtures";
 import { violations } from "../../test/axe";
 import { Constraints, DescribeForm, LearnedOverTime, LookingFor, TasteSummary } from "./taste-profile";
 
@@ -69,6 +69,23 @@ describe("TasteSummary", () => {
     expect(await violations(sheet)).toEqual([]);
   });
 
+  it("says when an added sentence names a kind of role", async () => {
+    const chose = vi.fn(async (action: TasteAction) => answer(tasteProfile({ roles: roles(["developer_tooling"]) }), action.action));
+    render(<TasteSummary profile={tasteProfile()} review={chose} />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const sheet = screen.getByRole("dialog", { name: "What Narrow understands" });
+    await userEvent.type(within(sheet).getByLabelText("Add one sentence"), "I'd love developer tooling");
+    await userEvent.click(within(sheet).getByRole("button", { name: "Add" }));
+    expect(await within(sheet).findByText("Added Developer tooling to the kinds of role you're looking for.")).toBeInTheDocument();
+    expect(within(sheet).getByLabelText("Add one sentence")).toHaveValue("");
+  });
+
+  it("shows a reading set aside against a chosen role, to settle", () => {
+    const aside = { ...tasteProfile().avoid[0]!.items[0]!, id: "taste_ai", dimension: "domain", value: "ai", text: "Ai" };
+    render(<TasteSummary profile={tasteProfile({ roles: roles(["ml_product"]), set_aside: [aside] })} review={review()} />);
+    expect(screen.getByText(/Narrow read “Ai” as something you'd avoid, which goes against the kind of role you chose/)).toBeInTheDocument();
+  });
+
   it("keeps provenance one tap away", async () => {
     render(<TasteSummary profile={tasteProfile()} review={review()} />);
     await userEvent.click(screen.getByText("How Narrow read this"));
@@ -84,12 +101,12 @@ describe("TasteSummary", () => {
   });
 });
 
-describe("What you're looking for", () => {
+describe("Anything else you care about", () => {
   it("asks the one question when nothing was said", async () => {
     const describe_ = vi.fn(async (_s: unknown, form: FormData) => ({ result: answer(tasteProfile()).data, submitted: String(form.get("text")) }));
     const onDone = vi.fn();
     const { container } = render(<DescribeForm describe={describe_} onDone={onDone} submitLabel="Continue" />);
-    await userEvent.type(screen.getByLabelText("What kind of job are you looking for?"), "Small teams, backend work");
+    await userEvent.type(screen.getByRole("textbox", { name: "Anything else you care about?" }), "Small teams, backend work");
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(onDone).toHaveBeenCalled());
     expect(describe_).toHaveBeenCalledOnce();
@@ -99,7 +116,7 @@ describe("What you're looking for", () => {
   it("shows an error and keeps the words", async () => {
     const describe_ = vi.fn(async () => ({ error: { title: "That didn't work", message: "say it in a few words" }, submitted: "x" }));
     render(<DescribeForm describe={describe_} />);
-    await userEvent.type(screen.getByLabelText("What kind of job are you looking for?"), "x");
+    await userEvent.type(screen.getByRole("textbox", { name: "Anything else you care about?" }), "x");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("say it in a few words");
   });
@@ -108,8 +125,8 @@ describe("What you're looking for", () => {
     render(<LookingFor profile={tasteProfile()} describe={vi.fn()} review={review()} />);
     expect(screen.getByText(/I like small technical teams/)).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Edit what you're looking for" }));
-    expect(screen.getByLabelText("What kind of job are you looking for?")).toHaveValue(tasteProfile().looking_for);
+    await userEvent.click(screen.getByRole("button", { name: "Edit what else you care about" }));
+    expect(screen.getByRole("textbox", { name: "Anything else you care about?" })).toHaveValue(tasteProfile().looking_for);
   });
 
   it("offers earlier words as the starting point", async () => {

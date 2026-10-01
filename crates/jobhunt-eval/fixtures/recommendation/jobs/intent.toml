@@ -1,0 +1,84 @@
+# Intent capture (BRU-324): roles at the right kind of company, level and
+# place for the senior startup candidate, but doing kinds of work a career
+# may show (an earlier mobile or web role) without the person wanting them
+# next. They are the jobs an inference from career history would wrongly
+# surface. Companies are made up.
+
+[[job]]
+id = "tidewater-senior-mobile"
+group = "intent"
+source = "ashby:tidewater"
+company = "Tidewater"
+title = "Senior Mobile Engineer (React Native)"
+location = "Remote - Latin America"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 150000.0, max = 175000.0, interval = "year" }] }
+description = """
+About us
+Tidewater is a 20-person startup building the app small marinas use to run bookings and payments. We are a seed-stage company with paying customers in three countries.
+
+About the role
+You'll join a team of 5 engineers and own our React Native app end to end: architecture, releases to the App Store and Google Play, performance and crash reporting. You decide how the app is built.
+
+What you'll need
+- Several years building and shipping React Native apps
+- Experience with native iOS or Android modules
+- TypeScript
+
+This role is remote and open to candidates anywhere in Latin America.
+"""
+
+[[job]]
+id = "fernlight-senior-frontend"
+group = "intent"
+source = "ashby:fernlight"
+company = "Fernlight"
+title = "Senior Frontend Engineer"
+location = "Remote - Latin America"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 150000.0, max = 175000.0, interval = "year" }] }
+description = """
+About us
+Fernlight is a 25-person startup building scheduling software for clinics. We are a Series A company and every engineer talks to customers.
+
+About the role
+You'll join a team of 4 engineers and own our web app's frontend end to end: the design system, accessibility, performance and the React component library.
+
+What you'll need
+- Several years building production web applications in React and TypeScript
+- A strong eye for UI and accessibility
+
+This role is remote and open to candidates anywhere in Latin America.
+"""
+
+[[job]]
+id = "kitebrook-ios-user-platform"
+group = "intent"
+source = "ashby:kitebrook"
+company = "Kitebrook"
+title = "Senior iOS Engineer - User Platform"
+location = "Remote - Latin America"
+workplace = "remote"
+remote = true
+employment = "full_time"
+provenance = "synthetic"
+compensation = { components = [{ kind = "salary", currency = "USD", min = 150000.0, max = 175000.0, interval = "year" }] }
+description = """
+About us
+Kitebrook is a 30-person startup building a budgeting app. We are a Series A company.
+
+About the role
+You'll join the User Platform team, 4 engineers who own sign-up, accounts and settings in our iOS app end to end. You'll build in Swift and SwiftUI.
+
+What you'll need
+- Several years building and shipping native iOS apps in Swift
+- Experience with SwiftUI
+
+This role is remote and open to candidates anywhere in Latin America.
+"""

@@ -26,8 +26,16 @@ use jobhunt_ranking::{
     RULE_READER_REVISION, Ranking, Severity, SignalGroup, SignalKind, TasteModel, Tier, rank,
 };
 
+use jobhunt_profile::taste::{
+    RoleChoice, TasteAssertion, TasteConfidence, TasteDimension, TasteOrigin, TasteReview,
+    TasteSource, edit, vocab,
+};
+use jobhunt_profile::{ProfileData, TasteId};
+
 use crate::build::{self, BuildError};
-use crate::fixture::{CandidateFixture, Fixtures, Group, JobFixture, Judgment};
+use crate::fixture::{
+    CandidateFixture, Fixtures, Group, JobFixture, Judgment, VariantFixture, VariantGate,
+};
 use crate::taxonomy::{Contradiction, Label, TodayExpectation};
 
 /// The feed's default size (`jobhunt_app::feed::DEFAULT_FEED_LIMIT`).
@@ -302,6 +310,8 @@ pub struct CandidateRun {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Run {
     pub candidates: Vec<CandidateRun>,
+    /// Intent-capture variants of the candidates run.
+    pub intent: Vec<VariantRun>,
 }
 
 fn rank_one(
@@ -338,7 +348,153 @@ pub fn run_candidate(
     fixtures: &Fixtures,
     candidate: &CandidateFixture,
 ) -> Result<CandidateRun, BuildError> {
-    let data = build::profile(candidate)?;
+    run_profile(fixtures, candidate, &build::profile(candidate)?)
+}
+
+/// What a variant's person said about the kind of work, in a few words.
+fn intent_label(v: &VariantFixture) -> String {
+    let mut parts = Vec::new();
+    if !v.roles.is_empty() {
+        parts.push(format!("chose {}", v.roles.join(" + ")));
+    }
+    if let Some(t) = &v.title {
+        parts.push(format!("title “{t}”"));
+    }
+    for s in &v.stated {
+        parts.push(format!("{} {}", s.polarity.as_str(), s.value));
+    }
+    if !v.inferred.is_empty() {
+        let inferred: Vec<String> = v
+            .inferred
+            .iter()
+            .map(|i| format!("{} {}", i.polarity.as_str(), i.value))
+            .collect();
+        parts.push(format!("inferred from the career: {}", inferred.join(", ")));
+    }
+    if parts.is_empty() {
+        "nothing about the kind of work".into()
+    } else {
+        parts.join("; ")
+    }
+}
+
+/// A variant's candidate (the base with its judgments overridden) and
+/// profile: the base's career and settings, its own statement of the kind
+/// of work, and the choice stored as the app stores it.
+pub fn variant_profile(
+    fixtures: &Fixtures,
+    v: &VariantFixture,
+) -> Result<(CandidateFixture, ProfileData), BuildError> {
+    let base = fixtures
+        .candidate(&v.base)
+        .ok_or_else(|| BuildError::Resume {
+            candidate: v.id.clone(),
+            message: format!("no base candidate {}", v.base),
+        })?;
+    let mut candidate = base.clone();
+    candidate.id = v.id.clone();
+    if !v.keep_roles {
+        candidate
+            .preference
+            .retain(|p| !matches!(p.value, jobhunt_profile::PreferenceValue::Role { .. }));
+        if let Some(t) = &mut candidate.taste {
+            t.statement
+                .retain(|s| s.dimension != TasteDimension::WorkShape);
+        }
+    }
+    if let Some(t) = &mut candidate.taste {
+        t.statement.extend(v.stated.iter().cloned());
+    }
+    for j in &v.judgment {
+        if let Some(existing) = candidate.judgment.iter_mut().find(|b| b.job == j.job) {
+            *existing = j.clone();
+        }
+    }
+    let mut data = build::profile(&candidate)?;
+    let at = build::now() - chrono::Duration::days(30);
+    for i in &v.inferred {
+        let key = jobhunt_profile::taste::key(i.dimension, &i.value);
+        data.taste.push(TasteAssertion {
+            id: TasteId::derive(&[&data.id().to_string(), "inferred", &key]),
+            dimension: i.dimension,
+            value: i.value.clone(),
+            polarity: i.polarity,
+            text: vocab::sentence(i.dimension, &i.value, i.polarity),
+            confidence: TasteConfidence::Medium,
+            origin: TasteOrigin::Profile,
+            review: TasteReview::Unreviewed,
+            sources: vec![TasteSource::Evidence {
+                text: i.evidence.clone(),
+                records: Vec::new(),
+            }],
+            explanation: None,
+            interpreter: Some("benchmark".into()),
+            original: None,
+            superseded_by: None,
+            created_at: at,
+            updated_at: at,
+        });
+    }
+    if !v.roles.is_empty() || v.title.is_some() {
+        let choice =
+            RoleChoice::parse(&v.roles, v.title.as_deref()).map_err(|e| BuildError::Resume {
+                candidate: v.id.clone(),
+                message: e.to_string(),
+            })?;
+        let composed = compose(&data, &[]);
+        edit::set_roles(&mut data, &composed, &choice, at);
+    }
+    Ok((candidate, data))
+}
+
+/// One intent-capture variant, run.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VariantRun {
+    pub id: String,
+    pub base: String,
+    /// What the person said about the kind of work.
+    pub intent: String,
+    pub gate: VariantGate,
+    pub run: CandidateRun,
+}
+
+impl VariantRun {
+    /// Cases failing the variant's gate.
+    pub fn failing(&self) -> Vec<&Case> {
+        self.run
+            .cases
+            .iter()
+            .filter(|c| match self.gate {
+                VariantGate::Full => c.verdict().failed(),
+                VariantGate::Precision => {
+                    matches!(c.verdict(), Verdict::FalsePositive | Verdict::MaybeInToday)
+                }
+            })
+            .collect()
+    }
+}
+
+/// Runs one intent-capture variant.
+pub fn run_variant(fixtures: &Fixtures, v: &VariantFixture) -> Result<VariantRun, BuildError> {
+    let (candidate, data) = variant_profile(fixtures, v)?;
+    let mut run = run_profile(fixtures, &candidate, &data)?;
+    run.summary = v.summary.clone();
+    Ok(VariantRun {
+        id: v.id.clone(),
+        base: v.base.clone(),
+        intent: intent_label(v),
+        gate: v.gate,
+        run,
+    })
+}
+
+/// Runs one candidate's pool, for the given profile.
+fn run_profile(
+    fixtures: &Fixtures,
+    candidate: &CandidateFixture,
+    data: &ProfileData,
+) -> Result<CandidateRun, BuildError> {
+    let data = data.clone();
     let person = Person::from_profile(&data);
     let facts = ProfileFacts::from_profile(&data);
     let taste = TasteModel::empty(RULE_READER_REVISION);
@@ -437,7 +593,13 @@ pub fn run(fixtures: &Fixtures) -> Result<Run, BuildError> {
         .iter()
         .map(|c| run_candidate(fixtures, c))
         .collect::<Result<_, _>>()?;
-    Ok(Run { candidates })
+    let intent = fixtures
+        .variants
+        .iter()
+        .filter(|v| fixtures.candidate(&v.base).is_some())
+        .map(|v| run_variant(fixtures, v))
+        .collect::<Result<_, _>>()?;
+    Ok(Run { candidates, intent })
 }
 
 #[cfg(test)]

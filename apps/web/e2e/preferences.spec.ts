@@ -58,10 +58,13 @@ test.describe.serial("Preferences", () => {
     await expect(how.getByText("Learned", { exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
 
+    // An existing profile that never chose roles is asked, compactly, and
+    // nothing else waits for it.
+    await expect(page.getByRole("region", { name: "What kind of role are you looking for?" })).toBeVisible();
     // The words onboarding stored are the starting point; describe anew.
     await expect(page.getByText("What you told Narrow before:")).toBeVisible();
     await page.getByRole("button", { name: "Describe it again" }).click();
-    await page.getByLabel("What kind of job are you looking for?").fill(WORDS);
+    await page.getByRole("textbox", { name: "Anything else you care about?" }).fill(WORDS);
     await page.getByRole("button", { name: "Save" }).click();
     const understood = page.getByRole("region", { name: "What Narrow understands" });
     await expect(understood.getByRole("list", { name: "What you want" }).getByText("Small technical teams")).toBeVisible();
@@ -101,7 +104,8 @@ test.describe.serial("Preferences", () => {
     await expect(sheet.getByText("Small technical teams: doesn't matter").first()).toBeVisible();
     await sheet.getByLabel("Add one sentence").fill("I'd love developer tooling");
     await sheet.getByRole("button", { name: "Add", exact: true }).click();
-    await expect(sheet.getByText("I'd love developer tooling").first()).toBeVisible();
+    // A kind of role in their words becomes what they're looking for, and says so.
+    await expect(sheet.getByRole("status").filter({ hasText: "Added Developer tooling to the kinds of role you're looking for." })).toBeVisible();
     await expectAccessible(page);
     await page.keyboard.press("Escape");
     await understood.getByRole("button", { name: "Looks right" }).click();
@@ -113,8 +117,48 @@ test.describe.serial("Preferences", () => {
       understood.getByRole("button", { name: "Read my words again" }).click(),
     ]);
     await page.reload();
-    await expect(understood.getByRole("list", { name: "What you want" }).getByText(/I'd love developer tooling/)).toBeVisible();
+    // A kind of role in their own words is their choice of role.
+    await expect(page.getByRole("region", { name: "What you're looking for" }).getByText("Developer tooling")).toBeVisible();
     await expect(understood.getByRole("list", { name: "What you want" }).getByText("Small technical teams")).toHaveCount(0);
+  });
+
+  test("the kinds of role are chosen in a sheet, changed later, and Cancel keeps them", async ({ page }) => {
+    await signIn(page, name, "/preferences");
+    const section = page.getByRole("region", { name: "What you're looking for" });
+    await section.getByRole("button", { name: /^Change/ }).click();
+    const sheet = page.getByRole("dialog", { name: "What kind of role are you looking for?" });
+    await expect(sheet.getByRole("checkbox", { name: "Developer tooling" })).toBeChecked();
+    await expect(sheet.getByRole("checkbox", { name: "Developer tooling" })).toBeFocused();
+    // Keyboard only: Tab to the next role, Space to choose it.
+    await page.keyboard.press("Tab");
+    await expect(sheet.getByRole("checkbox", { name: "SRE" })).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect(sheet.getByRole("checkbox", { name: "SRE" })).toBeChecked();
+    await sheet.getByRole("checkbox", { name: "Backend" }).check();
+    await expectAccessible(page);
+    // Cancel keeps what was there.
+    await sheet.getByRole("button", { name: "Cancel" }).click();
+    await expect(sheet).toBeHidden();
+    await expect(section.getByText("Developer tooling", { exact: true })).toBeVisible();
+    // Save replaces it in one step, with a long title of their own.
+    await section.getByRole("button", { name: /^Change/ }).click();
+    await sheet.getByRole("checkbox", { name: "Developer tooling" }).uncheck();
+    await sheet.getByRole("checkbox", { name: "Backend" }).check();
+    await sheet.getByRole("checkbox", { name: "Platform" }).check();
+    await sheet.getByRole("checkbox", { name: "Product engineering" }).check();
+    // Three is the most: the rest wait.
+    await expect(sheet.getByRole("checkbox", { name: "Mobile" })).toBeDisabled();
+    const title = "Infrastructure-focused Product Engineer for developer platforms";
+    await sheet.getByLabel(/A title in your words/).fill(title);
+    await sheet.getByRole("button", { name: "Save" }).click();
+    await expect(sheet).toBeHidden();
+    await expect(section.getByText("Backend · Platform · Product engineering")).toBeVisible();
+    await expect(section.getByText(title)).toBeVisible();
+    await page.reload();
+    await expect(section.getByText("Backend · Platform · Product engineering")).toBeVisible();
+    // Nothing internal on the page by default (provenance is behind "How Narrow read this").
+    expect(await page.locator("main").innerText()).not.toMatch(/work_shape|confidence|origin|weight/);
+    await expectAccessible(page);
   });
 
   test("settings change directly, without rewriting the sentence", async ({ page }) => {

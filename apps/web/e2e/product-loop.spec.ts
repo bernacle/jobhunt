@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test";
 import { RESUME, STATEMENT, expectAccessible, publishLaterJobs, runWorker, sentEmails, signIn } from "./helpers";
 
 /**
- * The main loop, as a person does it: sign in, upload a resume, say what
- * they want, open Today, review, reject one with a reason, save another,
+ * The main loop, as a person does it: sign in, upload a resume, choose the
+ * kinds of role they want, say what else they care about, open Today, review, reject one with a reason, save another,
  * mark one applied, check Applications and Preferences, get an email about
  * a strong match they haven't seen, sign out and back in, and find
  * everything as they left it.
@@ -23,11 +23,19 @@ test.describe.serial("the product loop", () => {
     // The step folds into one line once it's done.
     await expect(page.getByText(/ana_lima\.md · \d+ roles? found/)).toBeVisible();
 
-    // One question; Narrow reads it into a short summary to confirm.
-    await page.getByLabel("What kind of job are you looking for?").fill(STATEMENT);
+    // The one structured question: the kinds of role, a few chips.
+    const roles = page.getByRole("form", { name: "What kind of role are you looking for?" });
+    await roles.getByRole("checkbox", { name: "Backend" }).check();
+    await roles.getByRole("checkbox", { name: "Platform" }).check();
+    await roles.getByRole("button", { name: "Continue" }).click();
+    await expect(page.getByText("Backend · Platform", { exact: true })).toBeVisible();
+
+    // Anything else, in their words; Narrow reads it into a short summary.
+    await page.getByRole("textbox", { name: "Anything else you care about?" }).fill(STATEMENT);
     await page.getByRole("button", { name: "Continue" }).click();
     const understood = page.getByRole("region", { name: "What Narrow understands" });
-    await expect(understood.getByRole("list", { name: "What you want" }).getByText(/Backend engineering/)).toBeVisible();
+    // The kinds of role they chose aren't repeated as Narrow's reading.
+    await expect(understood.getByRole("list", { name: "What you want" }).getByText(/Backend engineering/)).toHaveCount(0);
     await expect(understood.getByRole("list", { name: "What you avoid" }).getByText(/SRE/)).toBeVisible();
     // What it couldn't place is said, never dropped.
     await expect(understood.getByText(/Something about good vibes/)).toBeVisible();
@@ -176,7 +184,8 @@ test.describe.serial("the product loop", () => {
 
   test("Preferences keep what was said apart from what was learned", async ({ page }) => {
     await signIn(page, name, "/preferences");
-    await expect(page.getByRole("region", { name: "What you're looking for" }).getByText(STATEMENT)).toBeVisible();
+    await expect(page.getByRole("region", { name: "What you're looking for" }).getByText("Backend · Platform")).toBeVisible();
+    await expect(page.getByRole("region", { name: "Anything else you care about?" }).getByText(STATEMENT)).toBeVisible();
     // What was learned from decisions is its own section, never "you said".
     await expect(page.getByRole("region", { name: "Learned over time" }).getByText(/You tend to pass on large companies/)).toBeVisible();
     await page.locator("summary").filter({ hasText: "Edit constraints" }).click();
@@ -186,7 +195,7 @@ test.describe.serial("the product loop", () => {
     await expect(more.getByRole("group", { name: "Role" }).filter({ hasText: "backend roles" })).toContainText("Want");
     // A structured preference, the same model the API and assistants use.
     await more.getByText("Add a preference").click();
-    await page.getByLabel("About").selectOption("domain");
+    await page.getByLabel("About", { exact: true }).selectOption("domain");
     await page.getByLabel("Rule").selectOption("avoid");
     await page.getByLabel("Value").fill("adtech");
     await page.getByRole("button", { name: "Add preference" }).click();

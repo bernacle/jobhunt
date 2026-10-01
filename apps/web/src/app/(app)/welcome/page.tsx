@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-import { clarifyPreference, describeTaste, reviewTaste, uploadResume } from "@/app/actions";
+import { clarifyPreference, describeTaste, reviewTaste, updatePreferences, uploadResume } from "@/app/actions";
 import { ClarifyPreference } from "@/components/clarify";
-import { Constraints, DescribeForm, TasteSummary } from "@/components/taste-profile";
+import { LocationControls, PreferenceEditing, WorkControls } from "@/components/preference-controls";
 import { ResumeUpload } from "@/components/resume-upload";
-import { Disclosure } from "@/components/summary";
+import { RolesForm } from "@/components/roles";
+import { Disclosure, RowGroup } from "@/components/summary";
+import { Constraints, DescribeForm, TasteSummary } from "@/components/taste-profile";
 import { LinkButton, PageHeader, textLinkClass } from "@/components/ui";
 import { api, loadOrNoProfile } from "@/lib/api";
 import { clarifyTitle } from "@/lib/clarify";
+import { QUESTION, rolesText } from "@/lib/roles";
 
 export const metadata: Metadata = { title: "Welcome" };
 
@@ -42,23 +45,29 @@ function Step({ n, title, state, summary, change, children }: { n: number; title
 }
 
 /**
- * Onboarding, to value quickly: a resume, one question about what you
- * want (Narrow reads it into a short summary to confirm or correct), then
- * Today. Nothing to configure; the rest can be refined later in Profile
- * and Preferences.
+ * Onboarding, to value quickly, in five short steps: a resume; the one
+ * structured question, what kind of role (a few chips, answered in
+ * seconds); anything else they care about, in their words (optional);
+ * the practical constraints that rule jobs out; then Today. Nothing else
+ * to configure; the rest can be refined later in Profile and Preferences.
  */
-export default async function Welcome() {
+export default async function Welcome({ searchParams }: { searchParams: Promise<{ words?: string }> }) {
+  const { words } = await searchParams;
   const profile = await loadOrNoProfile(() => api.profile());
   const hasProfile = profile !== "no_profile";
-  const taste = hasProfile ? await api.tasteProfile() : undefined;
+  const [taste, settings] = hasProfile ? await Promise.all([api.tasteProfile(), api.taste()]) : [undefined, undefined];
+  const answered = taste?.roles.answered ?? false;
   const described = taste?.looking_for_source === "description";
+  const skipped = words === "skip" && !described;
   // A practical constraint read from the person's words with an open
   // question (a pay without currency, remote: must or nice?) isn't in
   // effect the way they meant it until answered.
   const questions = hasProfile ? profile.preferences.filter((p) => p.active && p.clarify && (p.category === "location" || p.category === "compensation")) : [];
   const resume = hasProfile ? (profile.documents ?? []).find((d) => d.current) : undefined;
   const experiences = hasProfile ? profile.experiences.length : 0;
-  const wantsDone = described && questions.length === 0;
+  const wordsDone = described || skipped;
+  const ready = hasProfile && answered && wordsDone;
+  const state = (done: boolean, reachable: boolean): StepState => (done ? "done" : reachable ? "active" : "todo");
   return (
     <div className="max-w-[560px]">
       <PageHeader title="Set up Narrow" />
@@ -84,25 +93,70 @@ export default async function Welcome() {
         >
           {!hasProfile && <ResumeUpload action={uploadResume} hasResume={false} />}
         </Step>
-        <Step n={2} title="What you want" state={!hasProfile ? "todo" : wantsDone ? "done" : "active"}>
-          {hasProfile && taste && (
-            <>
-              {described ? (
-                <div className="flex flex-col gap-6">
-                  <p className="text-[14px] text-fg-body">
-                    <q>{taste.looking_for}</q>{" "}
-                    <a href="/preferences#looking-for" className={textLinkClass}>
-                      Change
-                    </a>
-                  </p>
-                  <TasteSummary profile={taste} review={reviewTaste} />
-                  <Constraints items={taste.constraints} noted={taste.interpretation?.constraints_noted ?? []} />
-                </div>
-              ) : (
-                <DescribeForm describe={describeTaste} submitLabel="Continue" />
-              )}
+        <Step
+          n={2}
+          title={QUESTION}
+          state={state(answered, hasProfile)}
+          summary={taste && answered && [rolesText(taste.roles), taste.roles.title && `“${taste.roles.title}”`].filter(Boolean).join(" · ")}
+          change={
+            taste &&
+            answered && (
+              <Disclosure label="Change">
+                <RolesForm roles={taste.roles} review={reviewTaste} submitLabel="Save" />
+              </Disclosure>
+            )
+          }
+        >
+          {taste && !answered && <RolesForm roles={taste.roles} review={reviewTaste} />}
+        </Step>
+        <Step
+          n={3}
+          title="Anything else you care about?"
+          state={state(wordsDone, hasProfile && answered)}
+          summary={
+            taste &&
+            (described ? (
+              <>
+                <q>{taste.looking_for}</q>{" "}
+                <a href="/preferences#looking-for" className={textLinkClass}>
+                  Change
+                </a>
+              </>
+            ) : (
+              skipped && "Skipped: you can add it any time in Preferences."
+            ))
+          }
+        >
+          {taste && answered && !wordsDone && (
+            <DescribeForm
+              describe={describeTaste}
+              submitLabel="Continue"
+              skip={
+                <a href="/welcome?words=skip" className={`${textLinkClass} text-[14px] max-sm:inline-flex max-sm:min-h-11 max-sm:items-center`}>
+                  Skip for now
+                </a>
+              }
+            />
+          )}
+          {taste && described && <TasteSummary profile={taste} review={reviewTaste} />}
+        </Step>
+        <Step n={4} title="Practical constraints" state={ready ? "active" : "todo"}>
+          {taste && settings && ready && (
+            <div className="flex flex-col gap-6">
+              <PreferenceEditing>
+                <Constraints items={taste.constraints} noted={taste.interpretation?.constraints_noted ?? []} heading={false}>
+                  <div className="flex flex-col gap-6">
+                    <RowGroup id="work" title="Work">
+                      <WorkControls controls={settings.controls} update={updatePreferences} />
+                    </RowGroup>
+                    <RowGroup id="location" title="Location">
+                      <LocationControls controls={settings.controls} update={updatePreferences} />
+                    </RowGroup>
+                  </div>
+                </Constraints>
+              </PreferenceEditing>
               {questions.length > 0 && (
-                <section aria-labelledby="questions" className="mt-6">
+                <section aria-labelledby="questions">
                   <h3 id="questions" className="text-[14px] font-semibold text-fg">
                     {questions.length === 1 ? "One thing to settle" : `${questions.length} things to settle`}
                   </h3>
@@ -124,12 +178,12 @@ export default async function Welcome() {
                   </ul>
                 </section>
               )}
-            </>
+            </div>
           )}
         </Step>
-        <Step n={3} title="See what's worth your time" state={hasProfile ? "active" : "todo"}>
+        <Step n={5} title="See what's worth your time" state={hasProfile ? "active" : "todo"}>
           {hasProfile && (
-            <LinkButton href="/today" variant={wantsDone ? "primary" : "secondary"} className="max-sm:h-11">
+            <LinkButton href="/today" variant={ready && questions.length === 0 ? "primary" : "secondary"} className="max-sm:h-11">
               Go to Today
             </LinkButton>
           )}

@@ -1,12 +1,13 @@
 //! `narrow preferences`: what the user wants next.
 //!
-//! `show` (the default) leads with the taste profile: what Narrow
-//! understands about the kind of role and company the person wants, and
-//! their practical constraints, kept apart. `describe` is the one question
-//! that fills it ("What kind of job are you looking for?"); `confirm`,
-//! `correct` and `remove` are the person's decisions about it. `add`,
-//! `set` and `remove` keep working on the structured preferences as
-//! before.
+//! `show` (the default) leads with the taste profile: the kinds of role the
+//! person wants, what Narrow understands about the role and company they
+//! want, and their practical constraints, kept apart. `roles` answers
+//! "What kind of role are you looking for?" (a few kinds of work, and
+//! optionally a title); `describe` is "Anything else you care about?" in
+//! their words; `confirm`, `correct` and `remove` are the person's
+//! decisions about what Narrow read. `add`, `set` and `remove` keep working
+//! on the structured preferences as before.
 
 use std::io::Write;
 use std::process::ExitCode;
@@ -20,7 +21,7 @@ use jobhunt_app::preferences::{
     WorkModeInput, WorkSetupInput,
 };
 use jobhunt_app::taste_profile::{
-    PolarityInput, TasteAction, TasteItemView, TasteProfileView, TasteUpdateResult,
+    PolarityInput, RolesView, TasteAction, TasteItemView, TasteProfileView, TasteUpdateResult,
 };
 
 use crate::config::LoadedConfig;
@@ -42,9 +43,27 @@ pub enum PreferencesCommand {
         #[arg(long)]
         all: bool,
     },
-    /// Say what kind of job you're looking for, in a few words. Replaces
-    /// your previous description; Narrow reads it into a short summary for
-    /// you to confirm or correct.
+    /// What kind of role are you looking for? Choose up to 3 kinds of work
+    /// (backend, platform, infrastructure, product, full_stack, frontend,
+    /// mobile, developer_tooling, sre, security, data, ml_product), and
+    /// optionally a title in your words. Replaces your previous answer.
+    /// Without arguments, shows your answer and the choices.
+    Roles {
+        #[arg(value_name = "ROLE")]
+        roles: Vec<String>,
+        /// The role in your words, for one the list misses
+        /// ("Infrastructure-focused Product Engineer"). Kept as you write
+        /// it; the kinds of work you choose are what Narrow ranks by.
+        #[arg(long, value_name = "TITLE")]
+        title: Option<String>,
+        /// Remove the title you gave.
+        #[arg(long, conflicts_with = "title")]
+        no_title: bool,
+    },
+    /// Anything else you care about (the team, the company, how you like
+    /// to work, what you'd avoid), in a few words. Replaces your previous
+    /// description; Narrow reads it into a short summary for you to
+    /// confirm or correct.
     Describe {
         #[arg(required = true, value_name = "WORDS")]
         words: Vec<String>,
@@ -308,6 +327,36 @@ async fn execute(args: PreferencesArgs, app: &jobhunt_app::LocalApp) -> anyhow::
                 }
             }))
         }
+        PreferencesCommand::Roles {
+            roles,
+            title,
+            no_title,
+        } => {
+            let current = app.taste_profile().await?;
+            if roles.is_empty() && title.is_none() && !no_title {
+                return finish(choices(&mut out, &current.roles));
+            }
+            // A new choice keeps the title unless it is replaced or removed.
+            let title = match (title, no_title) {
+                (Some(t), _) => Some(t),
+                (None, true) => None,
+                (None, false) => current.roles.title.clone(),
+            };
+            let roles = if roles.is_empty() {
+                current
+                    .roles
+                    .chosen
+                    .iter()
+                    .map(|r| r.value.clone())
+                    .collect()
+            } else {
+                roles
+            };
+            let result = app
+                .review_taste(&TasteAction::SetRoles { roles, title }, now)
+                .await?;
+            finish(update(&mut out, &result))
+        }
         PreferencesCommand::Describe { words } => {
             let result = app
                 .review_taste(
@@ -440,14 +489,79 @@ fn item(out: &mut impl Write, i: &TasteItemView) -> std::io::Result<()> {
     )
 }
 
-/// The taste profile: what Narrow understands, what the person avoids,
-/// their practical constraints, what was learned. `hint` adds what to do
-/// next.
+/// The kinds of role offered, with what was chosen.
+fn choices(out: &mut impl Write, roles: &RolesView) -> std::io::Result<()> {
+    use crate::render::{DIM, TITLE};
+    writeln!(
+        out,
+        "{TITLE}What kind of role are you looking for?{TITLE:#} Choose up to {}:",
+        roles.max
+    )?;
+    for o in &roles.options {
+        let mark = if roles.chosen.iter().any(|c| c.value == o.value) {
+            "[x]"
+        } else {
+            "[ ]"
+        };
+        writeln!(out, "  {mark} {:<20}{DIM}{}{DIM:#}", o.label, o.value)?;
+    }
+    if let Some(title) = &roles.title {
+        writeln!(out, "  Title: “{title}”")?;
+    }
+    if !roles.experience.is_empty() {
+        writeln!(
+            out,
+            "  {DIM}Your experience shows {}: what you've done, not necessarily what you want next.{DIM:#}",
+            roles.experience.join(", ")
+        )?;
+    }
+    writeln!(
+        out,
+        "  {DIM}narrow preferences roles backend platform [--title \"…\"]{DIM:#}"
+    )
+}
+
+/// "What you're looking for": the kinds of role chosen, or the question.
+fn roles(out: &mut impl Write, roles: &RolesView) -> std::io::Result<()> {
+    use crate::render::{DIM, TITLE};
+    if !roles.answered {
+        writeln!(
+            out,
+            "{TITLE}What kind of role are you looking for?{TITLE:#} Choose up to {} kinds of work, so Narrow knows what you want next:",
+            roles.max
+        )?;
+        writeln!(out, "  narrow preferences roles backend platform")?;
+        let options: Vec<&str> = roles.options.iter().map(|o| o.value.as_str()).collect();
+        writeln!(out, "  {DIM}{}{DIM:#}", options.join(", "))?;
+        if !roles.experience.is_empty() {
+            writeln!(
+                out,
+                "  {DIM}Your experience shows {}: what you've done, not necessarily what you want next.{DIM:#}",
+                roles.experience.join(", ")
+            )?;
+        }
+        return writeln!(out);
+    }
+    writeln!(out, "{TITLE}What you're looking for{TITLE:#}")?;
+    if !roles.chosen.is_empty() {
+        let chosen: Vec<&str> = roles.chosen.iter().map(|r| r.label.as_str()).collect();
+        writeln!(out, "  {}", chosen.join(" · "))?;
+    }
+    if let Some(title) = &roles.title {
+        writeln!(out, "  “{title}”")?;
+    }
+    writeln!(out, "  {DIM}Change: narrow preferences roles …{DIM:#}\n")
+}
+
+/// The taste profile: the kinds of role wanted, what Narrow understands,
+/// what the person avoids, their practical constraints, what was learned.
+/// `hint` adds what to do next.
 fn taste(out: &mut impl Write, v: &TasteProfileView, hint: bool) -> std::io::Result<()> {
     use crate::render::{DIM, TITLE};
+    roles(out, &v.roles)?;
     match (&v.looking_for, v.looking_for_source.as_deref()) {
         (Some(words), Some("description")) => {
-            writeln!(out, "{TITLE}What you're looking for{TITLE:#}")?;
+            writeln!(out, "{TITLE}Anything else you care about{TITLE:#}")?;
             writeln!(out, "  “{words}”\n")?;
         }
         (Some(words), _) => {
@@ -455,13 +569,13 @@ fn taste(out: &mut impl Write, v: &TasteProfileView, hint: bool) -> std::io::Res
             writeln!(out, "  “{words}”")?;
             writeln!(
                 out,
-                "  {DIM}Describe what you're looking for: narrow preferences describe \"…\"{DIM:#}\n"
+                "  {DIM}Say what else you care about: narrow preferences describe \"…\"{DIM:#}\n"
             )?;
         }
         (None, _) => {
             writeln!(
                 out,
-                "What kind of job are you looking for? Say it in a few words:\n  narrow preferences describe \"Small technical teams, backend or platform work, startups. No early-career roles.\"\n"
+                "Anything else you care about? Say it in a few words:\n  narrow preferences describe \"Small technical teams, high ownership, startups. No early-career roles.\"\n"
             )?;
         }
     }
@@ -512,6 +626,15 @@ fn taste(out: &mut impl Write, v: &TasteProfileView, hint: bool) -> std::io::Res
             )?;
         }
         writeln!(out)?;
+    }
+    for a in &v.set_aside {
+        writeln!(
+            out,
+            "  ? Narrow read “{}” as something you'd avoid, which goes against the kind of role you chose; it isn't used. {DIM}{} · remove it: narrow preferences remove {}{DIM:#}",
+            a.text,
+            a.basis,
+            short(&a.id)
+        )?;
     }
     if let Some(i) = &v.interpretation {
         for a in &i.ambiguities {

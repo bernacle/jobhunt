@@ -110,10 +110,28 @@ pub fn apply_reading(
     applied.replaced = before - data.taste.len();
     let settled = settled_keys(&data.taste);
     let profile = data.id().to_string();
+    let mut conflicts: Vec<String> = Vec::new();
     for read in &reading.assertions {
         let key = read.key();
         if settled.contains(&key) {
             applied.kept_persons += 1;
+            // Words that avoid a kind of work the person chose: their
+            // choice stands, and the disagreement is theirs to settle.
+            if read.polarity == Polarity::Avoid
+                && let Some(chosen) = data.taste.iter().find(|a| {
+                    a.key() == key
+                        && a.is_active()
+                        && a.is_persons()
+                        && a.dimension == TasteDimension::WorkShape
+                        && a.polarity == Polarity::Prefer
+                })
+            {
+                conflicts.push(format!(
+                    "Your words read as not wanting {}, but you chose {}. Narrow goes with your choice; change it if that's wrong.",
+                    lower(&read.text),
+                    lower(&chosen.text)
+                ));
+            }
             continue;
         }
         applied.added += 1;
@@ -146,13 +164,28 @@ pub fn apply_reading(
             at: now,
             note,
             summary: reading.summary.clone(),
-            ambiguities: reading.ambiguities.clone(),
+            ambiguities: reading
+                .ambiguities
+                .iter()
+                .cloned()
+                .chain(conflicts)
+                .collect(),
             constraints_noted: reading.constraints_noted.clone(),
             rejected: reading.rejected,
         });
         brief.updated_at = now;
     }
     applied
+}
+
+/// "Backend engineering" → "backend engineering" (acronyms kept: "SRE").
+fn lower(text: &str) -> String {
+    let mut chars = text.chars();
+    match (chars.next(), chars.next()) {
+        (Some(a), Some(b)) if a.is_uppercase() && b.is_uppercase() => text.to_owned(),
+        (Some(a), _) => a.to_lowercase().chain(text.chars().skip(1)).collect(),
+        _ => String::new(),
+    }
 }
 
 /// Structured preferences behind a statement: a decision about the
@@ -168,9 +201,12 @@ fn preferences_of(a: &ComposedAssertion) -> Vec<PreferenceId> {
 }
 
 fn active(profile: &TasteProfile, id: TasteId) -> Result<&ComposedAssertion, TasteEditError> {
+    // What their choice of roles set aside is still theirs to settle.
     profile
         .assertions
         .iter()
+        .chain(&profile.set_aside)
+        .chain(&profile.supporting)
         .find(|a| a.id == id)
         .ok_or_else(|| TasteEditError::NotFound(id.to_string()))
 }
@@ -404,6 +440,171 @@ pub fn remove(
         preferences: preferences_of(&a),
         polarity: None,
     })
+}
+
+/// What storing a choice of roles did.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RolesChosen {
+    /// Something changed.
+    pub changed: bool,
+    /// Structured role settings behind kinds of work the person no longer
+    /// chose, for the caller to remove (only settings that said nothing
+    /// but kinds of work: "senior platform" keeps its level).
+    pub preferences: Vec<PreferenceId>,
+}
+
+/// Stores the person's answer to "What kind of role are you looking
+/// for?" in one step (see [`super::roles`]): each kind of work chosen is
+/// their statement (`stated`, `confirmed`, wanted); a kind of work they
+/// had chosen and no longer do is removed (a tombstone, so nothing reads
+/// it back); the title in their words replaces the previous one (none:
+/// removed). Other statements are left alone, and a kind of work already
+/// chosen is not touched.
+pub fn set_roles(
+    data: &mut ProfileData,
+    profile: &TasteProfile,
+    choice: &super::RoleChoice,
+    now: DateTime<Utc>,
+) -> RolesChosen {
+    let mut out = RolesChosen::default();
+    let profile_id = data.id().to_string();
+    let chosen_before = profile.chosen_roles();
+    for shape in &choice.shapes {
+        if chosen_before.iter().any(|a| a.value == *shape) {
+            continue;
+        }
+        let key = super::key(TasteDimension::WorkShape, shape);
+        let composed = profile
+            .assertions
+            .iter()
+            .chain(&profile.supporting)
+            .chain(&profile.removed)
+            .find(|a| a.key() == key);
+        let stored = data
+            .taste
+            .iter()
+            .find(|a| a.key() == key && a.superseded_by.is_none())
+            .cloned();
+        let id = stored
+            .as_ref()
+            .map(|a| a.id)
+            .or(composed.map(|a| a.id))
+            .unwrap_or_else(|| TasteId::derive(&[&profile_id, "stated", &key]));
+        // Narrow had read something else about it (an avoid): kept, as the
+        // reading the person's choice replaced.
+        let original = stored
+            .as_ref()
+            .and_then(|a| a.original.clone())
+            .or_else(|| {
+                composed
+                    .filter(|a| !a.is_persons() && a.polarity != Polarity::Prefer)
+                    .map(|a| OriginalReading {
+                        dimension: a.dimension,
+                        value: a.value.clone(),
+                        polarity: a.polarity,
+                        text: a.text.clone(),
+                        origin: a.origin,
+                    })
+            });
+        let mut sources = composed.map(|a| a.sources.clone()).unwrap_or_default();
+        sources.retain(|s| !matches!(s, TasteSource::Feedback { .. }));
+        upsert(
+            data,
+            TasteAssertion {
+                id,
+                dimension: TasteDimension::WorkShape,
+                value: (*shape).to_owned(),
+                polarity: Polarity::Prefer,
+                text: vocab::sentence(TasteDimension::WorkShape, shape, Polarity::Prefer),
+                confidence: TasteConfidence::High,
+                origin: TasteOrigin::Stated,
+                review: TasteReview::Confirmed,
+                sources: with_person(sources),
+                explanation: None,
+                interpreter: None,
+                original,
+                superseded_by: None,
+                created_at: stored.as_ref().map_or(now, |a| a.created_at),
+                updated_at: now,
+            },
+        );
+        out.changed = true;
+    }
+    for a in chosen_before {
+        if choice.shapes.contains(&a.value.as_str()) {
+            continue;
+        }
+        let mut stored = match data.taste.iter().find(|x| x.id == a.id) {
+            Some(x) => x.clone(),
+            None => a.to_stored(now),
+        };
+        stored.review = TasteReview::Removed;
+        stored.sources = with_person(a.sources.clone());
+        stored.updated_at = now;
+        upsert(data, stored);
+        out.changed = true;
+        for id in preferences_of(a) {
+            let only_work = data
+                .preferences
+                .iter()
+                .find(|p| p.id == id)
+                .is_some_and(|p| {
+                    vocab::from_preference(p)
+                        .iter()
+                        .all(|r| r.dimension == TasteDimension::WorkShape)
+                });
+            if only_work && !out.preferences.contains(&id) {
+                out.preferences.push(id);
+            }
+        }
+    }
+    let title_key = super::key(TasteDimension::Other, super::roles::TITLE_VALUE);
+    let current = data
+        .taste
+        .iter()
+        .position(|a| a.key() == title_key && a.superseded_by.is_none());
+    match (&choice.title, current) {
+        (Some(title), Some(i)) if data.taste[i].text == *title && data.taste[i].is_active() => {}
+        (Some(title), _) => {
+            let id = current.map_or_else(
+                || TasteId::derive(&[&profile_id, "stated", &title_key]),
+                |i| data.taste[i].id,
+            );
+            upsert(
+                data,
+                TasteAssertion {
+                    id,
+                    dimension: TasteDimension::Other,
+                    value: super::roles::TITLE_VALUE.to_owned(),
+                    polarity: Polarity::Prefer,
+                    text: title.clone(),
+                    confidence: TasteConfidence::High,
+                    origin: TasteOrigin::Stated,
+                    review: TasteReview::Confirmed,
+                    sources: vec![
+                        TasteSource::Words {
+                            quote: title.clone(),
+                            statement: None,
+                        },
+                        TasteSource::Person,
+                    ],
+                    explanation: None,
+                    interpreter: None,
+                    original: None,
+                    superseded_by: None,
+                    created_at: now,
+                    updated_at: now,
+                },
+            );
+            out.changed = true;
+        }
+        (None, Some(i)) => {
+            data.taste.remove(i);
+            out.changed = true;
+        }
+        (None, None) => {}
+    }
+    out
 }
 
 /// Adds the person's own sentence, read by the caller into `reading`
@@ -732,5 +933,342 @@ mod tests {
         assert_eq!(a.text, "Something with real users");
         assert_eq!(a.origin, TasteOrigin::Stated);
         assert!(add(&mut d, "  !! ", &reading(Vec::new()), at(2)).is_err());
+    }
+
+    // --- BRU-324: the person's choice of the kinds of role they want ---
+
+    fn inferred(dimension: TasteDimension, value: &str, polarity: Polarity) -> ReadAssertion {
+        ReadAssertion {
+            dimension,
+            value: value.into(),
+            polarity,
+            confidence: TasteConfidence::Medium,
+            text: vocab::sentence(dimension, value, polarity),
+            explanation: Some("from the career".into()),
+            origin: TasteOrigin::Profile,
+            sources: vec![TasteSource::Evidence {
+                text: "Mobile Engineer · 2017–2019 · work: react native".into(),
+                records: vec!["exp_1".into()],
+            }],
+        }
+    }
+
+    fn choose(d: &mut ProfileData, shapes: &[&str], title: Option<&str>) -> RolesChosen {
+        let choice = super::super::RoleChoice::parse(
+            &shapes.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+            title,
+        )
+        .unwrap();
+        let p = compose(d, &[]);
+        set_roles(d, &p, &choice, at(5))
+    }
+
+    fn shapes(p: &TasteProfile) -> Vec<&str> {
+        p.wanted(TasteDimension::WorkShape)
+    }
+
+    #[test]
+    fn chosen_roles_are_the_persons_and_outrank_what_was_inferred() {
+        let mut d = data();
+        let words = reading(vec![
+            read(
+                TasteDimension::WorkShape,
+                "infrastructure",
+                Polarity::Prefer,
+            ),
+            inferred(TasteDimension::WorkShape, "mobile", Polarity::Prefer),
+            read(TasteDimension::Team, "small_team", Polarity::Prefer),
+        ]);
+        apply_reading(
+            &mut d,
+            &words,
+            InterpretationOutcome::Read,
+            None,
+            "a".into(),
+            at(1),
+        );
+        let before = compose(&d, &[]);
+        assert!(before.chosen_roles().is_empty(), "nothing chosen yet");
+        assert_eq!(
+            shapes(&before),
+            ["infrastructure", "mobile"],
+            "read and inferred count, softly"
+        );
+
+        let chosen = choose(&mut d, &["backend", "platform"], None);
+        assert!(chosen.changed);
+        assert!(chosen.preferences.is_empty());
+        let p = compose(&d, &[]);
+        assert_eq!(shapes(&p), ["backend", "platform"], "only what they chose");
+        for a in p.chosen_roles() {
+            assert_eq!(a.origin, TasteOrigin::Stated);
+            assert_eq!(a.review, TasteReview::Confirmed);
+            assert_eq!(a.confidence, TasteConfidence::High);
+            assert!(a.is_persons() && a.is_explicit());
+        }
+        let supporting: Vec<&str> = p.supporting.iter().map(|a| a.value.as_str()).collect();
+        assert_eq!(
+            supporting,
+            ["infrastructure", "mobile"],
+            "kept as context, with provenance"
+        );
+        assert!(
+            p.supporting
+                .iter()
+                .any(|a| a.origin == TasteOrigin::Profile)
+        );
+        assert!(
+            find(&p, "team:small_team").is_some(),
+            "other taste untouched"
+        );
+
+        // Reading the words again changes nothing about the choice.
+        apply_reading(
+            &mut d,
+            &words,
+            InterpretationOutcome::Read,
+            None,
+            "b".into(),
+            at(6),
+        );
+        assert_eq!(shapes(&compose(&d, &[])), ["backend", "platform"]);
+    }
+
+    #[test]
+    fn roles_can_be_changed_removed_and_chosen_again() {
+        let mut d = data();
+        choose(&mut d, &["backend", "platform"], None);
+        let first = compose(&d, &[]);
+        let platform = find(&first, "work_shape:platform").unwrap().id;
+
+        assert!(choose(&mut d, &["backend", "product"], None).changed);
+        let p = compose(&d, &[]);
+        assert_eq!(shapes(&p), ["backend", "product"]);
+        assert!(p.removed.iter().any(|a| a.id == platform), "a tombstone");
+
+        // The same choice again changes nothing.
+        assert!(!choose(&mut d, &["backend", "product"], None).changed);
+
+        choose(&mut d, &["product"], None);
+        assert_eq!(shapes(&compose(&d, &[])), ["product"]);
+
+        // Platform chosen again: the same statement, the person's again.
+        choose(&mut d, &["product", "platform"], None);
+        let p = compose(&d, &[]);
+        assert_eq!(shapes(&p), ["platform", "product"]);
+        let back = find(&p, "work_shape:platform").unwrap();
+        assert_eq!(back.id, platform);
+        assert_eq!(back.review, TasteReview::Confirmed);
+    }
+
+    #[test]
+    fn avoid_and_doesnt_matter_win_over_inference() {
+        let mut d = data();
+        let words = reading(vec![
+            read(TasteDimension::WorkShape, "frontend", Polarity::Avoid),
+            read(TasteDimension::WorkShape, "full_stack", Polarity::Prefer),
+        ]);
+        apply_reading(
+            &mut d,
+            &words,
+            InterpretationOutcome::Read,
+            None,
+            "a".into(),
+            at(1),
+        );
+        let p = compose(&d, &[]);
+        confirm(
+            &mut d,
+            &p,
+            &[find(&p, "work_shape:frontend").unwrap().id],
+            at(2),
+        )
+        .unwrap();
+        let p = compose(&d, &[]);
+        let full_stack = find(&p, "work_shape:full_stack").unwrap().id;
+        correct(
+            &mut d,
+            &p,
+            full_stack,
+            Some(Polarity::Neutral),
+            None,
+            None,
+            at(3),
+        )
+        .unwrap();
+        // The career says frontend and full-stack work: inferred again.
+        let career = reading(vec![
+            inferred(TasteDimension::WorkShape, "frontend", Polarity::Prefer),
+            inferred(TasteDimension::WorkShape, "full_stack", Polarity::Prefer),
+        ]);
+        let applied = apply_reading(
+            &mut d,
+            &career,
+            InterpretationOutcome::Read,
+            None,
+            "b".into(),
+            at(4),
+        );
+        assert_eq!(applied.kept_persons, 2);
+        let p = compose(&d, &[]);
+        assert_eq!(p.avoided(TasteDimension::WorkShape), ["frontend"]);
+        assert_eq!(
+            find(&p, "work_shape:full_stack").unwrap().polarity,
+            Polarity::Neutral
+        );
+        assert!(shapes(&p).is_empty(), "neither comes back as wanted");
+        // With roles chosen, both decisions still stand.
+        choose(&mut d, &["backend"], None);
+        let p = compose(&d, &[]);
+        assert_eq!(shapes(&p), ["backend"]);
+        assert_eq!(p.avoided(TasteDimension::WorkShape), ["frontend"]);
+        assert_eq!(
+            find(&p, "work_shape:full_stack").unwrap().polarity,
+            Polarity::Neutral
+        );
+    }
+
+    #[test]
+    fn a_reading_against_a_chosen_role_is_set_aside_and_said() {
+        let mut d = data();
+        choose(&mut d, &["ml_product", "backend"], None);
+        // "no ML model-training roles", read too broadly.
+        let words = reading(vec![
+            read(TasteDimension::Domain, "ai", Polarity::Avoid),
+            read(TasteDimension::WorkShape, "ml_product", Polarity::Avoid),
+            read(TasteDimension::WorkShape, "ml_research", Polarity::Avoid),
+        ]);
+        apply_reading(
+            &mut d,
+            &words,
+            InterpretationOutcome::Read,
+            None,
+            "a".into(),
+            at(6),
+        );
+        let p = compose(&d, &[]);
+        assert_eq!(shapes(&p), ["backend", "ml_product"], "the choice stands");
+        let aside: Vec<String> = p.set_aside.iter().map(ComposedAssertion::key).collect();
+        assert_eq!(aside, ["domain:ai"], "kept, not in effect");
+        // And it can be settled: removed for good.
+        let ai = p.set_aside[0].id;
+        remove(&mut d, &p, ai, at(7)).unwrap();
+        let p = compose(&d, &[]);
+        assert!(p.set_aside.is_empty());
+        assert!(p.removed.iter().any(|a| a.id == ai));
+        assert!(p.avoided(TasteDimension::Domain).is_empty());
+        assert_eq!(
+            p.avoided(TasteDimension::WorkShape),
+            ["ml_research"],
+            "model training stays avoided: depth, not the choice"
+        );
+        let ambiguities = &d
+            .taste_brief
+            .as_ref()
+            .unwrap()
+            .interpretation
+            .as_ref()
+            .unwrap()
+            .ambiguities;
+        assert!(
+            ambiguities
+                .iter()
+                .any(|a| a.contains("not wanting ML product engineering")),
+            "{ambiguities:?}"
+        );
+    }
+
+    #[test]
+    fn the_title_is_supplemental_and_never_a_kind_of_work() {
+        let mut d = data();
+        choose(
+            &mut d,
+            &["backend"],
+            Some("Infrastructure-focused Product Engineer"),
+        );
+        let p = compose(&d, &[]);
+        assert_eq!(shapes(&p), ["backend"], "the title adds no kind of work");
+        let title = p.role_title().unwrap();
+        assert_eq!(title.text, "Infrastructure-focused Product Engineer");
+        assert_eq!(title.dimension, TasteDimension::Other);
+        assert!(title.is_persons());
+
+        // A new title replaces it; none removes it.
+        choose(&mut d, &["backend"], Some("Backend / Platform Engineer"));
+        let p = compose(&d, &[]);
+        assert_eq!(p.role_title().unwrap().text, "Backend / Platform Engineer");
+        assert_eq!(
+            p.assertions
+                .iter()
+                .filter(|a| a.dimension == TasteDimension::Other)
+                .count(),
+            1
+        );
+        choose(&mut d, &["backend"], None);
+        assert!(compose(&d, &[]).role_title().is_none());
+
+        // A title alone: answered, but nothing firm about the kind of work,
+        // so what was read stays as it was (soft).
+        let mut d = data();
+        let words = reading(vec![read(
+            TasteDimension::WorkShape,
+            "platform",
+            Polarity::Prefer,
+        )]);
+        apply_reading(
+            &mut d,
+            &words,
+            InterpretationOutcome::Read,
+            None,
+            "a".into(),
+            at(1),
+        );
+        choose(&mut d, &[], Some("Senior Product Engineer"));
+        let p = compose(&d, &[]);
+        assert!(p.chosen_roles().is_empty());
+        assert_eq!(shapes(&p), ["platform"]);
+    }
+
+    #[test]
+    fn earlier_role_settings_count_as_chosen() {
+        let mut d = data();
+        let role = |role: &str| {
+            let value = PreferenceValue::Role { role: role.into() };
+            Preference {
+                id: crate::PreferenceId::derive(&[&value.key()]),
+                value,
+                stance: Stance::Wanted,
+                origin: PreferenceOrigin::UserEntered,
+                statement: None,
+                snippet: None,
+                certainty: Certainty::Certain,
+                note: None,
+                active: true,
+                superseded_by: None,
+                created_at: at(0),
+                updated_at: at(0),
+            }
+        };
+        let backend = role("backend");
+        let senior_platform = role("senior platform");
+        d.preferences.push(backend.clone());
+        d.preferences.push(senior_platform.clone());
+        let p = compose(&d, &[]);
+        let chosen: Vec<&str> = p.chosen_roles().iter().map(|a| a.value.as_str()).collect();
+        assert_eq!(
+            chosen,
+            ["backend", "platform"],
+            "settings they entered are theirs"
+        );
+
+        let out = choose(&mut d, &["product"], None);
+        assert_eq!(
+            out.preferences,
+            [backend.id],
+            "\"senior platform\" also says the level"
+        );
+        let p = compose(&d, &[]);
+        assert_eq!(shapes(&p), ["product"]);
+        assert!(find(&p, "seniority:senior").is_some());
     }
 }

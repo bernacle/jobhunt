@@ -3933,6 +3933,90 @@
       ],
       "type": "object"
     },
+    "RoleOptionView": {
+      "description": "A kind of role the person can choose.",
+      "properties": {
+        "label": {
+          "description": "\"Backend\", \"Full stack\".",
+          "type": "string"
+        },
+        "value": {
+          "description": "The canonical value (`backend`, `full_stack`): what `set_roles`\ntakes.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "label"
+      ],
+      "type": "object"
+    },
+    "RolesView": {
+      "description": "\"What kind of role are you looking for?\": what the person chose, and\nwhat they can choose from.",
+      "properties": {
+        "answered": {
+          "description": "They answered (chose a kind of role, or wrote a title). Until then,\nNarrow can only guess the kind of work from their words, and asks.",
+          "type": "boolean"
+        },
+        "chosen": {
+          "description": "The kinds of role they chose, in the order of `options`.",
+          "items": {
+            "$ref": "#/$defs/RoleOptionView"
+          },
+          "type": "array"
+        },
+        "experience": {
+          "description": "Kinds of role their career evidence shows they have done: a hint\nfor answering, never taken as what they want.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "inferred": {
+          "description": "Kinds of role Narrow read from their words or inferred (counted,\nsoftly, while they haven't chosen; context once they have).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "max": {
+          "description": "At most this many can be chosen.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_title": {
+          "description": "The longest title kept.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "options": {
+          "description": "Every kind of role offered, in the order to show.",
+          "items": {
+            "$ref": "#/$defs/RoleOptionView"
+          },
+          "type": "array"
+        },
+        "title": {
+          "description": "The role in their words, when they wrote one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "answered",
+        "chosen",
+        "options",
+        "max",
+        "max_title",
+        "experience",
+        "inferred"
+      ],
+      "type": "object"
+    },
     "SameCompany": {
       "description": "Another recommendation at the same company as a feed item, not on the\nfeed itself (and not recorded as shown).",
       "properties": {
@@ -4734,6 +4818,34 @@
             "text"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "\"What kind of role are you looking for?\": the kinds of work they\nwant next (1 to 3 of `roles.options`: `backend`, `platform`, …), and\noptionally a title in their words for a role the list misses. Stored\nas their own statements in one step; kinds of work chosen before and\nnot now are removed. Replaces the previous answer.",
+          "properties": {
+            "action": {
+              "const": "set_roles",
+              "type": "string"
+            },
+            "roles": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": {
+              "default": null,
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -4980,6 +5092,24 @@
           },
           "type": "array"
         },
+        "roles": {
+          "$ref": "#/$defs/RolesView",
+          "description": "\"What kind of role are you looking for?\"."
+        },
+        "set_aside": {
+          "description": "Readings that go against a kind of role they chose (\"avoid AI\" when\nthey chose ML product work): not in effect, for them to settle.",
+          "items": {
+            "$ref": "#/$defs/TasteItemView"
+          },
+          "type": "array"
+        },
+        "supporting": {
+          "description": "Kinds of work read or inferred that their choice of roles comes\nbefore: context, not wanted.",
+          "items": {
+            "$ref": "#/$defs/TasteItemView"
+          },
+          "type": "array"
+        },
         "understood": {
           "description": "What Narrow understands they want, one line per dimension.",
           "items": {
@@ -4996,6 +5126,7 @@
         }
       },
       "required": [
+        "roles",
         "understood",
         "avoid",
         "unsure",

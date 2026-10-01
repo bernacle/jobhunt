@@ -120,3 +120,29 @@ test("Preferences work on a phone: summary rows, one decision in a sheet, thumb-
   await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("dialog")).toBeHidden();
 });
+
+test("the role question works on a phone: chips are 44px, the sheet fits, Save in reach", async ({ page }) => {
+  await onboardViaApi("e2e-mobile-roles");
+  await signIn(page, "e2e-mobile-roles", "/preferences");
+  const section = page.getByRole("region", { name: "What kind of role are you looking for?" });
+  await section.getByRole("button", { name: "Choose roles" }).click();
+  const sheet = page.getByRole("dialog", { name: "What kind of role are you looking for?" });
+  await expect(sheet).toBeVisible();
+  const viewport = page.viewportSize()!;
+  const box = (await sheet.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(viewport.width - 1);
+  for (const name of ["Backend", "Platform", "ML product"]) {
+    const chip = await sheet.locator("label").filter({ has: page.getByRole("checkbox", { name, exact: true }) }).boundingBox();
+    expect(chip!.height).toBeGreaterThanOrEqual(44);
+  }
+  await sheet.getByRole("checkbox", { name: "Backend", exact: true }).check();
+  await expect(sheet.getByRole("checkbox", { name: "Backend", exact: true })).toBeChecked();
+  const saveBox = (await sheet.getByRole("button", { name: "Save" }).boundingBox())!;
+  expect(saveBox.height).toBeGreaterThanOrEqual(44);
+  expect(saveBox.y + saveBox.height).toBeLessThanOrEqual(viewport.height);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  await expectAccessible(page);
+  await sheet.getByRole("button", { name: "Save" }).click();
+  await expect(sheet).toBeHidden();
+  await expect(page.getByRole("region", { name: "What you're looking for" }).getByText("Backend", { exact: true })).toBeVisible();
+});
