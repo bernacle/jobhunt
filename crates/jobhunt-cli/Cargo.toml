@@ -44,6 +44,7 @@ url.workspace = true
 keyring = { version = "3.6", features = ["apple-native", "windows-native"] }
 
 [dev-dependencies]
+async-trait.workspace = true
 reqwest = { workspace = true, features = ["json"] }
 sqlx.workspace = true
 tempfile.workspace = true

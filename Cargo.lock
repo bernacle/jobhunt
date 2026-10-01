@@ -1738,6 +1738,7 @@ dependencies = [
  "anstream",
  "anstyle",
  "anyhow",
+ "async-trait",
  "chrono",
  "clap",
  "directories",
