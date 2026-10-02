@@ -241,7 +241,7 @@ fn without_company_sections(description: &str) -> String {
 impl JobInput {
     /// The title, department and team, the location fields, and the
     /// description's content sentences (benefits, pay and policy
-    /// boilerplate and "About <company>" sections removed), at most
+    /// boilerplate and "About &lt;company&gt;" sections removed), at most
     /// [`MAX_SENTENCES`] and [`MAX_JOB_CHARS`] characters. Company name,
     /// pay, ids and URLs are not sent.
     pub fn build(p: &PostingFields<'_>) -> Self {
