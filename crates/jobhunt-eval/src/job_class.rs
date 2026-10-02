@@ -34,9 +34,9 @@ pub const MAX_SENTENCES: usize = 150;
 /// Characters of content sent at most (about 2,000 tokens).
 pub const MAX_JOB_CHARS: usize = 8_000;
 /// Quotes kept per field.
-const MAX_QUOTES: usize = 3;
+pub(crate) const MAX_QUOTES: usize = 3;
 /// Shortest quote that counts as evidence.
-const MIN_QUOTE_CHARS: usize = 4;
+pub(crate) const MIN_QUOTE_CHARS: usize = 4;
 
 macro_rules! vocabulary {
     ($(#[$doc:meta])* $name:ident { $($(#[$vdoc:meta])* $variant:ident => $text:literal),+ $(,)? }) => {
@@ -285,7 +285,7 @@ impl JobInput {
     }
 
     /// Everything a quote may come from, normalized.
-    fn quotable(&self) -> String {
+    pub(crate) fn quotable(&self) -> String {
         normalize(&format!(
             "{}\n{}\n{}",
             self.title,
@@ -532,7 +532,7 @@ pub fn normalize(text: &str) -> String {
 
 /// A quote as it should appear in the posting: normalized, without
 /// surrounding quotation marks or a trailing ellipsis.
-fn quote_key(quote: &str) -> String {
+pub(crate) fn quote_key(quote: &str) -> String {
     let n = normalize(quote);
     let n = n.trim_matches(|c: char| c == '"' || c == '\'' || c.is_whitespace());
     let n = n.trim_end_matches("...").trim_end_matches('\u{2026}');
