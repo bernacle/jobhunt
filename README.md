@@ -2208,7 +2208,7 @@ Jobs:
 
 Trying Narrow against a real job search and telling us where it fails is
 more useful than praise. Open a [feedback
-issue](https://github.com/bernacle/jobhunt/issues/new?template=experiment-feedback.yml)
+issue](https://github.com/bernacle/narrow/issues/new?template=experiment-feedback.yml)
 once you've run `init`, `preferences add` and `find` at least once: what
 got in the way, whether the shortlist felt better than browsing job boards
 yourself, what you did with the results, what you wished it did. Issues

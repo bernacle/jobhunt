@@ -34,9 +34,10 @@ against a person who is not the maintainer. This experiment is that test.
 
 A clean-room pass was run in an isolated environment against an
 anonymous, unauthenticated clone of the public repo
-(`https://github.com/bernacle/jobhunt`), using only what is documented in
-`README.md`, `CONTRIBUTING.md`, `docs/cloud.md`, `config.example.toml`,
-and `--help` output — no maintainer knowledge.
+(`https://github.com/bernacle/narrow`, then named `bernacle/jobhunt`),
+using only what is documented in `README.md`, `CONTRIBUTING.md`,
+`docs/cloud.md`, `config.example.toml`, and `--help` output — no
+maintainer knowledge.
 
 **This is agent-driven usability testing, not product-market-fit
 evidence.** It tells us whether the golden path *works*; it cannot tell
@@ -248,7 +249,7 @@ where it fails, not for praise.
 > runs entirely on your machine (Rust CLI, one SQLite file, no account
 > needed). Would you be up for trying it for a real job search and
 > telling me where it breaks or annoys you? I care much more about
-> friction than compliments. Repo: https://github.com/bernacle/jobhunt
+> friction than compliments. Repo: https://github.com/bernacle/narrow
 
 **An OSS/community post**
 
@@ -260,7 +261,7 @@ where it fails, not for praise.
 > Apache-2.0. Looking for a few people who are actively job hunting to
 > try it against a real search and tell me what's confusing or missing.
 > Feedback (especially the critical kind) welcome via GitHub issues:
-> https://github.com/bernacle/jobhunt
+> https://github.com/bernacle/narrow
 
 **Someone actively job hunting**
 
