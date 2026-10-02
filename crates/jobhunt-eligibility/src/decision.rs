@@ -20,7 +20,7 @@ use crate::profile::{FactBasis, ProfileLocation};
 /// reached under the old one. Bump it with any change that can change a
 /// decision. (The IANA time-zone database version and the reference year
 /// are keyed separately; see [`crate::cache`].)
-pub const RULES_VERSION: &str = "5";
+pub const RULES_VERSION: &str = "6";
 
 /// Whether a person appears able to work a job, worst first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]

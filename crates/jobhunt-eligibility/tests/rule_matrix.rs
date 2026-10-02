@@ -694,8 +694,18 @@ fn missing_profile_information_is_uncertainty() {
 }
 
 #[test]
-fn remote_with_only_an_office_city_is_not_a_scope() {
+fn remote_with_only_listed_cities_is_scoped_to_their_country() {
+    // A finite list is the scope (BRU-325).
     let j = remote("New York, NY", "");
+    assert_eq!(status(&j, &at("Chicago")), Eligible);
+    let d = decide(&j, &at("Recife, Brazil"));
+    assert_eq!(d.status, Ineligible);
+    assert!(
+        d.headline
+            .contains("lists only places in the United States")
+    );
+    // Beside an unscoped "Remote", a city only suggests it.
+    let j = remote("New York, NY | Remote", "");
     let d = decide(&j, &at("Chicago"));
     assert_eq!(d.status, Uncertain);
     assert!(

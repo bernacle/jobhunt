@@ -42,7 +42,10 @@ open jobs
    re-reads geography. BRU-322 fixed the readings BRU-320 exposed:
    "Remote in United States" (and "in North America", "within Canada") is a
    remote scope, and "open to US-based candidates" limits who can apply
-   (eligibility `RULES_VERSION` 5).
+   (eligibility `RULES_VERSION` 5). The BRU-325 eligibility patch reads
+   hiring scope, not pay scope, and finite location lists
+   ([`eligibility-hiring-scope.md`](eligibility-hiring-scope.md),
+   `RULES_VERSION` 6).
 2. **Reading the work** ([`facets::work`](../crates/jobhunt-ranking/src/facets/work.rs)):
    - *level*: the title's ("Senior", "Staff+", "Early Career", "New Grad"),
      else the description's ("0-2 years", "our new-grad program",

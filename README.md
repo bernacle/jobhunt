@@ -1061,12 +1061,22 @@ Remote availability is separate from workplace type. A job offers one or
 more **work options**:
 
 - **remote**, with a scope: explicitly global ("Remote - Worldwide",
-  "Anywhere"), a list of areas ("Remote (US)", "Remote - LATAM", "Remote:
-  Brazil, Argentina, Chile"), or **unknown** ("Remote" alone). A remote
-  job that lists only an office city ("New York, NY") has a scope
-  *inferred* from that city's country, which is never enough for a
-  definite answer and gives way to an explicit statement in the
-  description;
+  "Anywhere"), a list of areas, or **unknown** ("Remote" alone). Areas are
+  *stated* or *listed*:
+  - **stated**: "Remote (US)", "Remote - LATAM", "Remote: Brazil,
+    Argentina, Chile", and the same in a list of offices ("US-Remote,
+    Chicago, Seattle, San Francisco"), or a bare country beside a bare
+    "Remote" (Stripe's "Remote" with the location "US");
+  - **listed**: a remote job whose location fields list only places, with
+    nothing unscoped beside them, is remote in their countries (remote,
+    with Seattle, Austin and San Francisco: the United States; with
+    London and Manchester: the United Kingdom). A finite list is a scope.
+    An explicit statement in the description outranks it.
+
+  A city listed beside an unscoped "Remote" ("Remote, San Francisco, CA")
+  or a place Narrow can't read only *suggests* its country: that is never
+  enough for a definite answer. A country attribute on a "Remote" entry
+  (PostHog's "Remote"/"USA") is the source's default, not a scope;
 - **office** (on-site, hybrid, or office-based when the source doesn't
   say how often), at a place;
 - **engagement**: a remote path through a named mechanism in named places
@@ -1090,6 +1100,12 @@ keeping each sentence as evidence:
   or Syria");
 - **anywhere** ("work from anywhere", "anywhere in the world"), but not
   descriptions of the team ("a globally distributed team" is marketing);
+- **scope labels**: a "Location:", "Countries:" or "Region:" line is read
+  as where this role is open ("Location: Americas - North, Central and
+  South America, EMEA, APAC"; "Countries: Brazil, Canada, Colombia, …"),
+  clause by clause when it has several ("San Francisco (strongly
+  preferred); remote (US) considered"). "Location: Fully remote" makes the
+  job remote even when the fields list only places;
 - **offices** ("hybrid in London", "onsite in New York", "based in our
   Toronto office");
 - **work authorization** ("must be authorized to work in the United
@@ -1098,8 +1114,24 @@ keeping each sentence as evidence:
 - **sponsorship** (offered; offered "but not for every role";
   unavailable), **relocation** (help offered, or required);
 - **engagement** (contractors, B2B, employer of record such as Deel or
-  Oyster, where; "we don't work with contractors");
+  Oyster, where; "we don't work with contractors"). An employer of
+  record's own postings name it everywhere; there the name is the
+  company, not a way the job is offered;
 - **time zones** (below).
+
+Each place statement records whom it is about: **this role** ("this role
+requires you to be based within EMEA", "This is a remote position
+available anywhere in the world", a scope label) or **hiring in
+general** ("we are open to candidates across the Americas", "Work from
+anywhere: we have no HQ").
+
+**Hiring scope is not pay scope.** A sentence about pay, salary,
+compensation, a base or annual range, or benefits says what is paid where,
+not where people may be: "The anticipated annual pay range … for
+applicants based within the United States is …" limits nothing. Neither
+do terms for some of the people hired ("For US-based applicants: this
+position is part of a bargaining unit"). Country names elsewhere in the
+description are still read.
 
 ### Time zones
 
@@ -1204,17 +1236,34 @@ place, a remote scope that isn't published, a membership usage disagrees
 on, an authorization your profile doesn't state: each is uncertain, with
 the reason and, where there is one, the command that settles it.
 
-### Conflicting evidence
+### Hiring-scope precedence and conflicting evidence
 
-Both statements are kept and the disagreement is recorded:
+Where a remote job can be done comes from, strongest first:
 
-- The structured fields say one scope and the description a narrower one
-  (listed "Remote - Worldwide", description "US only"): the narrower,
-  explicit restriction applies, and the conflict is shown.
-- The description is broader than the fields (listed "Remote (US)",
-  description "open to candidates across the Americas"): for someone the
+1. an explicit hiring statement in the description (limits, "anywhere",
+   scope labels);
+2. a stated scope in the location fields (country, region, "anywhere");
+3. a finite list of places in the location fields;
+4. the workplace type or a remote flag alone: scope unknown;
+5. nothing: unknown.
+
+Pay and terms-for-some-hires sentences are never hiring evidence. When
+statements disagree, both are kept and the disagreement is recorded:
+
+- The description is narrower than the fields (listed "Remote -
+  Worldwide", description "US only"): the narrower, explicit restriction
+  applies, whoever it is about, and the conflict is shown.
+- The description is broader than a stated scope **and is about this
+  role** (listed "NAMER; APAC; EMEA", "Location: Americas - North, Central
+  and South America, EMEA, APAC"; listed "Remote (United States)", "This
+  is a remote position available anywhere in the world"): the
+  description's statement applies, and the resolution is shown.
+- The description is broader **about hiring in general** (listed "Remote
+  (US)", "we are open to candidates across the Americas"): for someone the
   fields exclude but the description includes, it is uncertain, with both
   statements: the description may describe the company, not the role.
+- A listed or suggested scope gives way to any explicit statement of the
+  description.
 - "Remote", but "applicants must live in NYC": the city requirement
   applies and the conflict is shown.
 - Several source records of one opportunity: the live records decide; a

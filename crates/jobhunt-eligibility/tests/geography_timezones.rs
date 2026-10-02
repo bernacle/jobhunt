@@ -289,10 +289,11 @@ fn unknown_and_ambiguous_places_stay_unknown() {
 }
 
 #[test]
-fn a_town_known_only_by_its_country_field_is_an_office_not_a_scope() {
+fn a_town_known_only_by_its_country_field_is_listed_in_that_country() {
     // Two Portlands in the US (Oregon, Maine), or a town Narrow doesn't
-    // list: the country field says where the office is. On a remote job
-    // that suggests the scope; it doesn't state it (BRU-308).
+    // list: the country field says where the place is (BRU-308). A remote
+    // job listing only it is remote in that country (BRU-325's finite
+    // lists).
     for town in ["Portland", "Smallville Junction"] {
         let mut j = remote(town, "We build developer tools.");
         j.posting.location = None;
@@ -305,7 +306,7 @@ fn a_town_known_only_by_its_country_field_is_an_office_not_a_scope() {
         let r = requirements(&j);
         assert_eq!(
             r.options[0].label(),
-            format!("Remote (United States (inferred from {town}))"),
+            format!("Remote (United States (from {town}))"),
             "{town}"
         );
         // A stated scope still wins over it.
@@ -434,7 +435,7 @@ fn a_source_country_constrains_a_bare_city_name() {
         assert_eq!(r.options.len(), 1, "{town}: {:?}", r.options);
         assert_eq!(
             r.options[0].label(),
-            format!("Remote ({country} (inferred from {town}))"),
+            format!("Remote ({country} (from {town}))"),
             "{town}"
         );
         // As an office, it is in that country too.

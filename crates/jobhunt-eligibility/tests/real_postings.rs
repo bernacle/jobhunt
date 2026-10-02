@@ -50,7 +50,9 @@ fn every_fixture_posting_gets_an_explained_decision() {
 
 #[test]
 fn linear_europe_listing_with_a_broader_description() {
-    // Listed "Europe"; the description is open to North America and Europe.
+    // Listed "Europe"; the description says "This role is open to
+    // candidates based in North America and Europe": a statement about this
+    // role, so its wider scope applies.
     let job = common::find("Senior / Staff Fullstack Engineer");
     let r = requirements(&job);
     assert_eq!(r.conflicts.len(), 1);
@@ -64,14 +66,20 @@ fn linear_europe_listing_with_a_broader_description() {
     );
     // The description includes North America, the listing doesn't.
     let d = evaluate_record(&job, &at("Toronto"));
-    assert_eq!(d.status, Uncertain);
-    let conflict = d
+    assert_eq!(d.status, Eligible);
+    let resolved = d
         .reasons
         .iter()
         .find(|r| r.rule == RuleId::Ambiguity)
         .unwrap();
-    assert!(conflict.evidence.iter().any(|e| e.field == "locations"));
-    assert!(conflict.evidence.iter().any(|e| e.field == "description"));
+    assert_eq!(resolved.verdict, Verdict::NotApplicable);
+    assert!(
+        resolved
+            .conclusion
+            .contains("this role's scope more widely")
+    );
+    assert!(resolved.evidence.iter().any(|e| e.field == "locations"));
+    assert!(resolved.evidence.iter().any(|e| e.field == "description"));
 }
 
 #[test]
@@ -88,15 +96,16 @@ fn figma_remote_in_the_united_states_or_offices() {
 }
 
 #[test]
-fn spotify_office_city_gives_way_to_the_description() {
-    // Remote, listing only "New York, NY"; the description says North America.
+fn spotify_listed_city_gives_way_to_the_description() {
+    // Remote, listing only "New York, NY" (a finite list: the United
+    // States); the description says North America, and outranks it.
     let job = common::find("Associate – Audiobook Licensing & Author Partnerships");
     let r = requirements(&job);
     assert_eq!(r.mode, JobMode::Remote);
     let Some(RemoteScope::Areas(areas)) = r.remote_option() else {
         panic!("expected an inferred scope");
     };
-    assert_eq!(areas[0].basis, ScopeBasis::OfficeCity);
+    assert_eq!(areas[0].basis, ScopeBasis::Listed);
     assert_eq!(evaluate_record(&job, &at("Chicago")).status, Eligible);
     assert_eq!(evaluate_record(&job, &at("Toronto")).status, Eligible);
     assert_eq!(evaluate_record(&job, &at("Mexico City")).status, Uncertain);
