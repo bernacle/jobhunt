@@ -123,10 +123,22 @@ migration, and none of them is the repository's identity:
 
 ## 10. Verification
 
-See the PR that added this file for CI, the Vercel preview, and the
-production deploys on Vercel and Railway after merge.
-`git grep 'bernacle/jobhunt'` matches only this file and the "then named
-`bernacle/jobhunt`" note in `docs/oss-adoption-experiment.md`.
+PR #40 (the one that added this file) was the first push after the rename.
+
+| Check | Result |
+| --- | --- |
+| Push to `bernacle/narrow` | works; `git fetch` and `git ls-remote` too |
+| CI on the PR | every required check passed (`fmt`, `clippy`, `test`, `cloud`, `docs`, `msrv`, `web`, `e2e`, `ci-passed`); ruleset still enforced |
+| Vercel preview on the PR | built from `bernacle/narrow`, READY; the bot comment appeared. The project link then read `repo: "narrow"` (same `repoId`) |
+| Merge `6878594` to `main` | CI passed on `main` |
+| Vercel production | deployment for `6878594` READY; same project, Root Directory, five env vars and three domains |
+| Railway | `api`, `worker-discovery` and `worker-verification` each auto-deployed `6878594` from `bernacle/narrow` `main`: SUCCESS. Postgres and `postgres-volume` (5 GB) untouched |
+| Health | `api` `/ready` 200; `narrow.fyi` 307 (sign-in redirect, as before); `www.narrow.fyi` 308 to the apex |
+| Residual references | `git grep 'bernacle/jobhunt'` matches only this file and the "then named `bernacle/jobhunt`" note in `docs/oss-adoption-experiment.md` |
+
+The `live.yml` guard is only exercised by the schedule (Mondays,
+Wednesdays and Fridays, 06:17 UTC): the first scheduled run after the
+rename should run, not be skipped.
 
 ## 11. Remaining manual actions
 
