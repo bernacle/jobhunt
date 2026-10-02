@@ -193,13 +193,16 @@ async fn checks_jobs_against_the_profile() {
         out.contains("The listing limits remote work to Europe; you live in Brazil"),
         "{out}"
     );
-    // North America is in the description but not the listing: unclear,
-    // with both statements.
+    // North America is in the description but not the listing, in a
+    // statement about this role: the description applies, with both
+    // statements shown.
     env.ok(&["preferences", "set", "location", "Toronto"]);
     let out = env.ok(&["check", &id]);
-    assert!(out.contains("UNCLEAR"), "{out}");
+    assert!(out.contains("ELIGIBLE"), "{out}");
     assert!(
-        out.contains("The location fields exclude Canada but the description includes it"),
+        out.contains(
+            "The description states this role's scope more widely than the location fields"
+        ),
         "{out}"
     );
     assert!(

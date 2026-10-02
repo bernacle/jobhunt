@@ -25,7 +25,7 @@ use crate::decision::{ProfileFact, Reason, RuleId, Verdict};
 use crate::geo::{Area, Country, Membership};
 use crate::job::{
     AreaConstraint, Evidence, JobRequirements, Mechanism, Presence, Relocation, RemoteScope,
-    ScopeBasis, Sponsorship, Strength, WorkOption, ZoneKind, ZoneRequirement,
+    ScopeBasis, Sponsorship, Strength, Subject, WorkOption, ZoneKind, ZoneRequirement,
 };
 use crate::profile::{FactBasis, ProfileFacts, ProfileLocation};
 use crate::zones::{Offsets, Zone, day_pairs, days_text, distance_hours, offsets_text};
@@ -480,10 +480,10 @@ pub fn geography(ctx: &Context<'_>) -> Vec<Reason> {
         return out;
     }
 
-    // A scope only inferred from an office city gives way to an explicit
+    // A scope only listed or inferred from places gives way to an explicit
     // statement of the description.
     let inferred_only = matches!(scope, Some(RemoteScope::Areas(areas))
-        if areas.iter().all(|a| a.basis == ScopeBasis::OfficeCity));
+        if areas.iter().all(|a| a.basis != ScopeBasis::Stated));
     let described_scope =
         job.allow.iter().any(|c| c.strength == Strength::Required) || job.worldwide.is_some();
     let stated = match ctx.option {
@@ -495,6 +495,10 @@ pub fn geography(ctx: &Context<'_>) -> Vec<Reason> {
         allow_reason(job, me)
     } else {
         None
+    };
+    let (described, subject) = match described {
+        Some((reason, subject)) => (Some(reason), Some(subject)),
+        None => (None, None),
     };
     match (stated, described) {
         (None, None) => {
@@ -530,6 +534,21 @@ pub fn geography(ctx: &Context<'_>) -> Vec<Reason> {
                 conflict.evidence.extend(s.evidence.iter().cloned());
                 conflict.evidence.extend(a.evidence.iter().cloned());
                 out.extend([s, a, conflict]);
+            }
+            (Verdict::Fail, Verdict::Pass) if subject == Some(Subject::Role) => {
+                // The description states this role's scope more widely
+                // ("Location: Americas - North, Central and South America,
+                // EMEA, APAC" under "NAMER; APAC; EMEA"): it applies.
+                s.verdict = Verdict::NotApplicable;
+                s.conclusion = format!("{} (but see the description)", s.conclusion);
+                let mut resolved = Reason::new(
+                    RuleId::Ambiguity,
+                    Verdict::NotApplicable,
+                    "The description states this role's scope more widely than the location fields; the description's statement applies",
+                );
+                resolved.evidence.extend(s.evidence.iter().cloned());
+                resolved.evidence.extend(a.evidence.iter().cloned());
+                out.extend([s, a, resolved]);
             }
             (Verdict::Fail, Verdict::Pass) => {
                 // The description is broader: it may describe the company,
@@ -607,9 +626,11 @@ fn scope_reason(scope: &RemoteScope, me: &ProfileLocation) -> Option<Reason> {
         RemoteScope::Areas(areas) => {
             let stated: Vec<(Area, &Evidence)> = areas
                 .iter()
-                .filter(|a| a.basis == ScopeBasis::Stated)
+                .filter(|a| a.basis.is_decisive())
                 .map(|a| (a.area, &a.evidence))
                 .collect();
+            // Remote, listing only places of these countries.
+            let listed = areas.iter().any(|a| a.basis == ScopeBasis::Listed);
             if stated.is_empty() {
                 // Only an office city on a remote job.
                 let inferred: Vec<Area> = areas.iter().map(|a| a.area).collect();
@@ -635,11 +656,16 @@ fn scope_reason(scope: &RemoteScope, me: &ProfileLocation) -> Option<Reason> {
             }
             let (m, matched, evidence) = best(&stated, me);
             let all: Vec<Area> = stated.iter().map(|(a, _)| *a).collect();
-            let listed = area_list(all.iter().copied(), "or");
+            let listed_places = area_list(all.iter().copied(), "and");
+            let alternatives = area_list(all.iter().copied(), "or");
             Some(match m {
                 Membership::Yes => {
                     let area = matched[0];
                     let text = match area {
+                        _ if listed => format!(
+                            "The listing is remote and lists only places in {listed_places}, including {}",
+                            country_name(home)
+                        ),
                         Area::Country(_) => {
                             format!("The listing allows remote work from {}", area_name(area))
                         }
@@ -671,10 +697,17 @@ fn scope_reason(scope: &RemoteScope, me: &ProfileLocation) -> Option<Reason> {
                         .copied()
                         .map_or(RuleId::RegionConstraint, rule_for),
                     Verdict::Fail,
-                    format!(
-                        "The listing limits remote work to {listed}; you live in {}",
-                        country_name(home)
-                    ),
+                    if listed {
+                        format!(
+                            "The listing is remote but lists only places in {listed_places}; you live in {}",
+                            country_name(home)
+                        )
+                    } else {
+                        format!(
+                            "The listing limits remote work to {alternatives}; you live in {}",
+                            country_name(home)
+                        )
+                    },
                 )
                 .evidence(stated.iter().map(|(_, e)| *e))
                 .fact(ProfileFact::location(me)),
@@ -723,8 +756,9 @@ fn engagement_scope(m: &crate::job::MechanismTerm, me: &ProfileLocation) -> Opti
     )
 }
 
-/// The description's required limits (and "anywhere"), for this person.
-fn allow_reason(job: &JobRequirements, me: &ProfileLocation) -> Option<Reason> {
+/// The description's required limits (and "anywhere"), for this person,
+/// and whether what admits them is a statement about this role.
+fn allow_reason(job: &JobRequirements, me: &ProfileLocation) -> Option<(Reason, Subject)> {
     let home = me.country()?;
     let limits: Vec<&AreaConstraint> = job
         .allow
@@ -732,19 +766,30 @@ fn allow_reason(job: &JobRequirements, me: &ProfileLocation) -> Option<Reason> {
         .filter(|c| c.strength == Strength::Required)
         .collect();
     if limits.is_empty() {
-        return job.worldwide.as_ref().map(|ev| {
-            Reason::new(
-                RuleId::RegionConstraint,
-                Verdict::Pass,
-                "The description says people can work from anywhere",
+        return job.worldwide.as_ref().map(|(subject, ev)| {
+            (
+                Reason::new(
+                    RuleId::RegionConstraint,
+                    Verdict::Pass,
+                    "The description says people can work from anywhere",
+                )
+                .evidence([ev]),
+                *subject,
             )
-            .evidence([ev])
         });
     }
     let areas: Vec<(Area, &Evidence)> = limits.iter().map(|c| (c.area, &c.evidence)).collect();
     let (m, matched, evidence) = best(&areas, me);
     let all = area_list(limits.iter().map(|c| c.area), "or");
-    Some(match m {
+    let subject = if limits
+        .iter()
+        .any(|c| matched.contains(&c.area) && c.subject == Subject::Role)
+    {
+        Subject::Role
+    } else {
+        Subject::General
+    };
+    let reason = match m {
         Membership::Yes => Reason::new(
             rule_for(matched[0]),
             Verdict::Pass,
@@ -776,7 +821,8 @@ fn allow_reason(job: &JobRequirements, me: &ProfileLocation) -> Option<Reason> {
         )
         .evidence(limits.iter().map(|c| &c.evidence))
         .fact(ProfileFact::location(me)),
-    })
+    };
+    Some((reason, subject))
 }
 
 /// Preferred places, when nothing else bounds a remote option.

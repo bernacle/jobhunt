@@ -17,7 +17,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 
 use chrono::{DateTime, Utc};
 use jobhunt_eligibility::geo::{Area, COUNTRIES, Membership};
-use jobhunt_eligibility::job::{JobRequirements, RemoteScope, ScopeBasis, Strength};
+use jobhunt_eligibility::job::{JobRequirements, RemoteScope, Strength};
 use jobhunt_eligibility::{Assessment, Eligibility, RuleId, Verdict};
 use jobhunt_jobs::verification::{
     CompensationCheck, CompensationStatus, CurrencyEvidence, PayRange, Standing, TrustState,
@@ -1111,11 +1111,11 @@ impl RemoteReach {
         };
         match scope {
             RemoteScope::Global(_) => Self::Areas(vec![Area::Worldwide]),
-            RemoteScope::Areas(areas) if areas.iter().any(|a| a.basis == ScopeBasis::Stated) => {
+            RemoteScope::Areas(areas) if areas.iter().any(|a| a.basis.is_decisive()) => {
                 Self::Areas(
                     areas
                         .iter()
-                        .filter(|a| a.basis == ScopeBasis::Stated)
+                        .filter(|a| a.basis.is_decisive())
                         .map(|a| a.area)
                         .collect(),
                 )

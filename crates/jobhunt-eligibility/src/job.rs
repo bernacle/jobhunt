@@ -6,9 +6,11 @@
 //! sentences of the description ("must be based in the US", "open to
 //! candidates in LATAM", "we hire contractors in Brazil through Deel",
 //! "must overlap Pacific time", "hybrid in London"). Marketing language
-//! ("a globally distributed team") is not read as a rule, and nothing is
-//! read from silence: a remote flag with no place is a remote option whose
-//! scope is [`RemoteScope::Unknown`], never "anywhere".
+//! ("a globally distributed team") is not read as a rule, pay is not
+//! hiring scope ("the pay range for applicants based within the United
+//! States"), and nothing is read from silence: a remote flag with no place
+//! is a remote option whose scope is [`RemoteScope::Unknown`], never
+//! "anywhere".
 //!
 //! Where the structured fields and the description disagree about where
 //! the job can be done, both are kept and the disagreement is recorded as
@@ -20,6 +22,7 @@ use std::sync::{LazyLock, Mutex, PoisonError};
 
 use chrono::{DateTime, Utc};
 use jobhunt_core::SourceKey;
+use jobhunt_core::text::search_key;
 use jobhunt_jobs::{EmploymentType, JobRecord, WorkplaceType};
 use jobhunt_profile::words::{Pattern, words};
 
@@ -82,13 +85,27 @@ impl JobMode {
 /// Why an area bounds a remote option.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScopeBasis {
-    /// A location field names it ("Remote (Canada)", "Europe" on a remote
-    /// job).
+    /// A location field names it ("Remote (Canada)", "US-Remote", "Europe"
+    /// on a remote job, "US" beside a bare "Remote").
     Stated,
-    /// A remote job that lists only an office city: remote work is
-    /// probably limited to that city's country, but the source does not
-    /// say so. Never enough for a definite answer.
+    /// A remote job whose location fields list only places in these
+    /// countries, and nothing unscoped beside them: the finite list is the
+    /// scope (remote, with Seattle, Austin and San Francisco, is remote in
+    /// the United States). An explicit statement of the description
+    /// outranks it.
+    Listed,
+    /// A remote job that lists an office city beside an unscoped "Remote"
+    /// or a place Narrow can't read: remote work is probably limited to
+    /// that city's country, but the source does not say so. Never enough
+    /// for a definite answer.
     OfficeCity,
+}
+
+impl ScopeBasis {
+    /// Whether the area settles where remote work is allowed.
+    pub fn is_decisive(self) -> bool {
+        !matches!(self, Self::OfficeCity)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -120,6 +137,7 @@ impl RemoteScope {
                 for a in areas {
                     let name = match a.basis {
                         ScopeBasis::Stated => a.area.to_string(),
+                        ScopeBasis::Listed => format!("{} (from {})", a.area, a.raw),
                         ScopeBasis::OfficeCity => format!("{} (inferred from {})", a.area, a.raw),
                     };
                     if !names.contains(&name) {
@@ -241,11 +259,24 @@ pub enum Strength {
     Preferred,
 }
 
+/// Whom a statement of the description about places is about.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Subject {
+    /// This role: "this role requires you to be based within EMEA", "This
+    /// is a remote position available anywhere in the world", a
+    /// "Location:" or "Countries:" line.
+    Role,
+    /// Hiring in general, or the company: "we are open to candidates
+    /// across the Americas", "work from anywhere: we have no HQ".
+    General,
+}
+
 /// A place the description allows or rules out.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AreaConstraint {
     pub area: Area,
     pub strength: Strength,
+    pub subject: Subject,
     pub evidence: Evidence,
 }
 
@@ -321,8 +352,9 @@ pub struct JobRequirements {
     pub allow: Vec<AreaConstraint>,
     /// Places the description rules out.
     pub deny: Vec<AreaConstraint>,
-    /// The description explicitly says people can be anywhere.
-    pub worldwide: Option<Evidence>,
+    /// The description explicitly says people can be anywhere, and about
+    /// whom.
+    pub worldwide: Option<(Subject, Evidence)>,
     pub authorization: Vec<AuthorizationRequirement>,
     pub sponsorship: Option<(Sponsorship, Evidence)>,
     pub relocation: Option<(Relocation, Evidence)>,
@@ -390,7 +422,24 @@ pub fn requirements(record: &JobRecord) -> JobRequirements {
         presence_policy: Vec::new(),
     };
 
-    let places = structured_places(record);
+    let mut places = structured_places(record);
+    // A bare "Remote" beside only countries or regions ("Remote" with the
+    // location "US", as Stripe lists it): those places are where remote
+    // work is allowed, not offices.
+    let unscoped_remote = places.iter().any(|(p, _, _)| p.remote && p.area.is_none());
+    let others: Vec<&(Place, Evidence, bool)> =
+        places.iter().filter(|(p, _, _)| !p.remote).collect();
+    if unscoped_remote
+        && matches!(posting.workplace_type, None | Some(WorkplaceType::Remote))
+        && !others.is_empty()
+        && others.iter().all(|(p, _, filled)| {
+            !filled && matches!(p.area, Some(Area::Country(_) | Area::Region(_)))
+        })
+    {
+        for (p, _, _) in &mut places {
+            p.remote |= p.area.is_some();
+        }
+    }
     // "Remote-Friendly (Travel-Required)": travel stated in a location field.
     for (field, text) in posting
         .location
@@ -446,6 +495,9 @@ pub fn requirements(record: &JobRecord) -> JobRequirements {
     };
     let mut scope: Vec<ScopedArea> = Vec::new();
     let mut global: Option<Evidence> = None;
+    // A remote place without a readable scope: an unscoped "Remote", or a
+    // place Narrow doesn't recognize.
+    let mut unscoped = false;
     let mut remote_evidence: Vec<Evidence> = job
         .mode_evidence
         .iter()
@@ -507,6 +559,7 @@ pub fn requirements(record: &JobRecord) -> JobRequirements {
                 }
             }
             (true, None) => {
+                unscoped = true;
                 if !place.remote {
                     job.unrecognized.push(ev.clone());
                 }
@@ -529,9 +582,17 @@ pub fn requirements(record: &JobRecord) -> JobRequirements {
             }
         }
     }
-    // A stated place wins over one only inferred from an office.
+    // A stated place wins over one only inferred from an office, and a
+    // stated "anywhere" over offices.
     if scope.iter().any(|s| s.basis == ScopeBasis::Stated) {
         scope.retain(|s| s.basis == ScopeBasis::Stated);
+    } else if global.is_some() {
+        scope.clear();
+    } else if !unscoped {
+        // Only places, and nothing unscoped beside them: a finite list.
+        for s in &mut scope {
+            s.basis = ScopeBasis::Listed;
+        }
     }
     // An explicit hybrid or on-site workplace type outranks a remote flag
     // (Ashby sets `isRemote` on some hybrid jobs); the disagreement is kept.
@@ -604,7 +665,9 @@ pub fn requirements(record: &JobRecord) -> JobRequirements {
                 job.presence_policy
                     .push(evidence(record, "description", &sentence));
             }
-            read_sentence(record, &sentence, &mut job);
+            for clause in label_clauses(&sentence) {
+                read_sentence(record, &clause, &mut job);
+            }
         }
     }
     // Mechanisms with named places are paths of their own.
@@ -835,10 +898,20 @@ pub fn sentences(text: &str) -> Vec<String> {
     out
 }
 
-const LIMIT_CUES: [&str; 41] = [
+const LIMIT_CUES: [&str; 51] = [
     "based in",
     "based out of",
+    "based within",
     "located in",
+    "located within",
+    "reside within",
+    "residing within",
+    "live within",
+    "living within",
+    "available to applicants",
+    "available to candidates",
+    "eligible countries",
+    "eligible locations",
     "reside in",
     "residing in",
     "resident* of",
@@ -879,6 +952,101 @@ const LIMIT_CUES: [&str; 41] = [
     "_ based applicants",
     "_ based employees",
 ];
+
+/// Pay, not hiring: "the anticipated annual pay range … for applicants
+/// based within the United States is …" says what is paid where, never
+/// where people may be.
+const COMPENSATION_CUES: [&str; 16] = [
+    "pay range*",
+    "pay band*",
+    "pay scale*",
+    "pay transparency",
+    "annual pay",
+    "base pay",
+    "salary",
+    "salaries",
+    "compensation",
+    "base range",
+    "annual range",
+    "salary range*",
+    "on target earnings",
+    "=OTE",
+    "total rewards",
+    "benefits",
+];
+
+/// Terms for some of the people hired ("For US-based applicants: this
+/// position is part of a bargaining unit"), which presuppose others.
+const SUBSET_CUES: [&str; 12] = [
+    "for _ based applicants",
+    "for _ based candidates",
+    "for _ based employees",
+    "for applicants based",
+    "for candidates based",
+    "for employees based",
+    "for applicants located",
+    "for candidates located",
+    "for employees located",
+    "for applicants in",
+    "for candidates in",
+    "for employees in",
+];
+
+/// A statement about this role, not the company or hiring in general.
+const ROLE_CUES: [&str; 12] = [
+    "this role",
+    "this position",
+    "this job",
+    "this opening",
+    "this opportunity",
+    "this _ role",
+    "this _ position",
+    "the role",
+    "the position",
+    "a remote role",
+    "a remote position",
+    "a fully remote",
+];
+
+/// Labels that introduce where the job is open: "Location: Americas -
+/// North, Central and South America, EMEA, APAC", "Countries: Brazil,
+/// Canada, Colombia, …".
+const SCOPE_LABELS: [&str; 10] = [
+    "location",
+    "locations",
+    "location s",
+    "countries",
+    "eligible countries",
+    "hiring countries",
+    "remote locations",
+    "remote location",
+    "region",
+    "regions",
+];
+
+/// Whether a line is a scope label ("Location: …"), read as a statement
+/// of where this role is open.
+fn scope_label(sentence: &str) -> bool {
+    let line = sentence.trim_start_matches(|c: char| !c.is_alphanumeric());
+    line.split_once(':').is_some_and(|(label, rest)| {
+        !rest.trim().is_empty() && SCOPE_LABELS.contains(&search_key(label).as_str())
+    })
+}
+
+/// A scope label's clauses, each read on its own ("Location: San Francisco
+/// (strongly preferred); remote (US) considered": the preference is the
+/// city's, not the remote scope's); any other sentence whole.
+fn label_clauses(sentence: &str) -> Vec<String> {
+    match sentence.split_once(':') {
+        Some((label, value)) if scope_label(sentence) && value.contains(';') => value
+            .split(';')
+            .map(str::trim)
+            .filter(|c| !c.is_empty())
+            .map(|c| format!("{}: {c}", label.trim()))
+            .collect(),
+        _ => vec![sentence.to_owned()],
+    }
+}
 
 /// Wording that makes a location statement a preference, not a rule.
 const SOFT_CUES: [&str; 7] = [
@@ -1148,7 +1316,7 @@ fn presence_policy(sentence: &str) -> bool {
 
 /// Substrings (lowercase) at least one of which every eligibility sentence
 /// contains; sentences without any are skipped cheaply.
-const KEYWORDS: [&str; 38] = [
+const KEYWORDS: [&str; 40] = [
     "based",
     "locat",
     "resid",
@@ -1183,6 +1351,8 @@ const KEYWORDS: [&str; 38] = [
     "people",
     "office",
     "only",
+    "countries",
+    "region",
     "hybrid",
     "on-site",
     "onsite",
@@ -1218,8 +1388,17 @@ fn read_sentence(record: &JobRecord, sentence: &str, job: &mut JobRequirements) 
         .iter()
         .partition(|a| matches!(a, Area::City { .. } | Area::Subdivision { .. }));
 
+    // Pay for people in a place, and terms for some of the people hired,
+    // are not where the job can be done.
+    let hiring_scope = !has_any(&COMPENSATION_CUES) && !has_any(&SUBSET_CUES);
+    let label = scope_label(sentence);
+    let subject = if label || has_any(&ROLE_CUES) {
+        Subject::Role
+    } else {
+        Subject::General
+    };
     let excluded = has_any(&EXCLUSION_CUES);
-    let limited = has_any(&LIMIT_CUES);
+    let limited = has_any(&LIMIT_CUES) || label;
     let authorization = has_any(&AUTHORIZATION_CUES);
     let strength = if has_any(&SOFT_CUES) {
         Strength::Preferred
@@ -1229,10 +1408,17 @@ fn read_sentence(record: &JobRecord, sentence: &str, job: &mut JobRequirements) 
     let office_cue = has_any(&OFFICE_CUES);
     let remote_words = has_any(&["remote*"]);
     let contractor = has_any(&CONTRACTOR_CUES);
-    let eor = has_any(&EOR_CUES);
+    // An employer of record's own postings name it everywhere ("Work from
+    // anywhere: Oyster has no borders"); that is the company, not a way
+    // this job is offered.
+    let company = search_key(&record.posting.company);
+    let eor = compiled(&EOR_CUES)
+        .iter()
+        .zip(EOR_CUES)
+        .any(|(p, cue)| search_key(cue) != company && p.find(&ws).is_some());
     let mechanism_sentence = contractor || eor;
 
-    if !broad.is_empty() && (limited || authorization) && !mechanism_sentence {
+    if hiring_scope && !broad.is_empty() && (limited || authorization) && !mechanism_sentence {
         let target = if excluded {
             &mut job.deny
         } else {
@@ -1247,6 +1433,7 @@ fn read_sentence(record: &JobRecord, sentence: &str, job: &mut JobRequirements) 
                     target.push(AreaConstraint {
                         area: *area,
                         strength,
+                        subject,
                         evidence: ev(),
                     });
                 }
@@ -1260,23 +1447,19 @@ fn read_sentence(record: &JobRecord, sentence: &str, job: &mut JobRequirements) 
             });
         }
         // "can be held … remotely in the United States": a remote option.
-        if remote_words && !excluded && job.remote_option().is_none() {
-            job.options.insert(
-                0,
-                WorkOption::Remote {
-                    scope: RemoteScope::Unknown,
-                    evidence: vec![ev()],
-                },
-            );
-            job.mode = match job.mode {
-                JobMode::Unknown => JobMode::Remote,
-                JobMode::Remote => JobMode::Remote,
-                _ => JobMode::Mixed,
-            };
+        if remote_words && !excluded {
+            add_remote_option(job, ev());
         }
     }
+    // "Location: Fully remote.": the label says how the job is done, even
+    // where the location fields list only places.
+    if label && remote_words && hiring_scope && !has_any(&NEGATIONS) {
+        add_remote_option(job, ev());
+    }
     // "Applicants must live in NYC": a city limit on where people live.
-    if !cities.is_empty()
+    if hiring_scope
+        && !label
+        && !cities.is_empty()
         && limited
         && !excluded
         && !office_cue
@@ -1288,6 +1471,7 @@ fn read_sentence(record: &JobRecord, sentence: &str, job: &mut JobRequirements) 
                 job.allow.push(AreaConstraint {
                     area: *area,
                     strength,
+                    subject,
                     evidence: ev(),
                 });
             }
@@ -1295,7 +1479,8 @@ fn read_sentence(record: &JobRecord, sentence: &str, job: &mut JobRequirements) 
     }
     // "hybrid in London", "onsite in New York", "based in our Toronto
     // office".
-    if office_cue && !excluded && !mechanism_sentence && job.mode != JobMode::Remote {
+    if hiring_scope && office_cue && !excluded && !mechanism_sentence && job.mode != JobMode::Remote
+    {
         let presence = if has_any(&["hybrid"]) {
             Presence::Hybrid
         } else if has_any(&["on site", "onsite", "in person", "in office"]) {
@@ -1328,13 +1513,16 @@ fn read_sentence(record: &JobRecord, sentence: &str, job: &mut JobRequirements) 
             }
         }
     }
-    // "Work from anywhere in the US or Europe" limits; it isn't global.
-    if job.worldwide.is_none()
+    // "Work from anywhere in the US or Europe" limits; it isn't global. A
+    // statement about this role outranks one about the company.
+    let stated_worldwide = job.worldwide.as_ref().map(|(s, _)| *s);
+    if hiring_scope
+        && stated_worldwide.is_none_or(|s| s == Subject::General && subject == Subject::Role)
         && broad.is_empty()
         && has_any(&WORLDWIDE_CUES)
         && has_any(&HIRING_CONTEXT)
     {
-        job.worldwide = Some(ev());
+        job.worldwide = Some((subject, ev()));
     }
     if has_any(&FLEXIBLE_CUES) && job.flexible_hours.is_none() {
         job.flexible_hours = Some(ev());
@@ -1424,6 +1612,24 @@ fn read_sentence(record: &JobRecord, sentence: &str, job: &mut JobRequirements) 
             job.relocation = Some((Relocation::Offered, ev()));
         }
     }
+}
+
+/// A remote option the description states, when the fields gave none.
+fn add_remote_option(job: &mut JobRequirements, evidence: Evidence) {
+    if job.remote_option().is_some() {
+        return;
+    }
+    job.options.insert(
+        0,
+        WorkOption::Remote {
+            scope: RemoteScope::Unknown,
+            evidence: vec![evidence],
+        },
+    );
+    job.mode = match job.mode {
+        JobMode::Unknown | JobMode::Remote => JobMode::Remote,
+        _ => JobMode::Mixed,
+    };
 }
 
 /// Time zones in a sentence, with how they constrain the work.
@@ -1578,7 +1784,7 @@ fn find_conflicts(job: &mut JobRequirements) {
         }
         RemoteScope::Global(_) => {}
     }
-    if let Some(ev) = &job.worldwide
+    if let Some((_, ev)) = &job.worldwide
         && !limits.is_empty()
     {
         conflicts.push(Conflict {

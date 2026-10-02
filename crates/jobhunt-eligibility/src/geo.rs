@@ -400,6 +400,9 @@ impl Region {
                 "us canada",
                 "us and canada",
                 "usa canada",
+                // Region codes some boards use ("NAMER; APAC; EMEA").
+                "namer",
+                "noram",
             ],
             Self::LatinAmerica => &[
                 "latin america",
@@ -413,7 +416,14 @@ impl Region {
             Self::SouthAmerica => &["south america", "south american"],
             Self::CentralAmerica => &["central america"],
             Self::Caribbean => &["caribbean", "the caribbean"],
-            Self::Americas => &["americas", "the americas", "amer"],
+            Self::Americas => &[
+                "americas",
+                "the americas",
+                "amer",
+                // "any American region / time zone" (Canonical).
+                "american region",
+                "american regions",
+            ],
             Self::Europe => &["europe", "european", "eu uk", "uk eu"],
             Self::EuropeanUnion => &["eu", "european union"],
             Self::Eea => &["eea", "european economic area", "eu eea"],
@@ -1478,7 +1488,7 @@ pub fn parse_places(text: &str) -> Vec<Place> {
 
 fn split_options(text: &str) -> Vec<String> {
     // Separators only count outside parentheses: "Remote (SF, CA; Oakland, CA)".
-    const SEPARATORS: [&str; 6] = ["|", ";", " / ", "•", "\n", " or "];
+    const SEPARATORS: [&str; 7] = ["|", ";", " / ", "•", "\n", " or ", " & "];
     let mut parts = Vec::new();
     let mut current = String::new();
     let mut depth = 0usize;
@@ -1590,6 +1600,37 @@ fn parse_option(option: &str) -> Vec<Place> {
             main.push(c);
         }
     }
+    // "US-Remote, Chicago, Seattle, San Francisco": a part of a list that
+    // pairs a country or region with "Remote" is a remote scope, and the
+    // countries and regions listed with it share that scope ("Remote - US,
+    // Canada"); cities stay places of their own.
+    let segments: Vec<&str> = main
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+    if segments.len() > 1 && inner.is_empty() {
+        let (scoped, rest): (Vec<&str>, Vec<&str>) = segments
+            .iter()
+            .partition(|s| remote_scope_part(s).is_some());
+        if !scoped.is_empty() {
+            let mut out: Vec<Place> = scoped
+                .iter()
+                .map(|s| Place::new(*s, remote_scope_part(s), true))
+                .collect();
+            if !rest.is_empty() {
+                out.extend(
+                    parse_list(&rest.join(", "), false)
+                        .into_iter()
+                        .map(|mut p| {
+                            p.remote |= matches!(p.area, Some(Area::Country(_) | Area::Region(_)));
+                            p
+                        }),
+                );
+            }
+            return out;
+        }
+    }
     let (main_rest, main_remote) = strip_remote(&main);
     let inner_remote = inner.iter().any(|i| strip_remote(i).1);
     // "Remote - LATAM" and "US Remote" are remote work in that area;
@@ -1637,6 +1678,31 @@ fn parse_option(option: &str) -> Vec<Place> {
         places.push(Place::new(original, None, remote || main_remote));
     }
     places
+}
+
+/// "US-Remote", "Remote - UK", "EMEA Remote": a country or region named
+/// with a remote word, as one part of a longer list. A code that is also a
+/// state or province ("CA", "WA") is not read: after a city it qualifies
+/// the city.
+fn remote_scope_part(part: &str) -> Option<Area> {
+    let (rest, remote) = strip_remote(part);
+    if !remote || rest.is_empty() {
+        return None;
+    }
+    let area = if rest.len() <= 3 {
+        let code = rest.to_uppercase();
+        if SUBDIVISION_LISTS
+            .iter()
+            .flat_map(|l| l.iter())
+            .any(|s| s.code == code)
+        {
+            return None;
+        }
+        lookup_location_code_near(&code, false, None)
+    } else {
+        lookup_name(&rest)
+    }?;
+    matches!(area, Area::Country(_) | Area::Region(_)).then_some(area)
 }
 
 /// Pending names and what each could mean.
@@ -2025,6 +2091,42 @@ mod tests {
         );
         assert_eq!(areas("Remote - LATAM"), s(&[("Latin America", true)]));
         assert_eq!(areas("US Remote"), s(&[("United States", true)]));
+        // A remote scope inside a list of offices (Stripe).
+        assert_eq!(
+            areas("US-Remote, Chicago, Seattle, San Francisco"),
+            s(&[
+                ("United States", true),
+                ("Chicago, United States", false),
+                ("Seattle, United States", false),
+                ("San Francisco, United States", false),
+            ])
+        );
+        assert_eq!(
+            areas("Remote - US, Canada"),
+            s(&[("United States", true), ("Canada", true)])
+        );
+        for text in [
+            "Remote - US",
+            "Remote US",
+            "Remote (United States)",
+            "US-Remote",
+        ] {
+            assert_eq!(areas(text), s(&[("United States", true)]), "{text}");
+        }
+        // A state code after a city qualifies the city.
+        assert_eq!(
+            areas("Seattle, WA - Remote"),
+            s(&[("Seattle, United States", false), ("? Remote", true)])
+        );
+        assert_eq!(
+            areas("San Francisco, CA - Remote"),
+            s(&[("San Francisco, United States", false), ("? Remote", true)])
+        );
+        assert_eq!(areas("NAMER"), s(&[("North America", false)]));
+        assert_eq!(
+            areas("United States & Canada"),
+            s(&[("United States", false), ("Canada", false)])
+        );
         assert_eq!(areas("Anywhere"), s(&[("anywhere", false)]));
         assert_eq!(areas("Narnia"), s(&[("? Narnia", false)]));
     }
