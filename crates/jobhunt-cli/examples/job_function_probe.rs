@@ -558,20 +558,6 @@ fn fixed_chars() -> usize {
     job_function::SYSTEM_PROMPT.chars().count() + job_function::schema().to_string().chars().count()
 }
 
-/// The prompt and schema, digested: two runs with the same digest sent the
-/// same instructions.
-fn prompt_digest() -> String {
-    StableId::derive(
-        "narrow.eval.job_function.prompt",
-        &[
-            CLASSIFIER_VERSION,
-            job_function::SYSTEM_PROMPT,
-            &job_function::schema().to_string(),
-        ],
-    )
-    .to_string()
-}
-
 async fn size(db: &str) {
     let pool = pool(db).await;
     let rows = sqlx::query(&format!("select {COLUMNS} from jobs where status = 'open'"))
@@ -592,7 +578,7 @@ async fn size(db: &str) {
             "job_chars": {"mean": total / chars.len().max(1), "median": chars.get(chars.len() / 2),
                           "max": chars.last(), "total": total},
             "fixed_chars_per_call": fixed_chars(),
-            "prompt_digest": prompt_digest(),
+            "prompt_digest": job_function::prompt_digest(),
         }))
         .unwrap()
     );
@@ -717,7 +703,7 @@ async fn run(db: &str, ids_path: &str, out_path: &str) {
     calls.sort_by_key(|c| order[c["job"].as_str().unwrap()]);
     let out = json!({
         "classifier": CLASSIFIER_VERSION,
-        "prompt_digest": prompt_digest(),
+        "prompt_digest": job_function::prompt_digest(),
         "provider": PROVIDER,
         "model": model_name,
         "started_at": started_at.to_rfc3339(),

@@ -122,6 +122,16 @@ even when the work is writing code against APIs.\n\
 benefits and other employer marketing: never classify from them and never quote them.\n\
 - If the primary function or the customer contact is genuinely ambiguous, answer unclear.";
 
+/// The prompt and schema, digested: runs with the same digest sent the
+/// same instructions.
+pub fn prompt_digest() -> String {
+    jobhunt_core::StableId::derive(
+        "narrow.eval.job_function.prompt",
+        &[CLASSIFIER_VERSION, SYSTEM_PROMPT, &schema().to_string()],
+    )
+    .to_string()
+}
+
 fn string_array() -> Value {
     json!({"type": "array", "items": {"type": "string"}})
 }
