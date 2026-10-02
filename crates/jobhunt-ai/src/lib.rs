@@ -330,6 +330,13 @@ impl ModelInterpreter {
         };
         let input_tokens = tokens(["input_tokens", "prompt_tokens"]);
         let output_tokens = tokens(["output_tokens", "completion_tokens"]);
+        // OpenAI reports reasoning separately (and inside the output);
+        // Anthropic doesn't.
+        let reasoning_tokens = usage
+            .and_then(|u| u.get("completion_tokens_details"))
+            .and_then(|d| d.get("reasoning_tokens"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         let text = match self.config.provider {
             Provider::Anthropic => anthropic_text(&answer),
             Provider::OpenAi => openai_text(&answer),
@@ -338,15 +345,34 @@ impl ModelInterpreter {
             text,
             input_tokens,
             output_tokens,
+            reasoning_tokens,
         })
+    }
+
+    /// One call for a JSON answer of `schema`, after `system`, with no
+    /// retry and no validation: for offline experiments that bring their
+    /// own prompt and checks (BRU-330). Nothing is logged.
+    pub async fn structured(
+        &self,
+        system: &str,
+        user: &str,
+        schema: Value,
+        name: &str,
+    ) -> Result<Answer, InterpretError> {
+        self.answer(&self.body_for(system, user, schema, name))
+            .await
     }
 }
 
-/// A model's answer.
-struct Answer {
-    text: String,
-    input_tokens: u64,
-    output_tokens: u64,
+/// A model's answer: its text and the tokens it took, when the provider
+/// says.
+#[derive(Debug, Clone)]
+pub struct Answer {
+    pub text: String,
+    pub input_tokens: u64,
+    /// Including any reasoning.
+    pub output_tokens: u64,
+    pub reasoning_tokens: u64,
 }
 
 fn anthropic_text(answer: &Value) -> Result<String, InterpretError> {

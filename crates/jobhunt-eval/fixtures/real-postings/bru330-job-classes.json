@@ -1,0 +1,1708 @@
+{
+ "about": "BRU-330 job-description annotations for the 50 judged BRU-325 postings: what each job IS (function, engineering shape, specialization depth and specialties, seniority, customer-facing), for scoring the semantic job classifier. Separate from, and never used to change, the BRU-325 Fit judgments in bru325-2026-10-01.json. Not read by production code. See docs/job-function-semantic-classifier-experiment.md.",
+ "annotator": "one annotator (Claude), from the bounded job text the classifier is sent, written before any classifier output existed",
+ "conventions": {
+  "lists": "every field lists the acceptable answers; an answer agrees when it is one of them",
+  "shapes": "scored only when the job is a software engineering IC in both the annotation and the answer; the answer's shapes must be a non-empty subset",
+  "specialties": "the answer must tag at least one of specialties_required (when any) and nothing outside specialties_required + specialties_allowed",
+  "depth_for_non_ic": "depth is barely meaningful for non-engineering work; general, specialized and unclear are all accepted, and depth agreement is also reported for IC jobs only",
+  "seniority": "a title with no level accepts unclear, plus the level the scope clearly implies",
+  "critical": "bad_function, management, deep_specialist, strong_yes (Fit strong_yes in BRU-325)"
+ },
+ "jobs": [
+  {
+   "job": "job_daaaaa17208d4d56170e0b0448d2e940",
+   "company": "Airbnb",
+   "title": "Senior Fullstack Engineer, Quality Engineering",
+   "critical": null,
+   "bru325_fit": "no",
+   "note": "test automation / quality engineering",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "developer_tooling",
+     "full_stack",
+     "other"
+    ],
+    "depth": [
+     "specialized"
+    ],
+    "specialties_required": [
+     "test_automation"
+    ],
+    "specialties_allowed": [
+     "developer_productivity"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_3fc0acefeb5bfbd0b5c69ae3129aab7b",
+   "company": "Airbnb",
+   "title": "Senior Mobile Software Engineer, Quality Engineering",
+   "critical": null,
+   "bru325_fit": "no",
+   "note": "mobile test automation",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "mobile",
+     "developer_tooling",
+     "other"
+    ],
+    "depth": [
+     "specialized"
+    ],
+    "specialties_required": [
+     "test_automation"
+    ],
+    "specialties_allowed": [
+     "developer_productivity"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_13ca2b341602bb1e4bec9978af9f3231",
+   "company": "Airbnb",
+   "title": "Senior Software Engineer, Service Tools",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "build systems / developer productivity; \"customers\" are internal engineers",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "developer_tooling",
+     "backend",
+     "platform",
+     "infrastructure"
+    ],
+    "depth": [
+     "general",
+     "specialized"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "developer_productivity"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_4c9b635338ed6b1e9d756b0a5d02f5cc",
+   "company": "Anthropic",
+   "title": "Senior+ Software Engineer, Legal Tech",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "secure cloud/data infrastructure for legal; internal stakeholders",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "infrastructure",
+     "data",
+     "security",
+     "platform",
+     "backend"
+    ],
+    "depth": [
+     "general",
+     "specialized"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "security",
+     "other"
+    ],
+    "seniority": [
+     "senior",
+     "staff_plus"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_4d3b583f4a58d2298d39c99fd35645bf",
+   "company": "Anthropic",
+   "title": "Staff+ Software Engineer, Inference Velocity",
+   "critical": "deep_specialist",
+   "bru325_fit": "maybe",
+   "note": "staff IC lead for accelerator toolchains (compilers, drivers) and dev productivity",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "developer_tooling",
+     "infrastructure",
+     "platform"
+    ],
+    "depth": [
+     "specialized",
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "developer_productivity",
+     "runtime_compilers"
+    ],
+    "specialties_allowed": [
+     "observability",
+     "performance",
+     "other"
+    ],
+    "seniority": [
+     "staff_plus"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_50f682f10d5894326ed49d0706cbcc35",
+   "company": "axiom",
+   "title": "Distributed Systems Engineer",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "Rust rollup nodes and sequencers; blockchain protocols",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "backend",
+     "infrastructure",
+     "platform",
+     "other"
+    ],
+    "depth": [
+     "specialized",
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "distributed_systems",
+     "cryptography_zk",
+     "other"
+    ],
+    "specialties_allowed": [],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_a22608d44596149ed675fb3c93e6fa03",
+   "company": "axiom",
+   "title": "ZK Proof Engineer",
+   "critical": "deep_specialist",
+   "bru325_fit": "no",
+   "note": "ZK provers and circuits",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "other",
+     "backend",
+     "security"
+    ],
+    "depth": [
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "cryptography_zk"
+    ],
+    "specialties_allowed": [
+     "runtime_compilers",
+     "performance",
+     "database_internals"
+    ],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_f9c4d5c856608a8c7ede9af0c2dc70fa",
+   "company": "Canonical",
+   "title": "Linux Platform Integration - Ubuntu Systems Senior Engineer",
+   "critical": null,
+   "bru325_fit": "no",
+   "note": "OS/kernel enablement for partner silicon, with customer engagements",
+   "expected": {
+    "function": [
+     "software_engineering_ic",
+     "solutions_or_customer_engineering"
+    ],
+    "shapes": [
+     "infrastructure",
+     "platform",
+     "other"
+    ],
+    "depth": [
+     "specialized",
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "storage_kernel_io",
+     "bare_metal",
+     "other"
+    ],
+    "specialties_allowed": [
+     "networking_edge",
+     "performance"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "secondary",
+     "primary"
+    ]
+   }
+  },
+  {
+   "job": "job_30b105132f292a5dcac32617ea8801bd",
+   "company": "Canonical",
+   "title": "Senior Site Reliability / Gitops Engineer",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "internal IT SRE / IaC",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "sre",
+     "infrastructure",
+     "platform"
+    ],
+    "depth": [
+     "general"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "observability",
+     "developer_productivity"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_80d79e2232c4865f55ca6caa39afdb32",
+   "company": "Canonical",
+   "title": "Senior Software Engineer - MAAS",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "bare-metal provisioning product (MAAS)",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "backend",
+     "infrastructure",
+     "platform"
+    ],
+    "depth": [
+     "specialized",
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "bare_metal"
+    ],
+    "specialties_allowed": [
+     "networking_edge"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_40a309ddc5a0382ffaad493659d9fb42",
+   "company": "Canonical",
+   "title": "Software Developer (Backend SaaS)",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "Python web product (Landscape); no level in the title",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "backend",
+     "full_stack",
+     "product_engineering"
+    ],
+    "depth": [
+     "general"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [],
+    "seniority": [
+     "unclear",
+     "mid"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_6dc959e1efe869ad6499b198849d042e",
+   "company": "Canonical",
+   "title": "Ubuntu Engineering Lead",
+   "critical": "management",
+   "bru325_fit": "no",
+   "note": "leadership track: managers and Senior+ leads with people responsibility",
+   "expected": {
+    "function": [
+     "engineering_management",
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "other",
+     "platform",
+     "infrastructure",
+     "backend"
+    ],
+    "depth": [
+     "general",
+     "specialized"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "other",
+     "performance",
+     "security"
+    ],
+    "seniority": [
+     "management",
+     "staff_plus"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_0bd1cc6c3382a05f555157dca820ab3f",
+   "company": "clickhouse",
+   "title": "Senior Consulting Engineer - AMER",
+   "critical": "bad_function",
+   "bru325_fit": "no",
+   "note": "consultative support and L1-L3 cases",
+   "expected": {
+    "function": [
+     "solutions_or_customer_engineering",
+     "support_or_success"
+    ],
+    "shapes": [],
+    "depth": [
+     "general",
+     "specialized",
+     "unclear"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "database_internals",
+     "performance",
+     "other"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "primary"
+    ]
+   }
+  },
+  {
+   "job": "job_fad35ece26258b5062b3a2eab34abe8b",
+   "company": "clickhouse",
+   "title": "Senior Curriculum Developer & Instructor",
+   "critical": "bad_function",
+   "bru325_fit": "no",
+   "note": "writes and teaches courses",
+   "expected": {
+    "function": [
+     "curriculum_or_training"
+    ],
+    "shapes": [],
+    "depth": [
+     "general",
+     "specialized",
+     "unclear"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "other"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "secondary",
+     "primary"
+    ]
+   }
+  },
+  {
+   "job": "job_c3b82793add441c5b10bfb4fa73ac202",
+   "company": "oyster",
+   "title": "Senior AI Solutions Engineer - GTM",
+   "critical": "bad_function",
+   "bru325_fit": "no",
+   "note": "AI enablement for Sales/Marketing/CS/RevOps",
+   "expected": {
+    "function": [
+     "gtm_or_revenue_engineering",
+     "other_non_engineering"
+    ],
+    "shapes": [],
+    "depth": [
+     "general",
+     "specialized",
+     "unclear"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "other"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_1c9f9fb7018bb84b51a5cb36440e9375",
+   "company": "oyster",
+   "title": "Senior Data Engineer",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "data/AI platform engineering",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "data",
+     "platform",
+     "ml_product",
+     "backend"
+    ],
+    "depth": [
+     "general",
+     "specialized"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "other",
+     "developer_productivity"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_2a142d6ff324e04188d345ed89153953",
+   "company": "oyster",
+   "title": "Senior Engineer (Platform)",
+   "critical": "strong_yes",
+   "bru325_fit": "strong_yes",
+   "note": "platform engineering: CI/CD, AWS IaC, observability, dev tooling",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "platform",
+     "infrastructure",
+     "sre",
+     "developer_tooling"
+    ],
+    "depth": [
+     "general"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "observability",
+     "developer_productivity"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_35cf5195e69f6eb3217beb08e6e21896",
+   "company": "oyster",
+   "title": "Senior GTM Engineer",
+   "critical": "bad_function",
+   "bru325_fit": "no",
+   "note": "revenue-operations systems",
+   "expected": {
+    "function": [
+     "gtm_or_revenue_engineering"
+    ],
+    "shapes": [],
+    "depth": [
+     "general",
+     "specialized",
+     "unclear"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "other"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_6ccacbfcbbcc95f4bee9bdee0e340cd6",
+   "company": "PostHog",
+   "title": "ClickHouse Operations Engineer",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "ClickHouse operations; \"went into the internals\"",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "infrastructure",
+     "data",
+     "sre",
+     "platform"
+    ],
+    "depth": [
+     "specialized",
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "database_internals",
+     "performance"
+    ],
+    "specialties_allowed": [
+     "storage_kernel_io",
+     "distributed_systems",
+     "other"
+    ],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_1abd37a0b14c68d349d5e9ddea30ff67",
+   "company": "PostHog",
+   "title": "Product Engineer",
+   "critical": "strong_yes",
+   "bru325_fit": "strong_yes",
+   "note": "product engineer; talks to users and rotates through support",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "product_engineering",
+     "full_stack",
+     "backend",
+     "frontend"
+    ],
+    "depth": [
+     "general"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_fcf7f8748834d735e377c567f3bfdc82",
+   "company": "railway",
+   "title": "Infra Engineer - Datacenters",
+   "critical": "deep_specialist",
+   "bru325_fit": "no",
+   "note": "physical datacenters: hardware, supply chain, racks, PXE",
+   "expected": {
+    "function": [
+     "software_engineering_ic",
+     "other_non_engineering"
+    ],
+    "shapes": [
+     "infrastructure",
+     "other"
+    ],
+    "depth": [
+     "specialized",
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "bare_metal"
+    ],
+    "specialties_allowed": [
+     "other",
+     "networking_edge"
+    ],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_53fb18f76aa6926b8499cf7b7cffa936",
+   "company": "railway",
+   "title": "Infrastructure Engineer",
+   "critical": "strong_yes",
+   "bru325_fit": "strong_yes",
+   "note": "system-level infrastructure services from scratch (Go/Rust gRPC)",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "infrastructure",
+     "platform",
+     "backend"
+    ],
+    "depth": [
+     "general",
+     "specialized"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "distributed_systems",
+     "other"
+    ],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_85ae46cbf1864c7710abcaef5d13c2ba",
+   "company": "railway",
+   "title": "Senior Full-Stack Engineer - Product",
+   "critical": "strong_yes",
+   "bru325_fit": "strong_yes",
+   "note": "product features end to end",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "full_stack",
+     "product_engineering",
+     "frontend",
+     "backend"
+    ],
+    "depth": [
+     "general"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_969738c4ddc0eda164fb20928718dee6",
+   "company": "railway",
+   "title": "Senior Infra Engineer: Baremetal Orchestration",
+   "critical": "deep_specialist",
+   "bru325_fit": "maybe",
+   "note": "bare-metal provisioning and homegrown orchestration",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "infrastructure",
+     "platform",
+     "developer_tooling",
+     "sre"
+    ],
+    "depth": [
+     "specialized",
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "bare_metal"
+    ],
+    "specialties_allowed": [
+     "distributed_systems",
+     "observability",
+     "other"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_c9ff2411407cda083a88165e7b44918c",
+   "company": "railway",
+   "title": "Senior Infra Engineer: Observability",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "observability ingestion and alerting stack",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "backend",
+     "infrastructure",
+     "platform",
+     "data"
+    ],
+    "depth": [
+     "specialized"
+    ],
+    "specialties_required": [
+     "observability"
+    ],
+    "specialties_allowed": [
+     "distributed_systems"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_272c1fd30c81b78f10bdc66dbba818e3",
+   "company": "railway",
+   "title": "Senior Platform Engineer: Storage",
+   "critical": "deep_specialist",
+   "bru325_fit": "no",
+   "note": "block-storage engine; kernel I/O",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "infrastructure",
+     "platform"
+    ],
+    "depth": [
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "storage_kernel_io"
+    ],
+    "specialties_allowed": [
+     "distributed_systems",
+     "performance",
+     "bare_metal"
+    ],
+    "seniority": [
+     "senior",
+     "staff_plus"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_515f92b1eb9cf063cd9d07ad6d6eca25",
+   "company": "railway",
+   "title": "Senior Product Engineer, Scalability",
+   "critical": "strong_yes",
+   "bru325_fit": "strong_yes",
+   "note": "backend scaling: billing, payments, fraud, workers, queues",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "backend",
+     "product_engineering",
+     "full_stack",
+     "data"
+    ],
+    "depth": [
+     "general"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "distributed_systems"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_7f6daf9d54d7a52a14c810ff3f911aa9",
+   "company": "resend",
+   "title": "Customer Success Engineer",
+   "critical": "bad_function",
+   "bru325_fit": "no",
+   "note": "front-line customer support",
+   "expected": {
+    "function": [
+     "support_or_success"
+    ],
+    "shapes": [],
+    "depth": [
+     "general",
+     "specialized",
+     "unclear"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "other"
+    ],
+    "seniority": [
+     "unclear",
+     "mid"
+    ],
+    "customer_facing": [
+     "primary"
+    ]
+   }
+  },
+  {
+   "job": "job_b27a3dce2fa593a3e06a2175729a3ec3",
+   "company": "socket",
+   "title": "Senior Platform Engineer",
+   "critical": "strong_yes",
+   "bru325_fit": "strong_yes",
+   "note": "infrastructure, deploys, observability, on-call",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "platform",
+     "infrastructure",
+     "sre"
+    ],
+    "depth": [
+     "general"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "observability"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_7adf123f2bc943c81d81783e513599fd",
+   "company": "Sourcegraph",
+   "title": "Software Engineer - Platform [IC3]",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "IC3 cloud platform; works with enterprise customers",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "platform",
+     "infrastructure",
+     "backend"
+    ],
+    "depth": [
+     "general",
+     "specialized"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "networking_edge",
+     "distributed_systems"
+    ],
+    "seniority": [
+     "mid"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_b2752f6d59035e59eb04fce8217ab8c0",
+   "company": "Stripe",
+   "title": "Backend Engineer, Core Technology",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "infrastructure org, team matched later; 2-12+ years",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "backend",
+     "infrastructure",
+     "platform",
+     "developer_tooling",
+     "data"
+    ],
+    "depth": [
+     "general"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "distributed_systems"
+    ],
+    "seniority": [
+     "unclear",
+     "mid"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_3782a4c5defe034291998c15566dd7f3",
+   "company": "Stripe",
+   "title": "Integration Engineer (Metronome)",
+   "critical": "bad_function",
+   "bru325_fit": "no",
+   "note": "post-sale customer implementation",
+   "expected": {
+    "function": [
+     "solutions_or_customer_engineering"
+    ],
+    "shapes": [],
+    "depth": [
+     "general",
+     "specialized",
+     "unclear"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "other"
+    ],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "primary"
+    ]
+   }
+  },
+  {
+   "job": "job_372d7c5929546e985876b566fe8b6a44",
+   "company": "Supabase",
+   "title": "Customer Solution Architect (AMER)",
+   "critical": "bad_function",
+   "bru325_fit": "no",
+   "note": "customer solutions architect",
+   "expected": {
+    "function": [
+     "solutions_or_customer_engineering"
+    ],
+    "shapes": [],
+    "depth": [
+     "general",
+     "specialized",
+     "unclear"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "other",
+     "performance"
+    ],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "primary"
+    ]
+   }
+  },
+  {
+   "job": "job_0f26d5c1b7218af571ed3d102a4ad4eb",
+   "company": "Supabase",
+   "title": "Edge Functions Engineer",
+   "critical": "deep_specialist",
+   "bru325_fit": "maybe",
+   "note": "Rust/Deno edge runtime",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "backend",
+     "infrastructure",
+     "platform",
+     "developer_tooling"
+    ],
+    "depth": [
+     "specialized",
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "runtime_compilers"
+    ],
+    "specialties_allowed": [
+     "networking_edge",
+     "observability"
+    ],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_95bcdb6219ae86c491d2a828ae4a7eba",
+   "company": "Supabase",
+   "title": "FinOps Engineer",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "cloud cost engineering with Finance",
+   "expected": {
+    "function": [
+     "software_engineering_ic",
+     "other_non_engineering"
+    ],
+    "shapes": [
+     "infrastructure",
+     "platform",
+     "data",
+     "other"
+    ],
+    "depth": [
+     "specialized"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "other",
+     "observability",
+     "performance"
+    ],
+    "seniority": [
+     "unclear"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_4bd4867204b6ffa164d79c2ea5706cde",
+   "company": "Supabase",
+   "title": "Multigres Deployment Engineer",
+   "critical": "deep_specialist",
+   "bru325_fit": "no",
+   "note": "Kubernetes operator, CSI, K8s internals",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "platform",
+     "infrastructure"
+    ],
+    "depth": [
+     "specialized",
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "kubernetes_internals"
+    ],
+    "specialties_allowed": [
+     "distributed_systems",
+     "database_internals",
+     "storage_kernel_io",
+     "networking_edge"
+    ],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_0fb13f19838c0fd92d9feadcbbfcf797",
+   "company": "Supabase",
+   "title": "Multigres Engineer",
+   "critical": "deep_specialist",
+   "bru325_fit": "no",
+   "note": "distributed database internals",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "backend",
+     "infrastructure",
+     "data",
+     "other"
+    ],
+    "depth": [
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "database_internals"
+    ],
+    "specialties_allowed": [
+     "distributed_systems",
+     "networking_edge"
+    ],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_dbcb3f7022c4d9189980d052ec4593b3",
+   "company": "Supabase",
+   "title": "Performance Engineer - Benchmarking",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "benchmarking and profiling",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "developer_tooling",
+     "infrastructure",
+     "platform",
+     "other"
+    ],
+    "depth": [
+     "specialized",
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "performance"
+    ],
+    "specialties_allowed": [
+     "developer_productivity",
+     "observability"
+    ],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_d49ae8ac380cabca7ebe850221b014bb",
+   "company": "Supabase",
+   "title": "Platform Engineer - Compute Capacity",
+   "critical": "strong_yes",
+   "bru325_fit": "strong_yes",
+   "note": "capacity provisioning automation and metrics",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "platform",
+     "infrastructure",
+     "sre"
+    ],
+    "depth": [
+     "general",
+     "specialized"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "other",
+     "observability"
+    ],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_578c4b8e926ac7a63a2747ec640cfe8d",
+   "company": "Supabase",
+   "title": "Platform Engineer, Edge & Networking",
+   "critical": "deep_specialist",
+   "bru325_fit": "maybe",
+   "note": "edge router, DNS, load balancing",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "platform",
+     "infrastructure",
+     "sre"
+    ],
+    "depth": [
+     "specialized",
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "networking_edge"
+    ],
+    "specialties_allowed": [
+     "observability"
+    ],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_1abe6bd0b6d9b35046bcf037fcf22784",
+   "company": "Supabase",
+   "title": "Platform Security Engineer (AMER/APAC)",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "cloud/Kubernetes security engineering",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "security",
+     "platform",
+     "infrastructure"
+    ],
+    "depth": [
+     "specialized",
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "security"
+    ],
+    "specialties_allowed": [],
+    "seniority": [
+     "senior",
+     "unclear"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_fc763bb234bb18718ee27d68a62cd859",
+   "company": "Supabase",
+   "title": "Postgres Deployment Engineer (Nix)",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "Nix packaging and Postgres release lifecycle; customer deployments",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "infrastructure",
+     "developer_tooling",
+     "platform",
+     "sre"
+    ],
+    "depth": [
+     "specialized"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "developer_productivity",
+     "other"
+    ],
+    "seniority": [
+     "unclear"
+    ],
+    "customer_facing": [
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_0fa476937b300165e5c22209cc41d93a",
+   "company": "Supabase",
+   "title": "Release Engineer",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "release engineering with an SRE remit",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "sre",
+     "platform",
+     "infrastructure",
+     "developer_tooling"
+    ],
+    "depth": [
+     "general",
+     "specialized"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "observability",
+     "developer_productivity",
+     "other"
+    ],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_634dd38637dbbd4568ebbdc946cb4666",
+   "company": "Supabase",
+   "title": "Software Engineer - Auth",
+   "critical": null,
+   "bru325_fit": "maybe",
+   "note": "auth protocols (OAuth, OIDC, SAML)",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "backend",
+     "full_stack",
+     "security"
+    ],
+    "depth": [
+     "specialized"
+    ],
+    "specialties_required": [
+     "security",
+     "other"
+    ],
+    "specialties_allowed": [],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_db539adfc1d67f89427b009a9014a106",
+   "company": "Supabase",
+   "title": "Software Engineer - Branching",
+   "critical": "strong_yes",
+   "bru325_fit": "strong_yes",
+   "note": "CI/CD execution platform",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "platform",
+     "infrastructure",
+     "backend",
+     "developer_tooling"
+    ],
+    "depth": [
+     "general"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "distributed_systems",
+     "developer_productivity"
+    ],
+    "seniority": [
+     "unclear",
+     "mid"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_c1b6a0761ece46c6346070d31d0ffaa2",
+   "company": "Supabase",
+   "title": "Supalite Engineer",
+   "critical": "strong_yes",
+   "bru325_fit": "strong_yes",
+   "note": "broad generalist on a new product; \"storage internals\" appears only as range",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "backend",
+     "full_stack",
+     "developer_tooling",
+     "platform"
+    ],
+    "depth": [
+     "general"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [],
+    "seniority": [
+     "unclear",
+     "senior"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_62a13793be6e8b8db5b6ecf55c721505",
+   "company": "temporal",
+   "title": "Senior Platform Architect",
+   "critical": "bad_function",
+   "bru325_fit": "no",
+   "note": "technical services for customers",
+   "expected": {
+    "function": [
+     "solutions_or_customer_engineering"
+    ],
+    "shapes": [],
+    "depth": [
+     "general",
+     "specialized",
+     "unclear"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "distributed_systems",
+     "observability",
+     "other"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "primary"
+    ]
+   }
+  },
+  {
+   "job": "job_f73129d23d341c54d6fc24ccc1533e14",
+   "company": "temporal",
+   "title": "Senior Software Engineer, Cloud Platform Foundations",
+   "critical": "strong_yes",
+   "bru325_fit": "strong_yes",
+   "note": "control plane, HA/DR (US cities only: Impossible, not this classifier's concern)",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "platform",
+     "infrastructure",
+     "backend"
+    ],
+    "depth": [
+     "general"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "distributed_systems"
+    ],
+    "seniority": [
+     "senior"
+    ],
+    "customer_facing": [
+     "no"
+    ]
+   }
+  },
+  {
+   "job": "job_e8ea7fab276acd3c5264b12c08f7dcd6",
+   "company": "temporal",
+   "title": "Software Engineer II, Open Source Server",
+   "critical": null,
+   "bru325_fit": "no",
+   "note": "Software Engineer II, core server",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "backend",
+     "infrastructure",
+     "platform"
+    ],
+    "depth": [
+     "general",
+     "specialized"
+    ],
+    "specialties_required": [],
+    "specialties_allowed": [
+     "distributed_systems"
+    ],
+    "seniority": [
+     "mid"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  },
+  {
+   "job": "job_06a8f475b9c6ad7a5a9788fe4bfbe380",
+   "company": "temporal",
+   "title": "Staff Software Engineer, Traffic",
+   "critical": "deep_specialist",
+   "bru325_fit": "maybe",
+   "note": "staff networking/traffic",
+   "expected": {
+    "function": [
+     "software_engineering_ic"
+    ],
+    "shapes": [
+     "infrastructure",
+     "platform",
+     "backend"
+    ],
+    "depth": [
+     "specialized",
+     "deep_specialist"
+    ],
+    "specialties_required": [
+     "networking_edge"
+    ],
+    "specialties_allowed": [
+     "distributed_systems"
+    ],
+    "seniority": [
+     "staff_plus"
+    ],
+    "customer_facing": [
+     "no",
+     "secondary"
+    ]
+   }
+  }
+ ]
+}
