@@ -18,6 +18,8 @@
 //! * [`metrics`]: precision, false positives, contradiction misses,
 //!   density.
 //! * [`report`]: the Markdown report and recorded baseline.
+//! * [`job_class`]: the BRU-330 semantic job-classifier experiment (the
+//!   job only, never a candidate), scored against real postings.
 //!
 //! Everything is deterministic and offline: no network, no database, no
 //! model calls, a fixed clock. `docs/recommendation-quality.md` says what
@@ -25,6 +27,7 @@
 
 pub mod build;
 pub mod fixture;
+pub mod job_class;
 pub mod metrics;
 pub mod report;
 pub mod run;
