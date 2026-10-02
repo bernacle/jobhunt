@@ -5,8 +5,9 @@
 //! is read or sent.
 //!
 //! ```text
-//! # a seeded, stratified sample of the corpus's open postings
-//! job_function_probe sample <corpus.db> <seed> <ids.txt> <selection.json>
+//! # a seeded, stratified sample of the corpus's open postings, leaving out
+//! # the ids in [exclude.txt]
+//! job_function_probe sample <corpus.db> <seed> <ids.txt> <selection.json> [exclude.txt]
 //! # the exact input each posting would send (no network)
 //! job_function_probe dump   <corpus.db> <ids.txt> <out dir>
 //! # input size of every open posting (for cost estimates; no network)
@@ -463,8 +464,11 @@ fn stratum(title: &str) -> &'static Stratum {
 /// title matches; within a stratum, postings are taken in the order of a
 /// seeded hash of their id. A company appears once per stratum (twice only
 /// if the stratum can't fill otherwise) and at most [`COMPANY_CAP`] times
-/// overall, and a company's repeated title is drawn once.
-async fn sample(db: &str, seed: &str, ids_out: &str, selection_out: &str) {
+/// overall, unless a stratum can't fill any other way, and a company's
+/// repeated title is drawn once. Postings in
+/// `exclude` (an earlier experiment's) are never drawn.
+async fn sample(db: &str, seed: &str, ids_out: &str, selection_out: &str, exclude: Option<&str>) {
+    let excluded: BTreeSet<String> = exclude.map(ids).unwrap_or_default().into_iter().collect();
     let pool = pool(db).await;
     let rows = sqlx::query("select id, company, title from jobs where status = 'open'")
         .fetch_all(&pool)
@@ -475,6 +479,9 @@ async fn sample(db: &str, seed: &str, ids_out: &str, selection_out: &str) {
     for row in &rows {
         let (id, company, title): (String, String, String) =
             (row.get("id"), row.get("company"), row.get("title"));
+        if excluded.contains(&id) {
+            continue;
+        }
         let key = StableId::derive("narrow.eval.job_function.sample", &[seed, &id]).to_string();
         pools
             .entry(stratum(&title).name)
@@ -489,7 +496,8 @@ async fn sample(db: &str, seed: &str, ids_out: &str, selection_out: &str) {
         let mut candidates = pools.remove(s.name).unwrap_or_default();
         candidates.sort();
         let mut here: Vec<&(String, String, String, String)> = Vec::new();
-        for per_stratum in [1, 2] {
+        // (per company in this stratum, whether the overall cap holds)
+        for (per_stratum, capped) in [(1, true), (2, true), (1, false), (2, false)] {
             for c in &candidates {
                 if here.len() >= s.quota {
                     break;
@@ -498,7 +506,7 @@ async fn sample(db: &str, seed: &str, ids_out: &str, selection_out: &str) {
                 let title_key = (company.clone(), title.trim().to_lowercase());
                 let in_stratum = here.iter().filter(|h| &h.2 == company).count();
                 if in_stratum >= per_stratum
-                    || per_company.get(company).copied().unwrap_or(0) >= COMPANY_CAP
+                    || (capped && per_company.get(company).copied().unwrap_or(0) >= COMPANY_CAP)
                     || titles.contains(&title_key)
                 {
                     continue;
@@ -519,6 +527,7 @@ async fn sample(db: &str, seed: &str, ids_out: &str, selection_out: &str) {
     std::fs::write(ids_out, ids.join("\n") + "\n").unwrap();
     let out = json!({
         "seed": seed,
+        "excluded": excluded.len(),
         "open_postings": rows.len(),
         "company_cap": COMPANY_CAP,
         "strata": summary,
@@ -858,7 +867,16 @@ fn score(annotations: &str, run_paths: &[String]) {
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
-        Some("sample") => sample(&args[2], &args[3], &args[4], &args[5]).await,
+        Some("sample") => {
+            sample(
+                &args[2],
+                &args[3],
+                &args[4],
+                &args[5],
+                args.get(6).map(String::as_str),
+            )
+            .await;
+        }
         Some("dump") => dump(&args[2], &args[3], &args[4]).await,
         Some("size") => size(&args[2]).await,
         Some("run") => run(&args[2], &args[3], &args[4]).await,
