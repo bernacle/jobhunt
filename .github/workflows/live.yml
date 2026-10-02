@@ -55,7 +55,7 @@ jobs:
     # Scheduled runs only in the upstream repository, not in forks.
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.family != 'verification')
-      || (github.event_name != 'workflow_dispatch' && github.repository == 'bernacle/jobhunt')
+      || (github.event_name != 'workflow_dispatch' && github.repository == 'bernacle/narrow')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -110,7 +110,7 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch'
         && (inputs.family == 'all' || inputs.family == 'verification'))
-      || (github.event_name != 'workflow_dispatch' && github.repository == 'bernacle/jobhunt')
+      || (github.event_name != 'workflow_dispatch' && github.repository == 'bernacle/narrow')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

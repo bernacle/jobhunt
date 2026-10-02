@@ -26,7 +26,7 @@ import { defineRailway, github, postgres, preserve, project, service } from "rai
 
 export default defineRailway((ctx) => {
   const db = postgres("Postgres");
-  const source = () => github("bernacle/jobhunt", { branch: "main" });
+  const source = () => github("bernacle/narrow", { branch: "main" });
   const build = { builder: "DOCKERFILE" as const, dockerfilePath: "Dockerfile" };
 
   const api = service("api", {
