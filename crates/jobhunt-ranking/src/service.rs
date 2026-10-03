@@ -414,11 +414,13 @@ where
         let taste_profile = compose(&data, &learned_signals(&taste));
         let state = self.state(records).await?;
         let assessment = self.assess(records, &facts, now).await?;
+        // One opportunity: its own postings' company facts only.
         let ctx = Context {
             person: &person,
             taste: &taste,
             taste_profile: &taste_profile,
             now,
+            companies: None,
         };
         let candidate = Candidate {
             records,
@@ -473,12 +475,6 @@ where
             ..JobQuery::default()
         }
         .with_text(&query.text);
-        let ctx = Context {
-            person: &person,
-            taste: &taste,
-            taste_profile: &taste_profile,
-            now,
-        };
         timings.person_ms = ms_since(started);
         let started = std::time::Instant::now();
         struct Prepared {
@@ -509,6 +505,19 @@ where
             gathered.push((records, state));
         }
         let all: Vec<&[JobRecord]> = gathered.iter().map(|(r, _)| r.as_slice()).collect();
+        // A company's stage and size, read once across all its postings.
+        let read: Vec<std::sync::Arc<crate::facets::JobFacets>> = gathered
+            .iter()
+            .flat_map(|(records, _)| records.iter().map(crate::facets::facets_of))
+            .collect();
+        let companies = crate::fit::CompanyBook::of(read.iter().map(AsRef::as_ref));
+        let ctx = Context {
+            person: &person,
+            taste: &taste,
+            taste_profile: &taste_profile,
+            now,
+            companies: Some(&companies),
+        };
         let verified = cached_many(self.repo, &all).await?;
         timings.load_ms = ms_since(started);
         let started = std::time::Instant::now();

@@ -60,7 +60,7 @@ use crate::taste::TasteModel;
 /// Revision of the signals, fit rules, gates and tiers. Part of every
 /// stored ranking's key; bump it with any change that can rank a job
 /// differently.
-pub const RANKING_VERSION: &str = "7";
+pub const RANKING_VERSION: &str = "8";
 
 /// Why an opportunity is not among the recommendations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -276,6 +276,9 @@ pub struct Context<'a> {
     /// What the person wants: the composed taste profile (BRU-321).
     pub taste_profile: &'a TasteProfile,
     pub now: DateTime<Utc>,
+    /// Company facts read across every posting being ranked, when ranking
+    /// many: a company's stage and size count once for all its postings.
+    pub companies: Option<&'a crate::fit::CompanyBook>,
 }
 
 /// What decides the gate beyond eligibility and verification.
@@ -397,7 +400,8 @@ pub fn rank(candidate: &Candidate<'_>, ctx: &Context<'_>) -> Option<Ranking> {
             hides_unclear_eligibility: ctx.person.hides_unclear_eligibility,
         },
     );
-    let mut fit = crate::fit::assess(&facets, ctx.person, ctx.taste_profile);
+    let company_facts = ctx.companies.and_then(|b| b.get(&facets.company));
+    let mut fit = crate::fit::assess_with(&facets, ctx.person, ctx.taste_profile, company_facts);
     // What they already said about this job speaks for itself: liking or
     // saving it is interest in this very job (it counts once).
     let liked = candidate.state.sentiment == Some(crate::feedback::Sentiment::Liked);

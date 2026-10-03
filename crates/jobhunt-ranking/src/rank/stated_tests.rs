@@ -118,6 +118,7 @@ fn rank_for(record: &JobRecord, person: &Person, facts: &ProfileFacts) -> Rankin
         taste: &taste,
         taste_profile: &profile,
         now: now(),
+        companies: None,
     };
     rank(&candidate, &ctx).expect("a ranking")
 }
@@ -701,6 +702,7 @@ fn geography_probe() {
             taste: &taste,
             taste_profile: &profile,
             now: now(),
+            companies: None,
         };
         let started = std::time::Instant::now();
         for _ in 0..10 {

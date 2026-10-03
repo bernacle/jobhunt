@@ -406,8 +406,143 @@ fn unknown_company_facts_are_neither_for_nor_against() {
         &generalist(),
     );
     assert!(f.contradictions.is_empty(), "{f:#?}");
-    assert_eq!(f.level, FitLevel::Plausible, "the company side isn't shown");
+    // The role stands on its own (the work they want, described, at their
+    // level); the company side is unknown, said, and not held against it.
+    assert_eq!(f.role, RoleFit::Strong, "{f:#?}");
+    assert_eq!(f.company, CompanyFit::Unknown);
+    assert_eq!(f.level, FitLevel::Strong);
     assert!(!f.uncertainties.is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Role first, then the company (fit-rules/3).
+
+/// Everything the company side can say, as well as it can say it.
+const DREAM_COMPANY: &str = "We are a 12-person startup and a small team with high ownership:     real autonomy, no process for its own sake.";
+
+#[test]
+fn company_evidence_never_makes_a_strong_fit() {
+    let generalist = generalist();
+    // Work only related to what they want (full-stack, for a backend
+    // engineer), at the best company they could describe.
+    let related = fit(
+        "Senior Full-Stack Engineer",
+        &format!("{DREAM_COMPANY} You'll build product features across the web app."),
+        &senior_engineer(),
+        &generalist,
+    );
+    assert_eq!(related.company, CompanyFit::Matches, "{related:#?}");
+    assert!(related.company_support >= 2.0, "{related:#?}");
+    assert_eq!(related.role, RoleFit::Plausible, "{related:#?}");
+    assert_eq!(related.level, FitLevel::Plausible);
+    // The work they want, but only as words in the requirements.
+    let listed = fit(
+        "Software Engineer",
+        &format!("{DREAM_COMPANY}\nRequirements\n- Go, PostgreSQL, gRPC, REST APIs, Redis"),
+        &senior_engineer(),
+        &generalist,
+    );
+    assert_ne!(listed.level, FitLevel::Strong, "{listed:#?}");
+    // A level below the one they want isn't made up for by the company.
+    let below = fit(
+        "Backend Engineer II",
+        &format!("{DREAM_COMPANY} You'll own backend services end to end."),
+        &senior_engineer(),
+        &generalist,
+    );
+    assert!(
+        below
+            .contradictions
+            .iter()
+            .any(|c| c.kind == ContradictionKind::Seniority && c.severity == Severity::Holding),
+        "{below:#?}"
+    );
+    assert_eq!(below.level, FitLevel::Plausible);
+    // The same company with the work described: strong, and the company
+    // orders it above the same role elsewhere.
+    let described = fit(
+        "Senior Backend Engineer",
+        &format!("{DREAM_COMPANY} You'll own backend services end to end in Go."),
+        &senior_engineer(),
+        &generalist,
+    );
+    let elsewhere = fit(
+        "Senior Backend Engineer",
+        "You'll own backend services end to end in Go.",
+        &senior_engineer(),
+        &generalist,
+    );
+    assert_eq!(described.level, FitLevel::Strong, "{described:#?}");
+    assert_eq!(elsewhere.level, FitLevel::Strong, "{elsewhere:#?}");
+    assert!(described.score() > elsewhere.score());
+}
+
+#[test]
+fn role_and_company_reasons_stay_apart() {
+    let f = fit(
+        "Senior Backend Engineer",
+        &format!("{DREAM_COMPANY} You'll own backend services end to end in Go."),
+        &senior_engineer(),
+        &generalist(),
+    );
+    assert!(f.role_reasons().all(|r| r.aspect.scope() == Scope::Role));
+    assert!(f.role_reasons().any(|r| r.aspect == Aspect::Role));
+    assert!(f.company_reasons().any(|r| r.aspect == Aspect::Team));
+    assert!(
+        f.company_reasons()
+            .all(|r| r.aspect.scope() == Scope::Company)
+    );
+}
+
+#[test]
+fn a_title_alone_needs_one_more_job_local_fact() {
+    // "Backend Engineer" and nothing about the work or the level.
+    let bare = fit(
+        "Backend Engineer",
+        DREAM_COMPANY,
+        &senior_engineer(),
+        &generalist(),
+    );
+    assert_eq!(bare.role_basis, RoleBasis::Title, "{bare:#?}");
+    assert_eq!(bare.level, FitLevel::Plausible);
+    // The level they want is that fact.
+    let senior = fit(
+        "Senior Backend Engineer",
+        DREAM_COMPANY,
+        &senior_engineer(),
+        &generalist(),
+    );
+    assert_eq!(senior.level, FitLevel::Strong, "{senior:#?}");
+}
+
+#[test]
+fn a_company_headcount_from_another_posting_holds() {
+    let taste = profile(&[
+        said(WorkShape, "backend", Polarity::Prefer),
+        said(Seniority, "senior", Polarity::Prefer),
+        said(Company, "large_company", Polarity::Avoid),
+    ]);
+    let stated = facets(&record(
+        "greenhouse:bigco",
+        "Senior Backend Engineer",
+        "The company is a pioneer of distributed work, with 1200+ colleagues in 75+ countries.",
+    ));
+    let silent = facets(&record(
+        "greenhouse:bigco",
+        "Senior Backend Engineer, Billing",
+        "You'll own backend services end to end.",
+    ));
+    let book = CompanyBook::of([&stated, &silent]);
+    let alone = assess(&silent, &senior_engineer(), &taste);
+    assert_eq!(alone.level, FitLevel::Strong, "{alone:#?}");
+    let with = assess_with(
+        &silent,
+        &senior_engineer(),
+        &taste,
+        book.get(&silent.company),
+    );
+    assert_eq!(with.company, CompanyFit::Conflicts, "{with:#?}");
+    assert_eq!(with.level, FitLevel::Poor);
 }
 
 // ---------------------------------------------------------------------------

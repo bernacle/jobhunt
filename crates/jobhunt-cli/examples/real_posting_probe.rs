@@ -78,6 +78,12 @@ fn row(r: &Ranking, record: Option<&jobhunt_jobs::JobRecord>, review: Option<&Fi
         "score": r.score,
         "role_fit": r.fit.role_fit,
         "support": r.fit.support,
+        "role_level": r.fit.role.as_str(),
+        "role_basis": format!("{:?}", r.fit.role_basis),
+        "company_fit": r.fit.company.as_str(),
+        "company_support": r.fit.company_support,
+        "role_reasons": r.fit.role_reasons().filter(|x| !x.folded).map(|x| x.text.clone()).collect::<Vec<_>>(),
+        "company_reasons": r.fit.company_reasons().map(|x| x.text.clone()).collect::<Vec<_>>(),
         "gate": format!("{:?}", r.gate),
         "practicality": r.practicality.status.as_str(),
         "blockers": r.practicality.blockers,
@@ -253,6 +259,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "actionable_jobs": r.rankings.iter().map(|x| json!({
             "opp": x.opportunity.to_string(), "job": x.job.to_string(), "company": x.company,
             "title": x.title, "tier": x.tier.as_str(), "gate": format!("{:?}", x.gate),
+            "role_level": x.fit.role.as_str(), "company_fit": x.fit.company.as_str(),
             "contradictions": x.fit.contradictions.iter().take(2)
                 .map(|c| format!("{} {}: {}", c.severity.as_str(), c.kind.as_str(), c.text))
                 .collect::<Vec<_>>(),

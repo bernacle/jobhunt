@@ -335,6 +335,7 @@ fn rank_one(
         taste,
         taste_profile,
         now: build::now(),
+        companies: None,
     };
     let ranking = rank(&candidate, &ctx).ok_or_else(|| BuildError::Job {
         job: job.id.clone(),

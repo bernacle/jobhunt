@@ -137,6 +137,12 @@ pub struct ShapeFact {
     pub shape: String,
     pub basis: ShapeBasis,
     pub evidence: String,
+    /// For a shape the title names: a sentence about what the person will
+    /// do that describes that work ("As a infrastructure engineer, you
+    /// will be directly responsible for…"). `None` when no such sentence
+    /// says it (the title alone does).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub described: Option<String>,
 }
 
 /// Specialized work that shares vocabulary with ordinary engineering but
@@ -558,6 +564,7 @@ pub fn specialties_in(title: &str, sentences: &[(String, Vec<Word>)]) -> Vec<Spe
                 text: text.clone(),
                 words: ws.clone(),
                 clauses,
+                duty: false,
             };
             for (_, ranges) in vocabulary.find_all(ws) {
                 for range in ranges {
@@ -677,7 +684,7 @@ fn headcount(sentences: &[Sentence]) -> Option<(u32, String)> {
         "business",
         "organization",
     ];
-    const PEOPLE: [&str; 4] = ["people", "employees", "person", "staff"];
+    const PEOPLE: [&str; 5] = ["people", "employees", "person", "staff", "colleagues"];
     for s in sentences {
         let ws = &s.words;
         let has = |set: &[&str]| ws.iter().any(|w| set.contains(&w.lower.as_str()));
@@ -752,9 +759,10 @@ fn shape_sentence(shape: &str, sentences: &[Sentence]) -> Option<String> {
     // about the company or its customers ("deploy previews for backend
     // teams").
     let about_you = |s: &&Sentence| {
-        s.words
-            .iter()
-            .any(|w| matches!(w.lower.as_str(), "you" | "your" | "role"))
+        s.duty
+            || s.words
+                .iter()
+                .any(|w| matches!(w.lower.as_str(), "you" | "your" | "role"))
     };
     // No sentence about the role says it: no quote (a sentence about the
     // product would mislead).
@@ -852,6 +860,7 @@ pub(super) fn read(facets: &JobFacets, sentences: &[Sentence]) -> WorkReading {
     let named = title_shapes(area);
     for (shape, evidence) in &own {
         out.shapes.push(ShapeFact {
+            described: None,
             shape: (*shape).to_owned(),
             basis: ShapeBasis::Title,
             evidence: evidence.clone(),
@@ -862,6 +871,7 @@ pub(super) fn read(facets: &JobFacets, sentences: &[Sentence]) -> WorkReading {
             continue;
         }
         out.shapes.push(ShapeFact {
+            described: None,
             shape: (*shape).to_owned(),
             basis: if own.is_empty() {
                 ShapeBasis::Title
@@ -875,6 +885,7 @@ pub(super) fn read(facets: &JobFacets, sentences: &[Sentence]) -> WorkReading {
         let shape = s.specialty.shape();
         if !out.has_shape(shape) {
             out.shapes.push(ShapeFact {
+                described: None,
                 shape: shape.to_owned(),
                 basis: ShapeBasis::Specialty,
                 evidence: s.evidence.clone(),
@@ -893,6 +904,7 @@ pub(super) fn read(facets: &JobFacets, sentences: &[Sentence]) -> WorkReading {
                 && !out.has_shape(shape)
             {
                 out.shapes.push(ShapeFact {
+                    described: None,
                     shape: shape.to_owned(),
                     basis: ShapeBasis::Description,
                     // The sentence that says so; none when the shape rests
@@ -900,6 +912,14 @@ pub(super) fn read(facets: &JobFacets, sentences: &[Sentence]) -> WorkReading {
                     evidence: shape_sentence(shape, sentences).unwrap_or_default(),
                 });
             }
+        }
+    }
+    // What the person will do, for the shapes the title names: the title
+    // alone says the work's name, a responsibility sentence says it is the
+    // work.
+    for shape in &mut out.shapes {
+        if matches!(shape.basis, ShapeBasis::Title | ShapeBasis::TitleArea) {
+            shape.described = shape_sentence(&shape.shape, sentences);
         }
     }
     // "Product Engineer" work that owns the backend is backend work too.
@@ -920,6 +940,7 @@ pub(super) fn read(facets: &JobFacets, sentences: &[Sentence]) -> WorkReading {
         });
         if let Some(s) = found {
             out.shapes.push(ShapeFact {
+                described: None,
                 shape: "backend".to_owned(),
                 basis: ShapeBasis::Included,
                 evidence: s.text.clone(),
@@ -1224,6 +1245,54 @@ mod tests {
             "We closed our seed round and are a team of 9 building analytics.",
         );
         assert_eq!(w.headcount.map(|h| h.0), Some(9));
+    }
+
+    #[test]
+    fn numbered_ladders_colleagues_and_duty_lists() {
+        let level = |title: &str| read(title, "").level.map(|l| l.seniority);
+        assert_eq!(
+            level("Software Engineer - Platform [IC3]"),
+            Some(Seniority::Mid)
+        );
+        assert_eq!(
+            level("Software Engineer II, Open Source Server"),
+            Some(Seniority::Mid)
+        );
+        assert_eq!(level("Software Engineer, IC4"), Some(Seniority::Senior));
+        assert_eq!(
+            level("Senior Software Engineer II"),
+            Some(Seniority::Senior)
+        );
+        let w = read(
+            "Engineer",
+            "The company is a pioneer of distributed collaboration, with 1200+ colleagues in 75+ countries.",
+        );
+        assert_eq!(w.headcount.as_ref().map(|h| h.0), Some(1200));
+        assert!(w.company_is("large_company").is_some());
+        // Bullets under "In this role, you'll:" describe the work, without
+        // saying "you".
+        let w = read(
+            "Supalite Engineer",
+            "ABOUT THE ROLE\nIn this role, you'll:\n - Grow API compatibility with the client\n\
+             - Build and harden the hosted backend services\nABOUT YOU\n- Backend services experience",
+        );
+        let backend = w.shapes.iter().find(|s| s.shape == "backend");
+        assert!(
+            backend.is_some_and(|s| s.evidence.contains("Grow API")),
+            "{:?}",
+            w.shapes
+        );
+        // A title's work, confirmed by what the person will do.
+        let w = read(
+            "Infrastructure Engineer",
+            "As an infrastructure engineer, you will be directly responsible for our compute fleet.",
+        );
+        assert!(w.shapes[0].described.is_some(), "{:?}", w.shapes);
+        assert!(
+            read("Infrastructure Engineer", "We are hiring.").shapes[0]
+                .described
+                .is_none()
+        );
     }
 
     #[test]

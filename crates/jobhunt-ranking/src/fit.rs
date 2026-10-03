@@ -34,16 +34,32 @@
 //! matches; a **holding** one keeps it from being strong; a **minor** one
 //! is only said.
 //!
-//! The level ([`FitLevel`]) follows from the evidence, not from a sum that
-//! anything can reach:
+//! Every reason and contradiction has a [`Scope`]: the **role** (what the
+//! job itself says about the work: shape, level, depth, employment,
+//! domain, technology, way of working) or the **company** (stage, size,
+//! team, ownership, culture). The level ([`FitLevel`]) is decided in
+//! stages, never from a sum the company side can reach:
 //!
-//! * **strong**: the role fits (the work they want, not only something
-//!   related read from the description), at least one other aspect
-//!   affirmatively fits, enough of it is theirs, and nothing contradicts or
-//!   holds it;
-//! * **plausible**: something points to it, not enough;
-//! * **insufficient**: little or nothing does;
-//! * **poor**: a material contradiction.
+//! 1. **Role fit** ([`RoleFit`]), from role evidence only: strong when the
+//!    work they want is evidenced by the job itself (a responsibility
+//!    sentence describing it, or the title naming it plus another
+//!    job-local fact), and nothing about the role holds it back.
+//! 2. **Company fit** ([`CompanyFit`]), only then: a conflict holds an
+//!    otherwise strong role back; a match only orders it among strong
+//!    roles; unknown is not negative.
+//!
+//! So:
+//!
+//! * **strong**: role fit is strong and the company doesn't conflict;
+//! * **plausible**: some of the work they want (or a strong role at a
+//!   conflicting company);
+//! * **insufficient**: nothing job-local points to it (company evidence
+//!   alone never does);
+//! * **poor**: a material contradiction, role or company.
+//!
+//! **Invariant:** company evidence can never make a job strong. It can't
+//! promote an insufficient role, erase a role contradiction, compensate
+//! for the wrong level or for specialization the person doesn't want.
 
 use serde::{Deserialize, Serialize};
 
@@ -57,7 +73,7 @@ use crate::signals::clip;
 
 /// Revision of the fit rules. Part of every stored ranking's key (through
 /// [`crate::RANKING_VERSION`]) and every semantic review's.
-pub const FIT_RULES: &str = "fit-rules/2";
+pub const FIT_RULES: &str = "fit-rules/3";
 
 /// How well a job fits what the person wants. Deliberately coarse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -156,7 +172,32 @@ pub enum Aspect {
     Feedback,
 }
 
+/// Whose evidence a fact is: the job's own, or the company's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Scope {
+    /// Local to the job: what the person will do, at what level, on what
+    /// terms.
+    Role,
+    /// About the employer or the team: the same on every posting of the
+    /// company that says it.
+    Company,
+}
+
 impl Aspect {
+    pub fn scope(self) -> Scope {
+        match self {
+            Self::Company | Self::Team | Self::Ownership | Self::Culture => Scope::Company,
+            Self::Role
+            | Self::Specialization
+            | Self::Seniority
+            | Self::Domain
+            | Self::Technology
+            | Self::WorkStyle
+            | Self::Feedback => Scope::Role,
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Role => "role",
@@ -210,6 +251,18 @@ pub enum ContradictionKind {
 }
 
 impl ContradictionKind {
+    pub fn scope(self) -> Scope {
+        match self {
+            Self::CompanyShape | Self::TeamShape | Self::Culture => Scope::Company,
+            Self::Seniority
+            | Self::RoleDepth
+            | Self::WorkShape
+            | Self::Domain
+            | Self::Technology
+            | Self::WorkStyle => Scope::Role,
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Seniority => "seniority",
@@ -260,6 +313,79 @@ pub struct FitContradiction {
     pub firmness: Firmness,
 }
 
+/// How well the job itself fits, from role-scope evidence only.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum RoleFit {
+    /// A material role contradiction.
+    Contradictory,
+    /// Nothing job-local points to it.
+    #[default]
+    Insufficient,
+    /// Some of the work they want, not enough (or held back).
+    Plausible,
+    /// The work they want, evidenced by the job itself.
+    Strong,
+}
+
+impl RoleFit {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Contradictory => "contradictory",
+            Self::Insufficient => "insufficient",
+            Self::Plausible => "plausible",
+            Self::Strong => "strong",
+        }
+    }
+}
+
+/// How the employer fits, assessed after the role.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum CompanyFit {
+    /// A company contradiction (material or holding).
+    Conflicts,
+    /// The posting doesn't show the company side: not negative.
+    #[default]
+    Unknown,
+    /// Company-side reasons fit.
+    Matches,
+}
+
+impl CompanyFit {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Conflicts => "conflicts",
+            Self::Unknown => "unknown",
+            Self::Matches => "matches",
+        }
+    }
+}
+
+/// What says the work is the kind the person wants.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum RoleBasis {
+    /// Nothing, or only scattered words or a requirements list ("from what
+    /// the description asks for"), the team's name, a shape merely related
+    /// to the one they want, or a weak or learned-only want.
+    #[default]
+    Inferred,
+    /// The title names it, and nothing about what the person will do says
+    /// so.
+    Title,
+    /// What the person will do describes it: a responsibility sentence, an
+    /// included shape's sentence, the specialty itself, or the title's
+    /// work confirmed by one.
+    Described,
+}
+
 /// Whether a semantic reviewer looked at the assessment.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
@@ -292,13 +418,25 @@ pub struct FitAssessment {
     pub evaluated: Vec<Aspect>,
     /// How well the work itself fits (0 when nothing says it does).
     pub role_fit: f64,
-    /// How much the other aspects affirmatively fit.
-    pub support: f64,
-    /// The person has a firm view on the company side (the company, the
-    /// team, ownership, culture): a strong fit needs some of it to fit, not
-    /// only the role.
+    /// What says the work fits (see [`RoleBasis`]).
     #[serde(default)]
-    pub needs_company_fit: bool,
+    pub role_basis: RoleBasis,
+    /// Narrow read the work they want (soft), rather than them saying it:
+    /// the job must show more of it.
+    #[serde(default)]
+    pub role_read: bool,
+    /// How much the other job-local aspects affirmatively fit.
+    pub support: f64,
+    /// How much the company side affirmatively fits: orders strong roles,
+    /// never makes one.
+    #[serde(default)]
+    pub company_support: f64,
+    /// Role fit, from role evidence only.
+    #[serde(default)]
+    pub role: RoleFit,
+    /// Company fit, assessed after the role.
+    #[serde(default)]
+    pub company: CompanyFit,
     /// `fit-rules/2`.
     pub assessor: String,
     #[serde(default)]
@@ -314,8 +452,12 @@ impl Default for FitAssessment {
             uncertainties: Vec::new(),
             evaluated: Vec::new(),
             role_fit: 0.0,
+            role_basis: RoleBasis::Inferred,
+            role_read: false,
             support: 0.0,
-            needs_company_fit: false,
+            company_support: 0.0,
+            role: RoleFit::Insufficient,
+            company: CompanyFit::Unknown,
             assessor: FIT_RULES.to_owned(),
             review: ReviewState::NotReviewed,
         }
@@ -323,8 +465,10 @@ impl Default for FitAssessment {
 }
 
 impl FitAssessment {
-    /// Orders jobs of the same level: more evidence first, holding and
-    /// minor contradictions last. Not shown as a number.
+    /// Orders jobs of the same level: more evidence first (the company's
+    /// included: it may rank one strong role above another), holding and
+    /// minor contradictions last. Not shown as a number, and never what
+    /// makes the level.
     pub fn score(&self) -> f64 {
         let held: f64 = self
             .contradictions
@@ -335,7 +479,7 @@ impl FitAssessment {
                 Severity::Minor => 0.25,
             })
             .sum();
-        ((self.role_fit + self.support - held) * 100.0).round() / 100.0
+        ((self.role_fit + self.support + self.company_support - held) * 100.0).round() / 100.0
     }
 
     pub fn material(&self) -> impl Iterator<Item = &FitContradiction> {
@@ -358,44 +502,83 @@ impl FitAssessment {
             .collect()
     }
 
-    /// How much the company side (company, team, ownership, culture, the
-    /// person's own interest in this job) affirmatively fits.
-    pub fn company_support(&self) -> f64 {
+    /// Why this role: the job-local reasons.
+    pub fn role_reasons(&self) -> impl Iterator<Item = &FitReason> {
         self.reasons
             .iter()
-            .filter(|r| {
-                matches!(
-                    r.aspect,
-                    Aspect::Company
-                        | Aspect::Team
-                        | Aspect::Ownership
-                        | Aspect::Culture
-                        | Aspect::Feedback
-                )
-            })
-            .map(|r| r.weight)
-            .fold(0.0, f64::max)
+            .filter(|r| r.aspect.scope() == Scope::Role)
     }
 
-    /// The level the evidence supports (see the module docs).
+    /// Why this company: the company-side reasons.
+    pub fn company_reasons(&self) -> impl Iterator<Item = &FitReason> {
+        self.reasons
+            .iter()
+            .filter(|r| r.aspect.scope() == Scope::Company)
+    }
+
+    fn any(&self, scope: Scope, severity: Severity) -> bool {
+        self.contradictions
+            .iter()
+            .any(|c| c.kind.scope() == scope && c.severity == severity)
+    }
+
+    /// Whether the work they want is evidenced by the job itself: described
+    /// by what the person will do, or named by the title with another
+    /// job-local fact (the level they want, a specialty they want or have
+    /// shown, their own interest in this job).
+    ///
+    /// A want Narrow only read (soft) needs more from the job: the work
+    /// described and another job-local fact.
+    fn role_evidenced(&self) -> bool {
+        let another = self.reasons.iter().any(|r| {
+            r.weight > 0.0
+                && matches!(
+                    r.aspect,
+                    Aspect::Seniority | Aspect::Specialization | Aspect::Feedback
+                )
+        });
+        match (self.role_basis, self.role_read) {
+            (RoleBasis::Described, false) => true,
+            (RoleBasis::Described, true) | (RoleBasis::Title, false) => another,
+            (RoleBasis::Title, true) | (RoleBasis::Inferred, _) => false,
+        }
+    }
+
+    /// The level the evidence supports, in stages (see the module docs):
+    /// the role from role evidence alone, then the company.
     pub fn classify(&mut self) {
-        let has = |s: Severity| self.contradictions.iter().any(|c| c.severity == s);
-        let (role, support) = (self.role_fit, self.support);
-        let company = !self.needs_company_fit || self.company_support() >= Firmness::Soft.weight();
-        self.level = if has(Severity::Material) {
-            FitLevel::Poor
-        } else if role >= 0.5
-            && support >= 1.0
-            && role + support >= 2.0
-            && (role >= 0.75 || support >= 2.0)
-            && company
-            && !has(Severity::Holding)
-        {
-            FitLevel::Strong
-        } else if role > 0.0 || support >= 1.5 {
-            FitLevel::Plausible
+        use Scope::{Company, Role};
+        // 1. Role fit: job-local evidence only.
+        self.role = if self.any(Role, Severity::Material) {
+            RoleFit::Contradictory
+        } else if self.role_evidenced() && !self.any(Role, Severity::Holding) {
+            RoleFit::Strong
+        } else if self.role_fit > 0.0 || self.support >= 1.5 {
+            RoleFit::Plausible
         } else {
-            FitLevel::Insufficient
+            RoleFit::Insufficient
+        };
+        // 2. Company fit, after the role.
+        self.company =
+            if self.any(Company, Severity::Material) || self.any(Company, Severity::Holding) {
+                CompanyFit::Conflicts
+            } else if self.company_support > 0.0 {
+                CompanyFit::Matches
+            } else {
+                CompanyFit::Unknown
+            };
+        // 3. The level. Company evidence can hold a strong role back or make
+        // the fit poor; it never makes one.
+        self.level = if self.any(Role, Severity::Material) || self.any(Company, Severity::Material)
+        {
+            FitLevel::Poor
+        } else {
+            match (self.role, self.company) {
+                (RoleFit::Strong, CompanyFit::Conflicts) => FitLevel::Plausible,
+                (RoleFit::Strong, _) => FitLevel::Strong,
+                (RoleFit::Plausible, _) => FitLevel::Plausible,
+                (RoleFit::Insufficient | RoleFit::Contradictory, _) => FitLevel::Insufficient,
+            }
         };
     }
 }
@@ -717,10 +900,118 @@ impl Builder {
     }
 }
 
-/// Assesses how well a job fits what the person wants.
+/// What a company says about its own size, read once for the company: a
+/// headcount one posting states ("with 1200+ colleagues in 75+
+/// countries") holds for the company's other postings too, and the same
+/// statement on 200 postings is one company fact.
+///
+/// Only the company's stated headcount is shared. Stage and kind words
+/// read from a single posting ("a Fortune 500 CISO" about a customer, an
+/// award name) stay that posting's: shared, one misreading would hold back
+/// every role at the company.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CompanyFacts {
+    pub headcount: Option<(u32, String)>,
+    /// Digest of the facts, for cache keys.
+    pub digest: String,
+}
+
+impl CompanyFacts {
+    /// The size the headcount means: `small_company` (≤ 100 people),
+    /// `large_company` (≥ 1,000), or nothing in between.
+    fn size(&self) -> Option<Trait> {
+        let (n, evidence) = self.headcount.as_ref()?;
+        let value = match n {
+            0..=100 => "small_company",
+            1000.. => "large_company",
+            _ => return None,
+        };
+        Some(Trait {
+            value: value.to_owned(),
+            evidence: evidence.clone(),
+        })
+    }
+}
+
+/// [`CompanyFacts`] by company (normalized name).
+#[derive(Debug, Clone, Default)]
+pub struct CompanyBook {
+    by_company: std::collections::HashMap<String, CompanyFacts>,
+}
+
+impl CompanyBook {
+    /// The company facts of every company among `facets`.
+    pub fn of<'f>(facets: impl IntoIterator<Item = &'f JobFacets>) -> Self {
+        let mut by_company: std::collections::HashMap<String, CompanyFacts> =
+            std::collections::HashMap::new();
+        for f in facets {
+            let entry = by_company
+                .entry(jobhunt_core::text::search_key(&f.company))
+                .or_default();
+            if entry.headcount.is_none() {
+                entry.headcount.clone_from(&f.work.headcount);
+            }
+        }
+        for facts in by_company.values_mut() {
+            let n = facts
+                .headcount
+                .as_ref()
+                .map(|(n, _)| n.to_string())
+                .unwrap_or_default();
+            facts.digest =
+                jobhunt_core::StableId::derive("narrow.ranking.company_facts", &[&n]).to_string();
+        }
+        Self { by_company }
+    }
+
+    pub fn get(&self, company: &str) -> Option<&CompanyFacts> {
+        self.by_company
+            .get(&jobhunt_core::text::search_key(company))
+    }
+}
+
+/// Assesses how well a job fits what the person wants, from the posting's
+/// own company facts.
 pub fn assess(facets: &JobFacets, person: &Person, profile: &TasteProfile) -> FitAssessment {
+    assess_with(facets, person, profile, None)
+}
+
+/// [`assess`], with the company's facts read across its postings when
+/// they are known ([`CompanyBook`]).
+pub fn assess_with(
+    facets: &JobFacets,
+    person: &Person,
+    profile: &TasteProfile,
+    company_facts: Option<&CompanyFacts>,
+) -> FitAssessment {
     let wants = Wants::of(profile);
     let work = &facets.work;
+    // The company's own headcount, when another of its postings states it
+    // and this one doesn't.
+    let merged;
+    let company_work = match company_facts.and_then(|c| c.size().map(|t| (c, t))) {
+        Some((c, size)) if work.headcount.is_none() => {
+            let mut company = work.company.clone();
+            if !company.iter().any(|t| t.value == size.value) {
+                company.push(size.clone());
+            }
+            if size.value == "large_company" {
+                company.retain(|t| {
+                    !matches!(
+                        t.value.as_str(),
+                        "startup" | "early_stage" | "small_company"
+                    )
+                });
+            }
+            merged = WorkReading {
+                company,
+                headcount: c.headcount.clone(),
+                ..work.clone()
+            };
+            &merged
+        }
+        _ => work,
+    };
     let mut b = Builder {
         fit: FitAssessment::default(),
     };
@@ -728,15 +1019,18 @@ pub fn assess(facets: &JobFacets, person: &Person, profile: &TasteProfile) -> Fi
     role(&mut b, facets, &wants);
     depth(&mut b, work, person, &wants);
     seniority(&mut b, work, person, &wants);
-    company(&mut b, work, &wants);
+    company(&mut b, company_work, &wants);
     team_and_culture(&mut b, work, &wants);
     domain(&mut b, facets, &wants);
     technology(&mut b, facets, &wants);
     work_style(&mut b, facets, &wants);
     context(&mut b, facets, person, &wants);
 
-    // Role fit is the best the work itself offers; every other aspect
-    // counts once, by its best reason.
+    employment(&mut b, facets);
+
+    // Role fit is the best the work itself offers. Every other aspect counts
+    // once, by its best reason, on its own side: job-local support, or the
+    // company's (which orders strong roles and never makes one).
     let mut fit = b.fit;
     fit.role_fit = fit
         .reasons
@@ -744,25 +1038,28 @@ pub fn assess(facets: &JobFacets, person: &Person, profile: &TasteProfile) -> Fi
         .filter(|r| r.aspect == Aspect::Role)
         .map(|r| r.weight)
         .fold(0.0, f64::max);
-    let mut support = 0.0;
+    let (mut support, mut company_support) = (0.0, 0.0);
     let mut aspects: Vec<Aspect> = fit.reasons.iter().map(|r| r.aspect).collect();
     aspects.sort();
     aspects.dedup();
     for aspect in aspects.into_iter().filter(|a| *a != Aspect::Role) {
-        support += fit
+        let best = fit
             .reasons
             .iter()
             .filter(|r| r.aspect == aspect)
             .map(|r| r.weight)
             .fold(0.0, f64::max);
+        match aspect.scope() {
+            Scope::Role => support += best,
+            Scope::Company => company_support += best,
+        }
     }
     fit.support = (support * 100.0).round() / 100.0;
+    fit.company_support = (company_support * 100.0).round() / 100.0;
     fit.role_fit = (fit.role_fit * 100.0).round() / 100.0;
-    // Company and role are one unit: someone with a firm view on the kind
-    // of company, team or ownership needs some of it shown, not only the
-    // role (what the posting doesn't say stays unknown: not a
-    // contradiction, just not enough for a strong fit).
-    fit.needs_company_fit = [
+    // A firm view on the company side that the posting doesn't show stays
+    // unknown: said, not held against the job.
+    let company_view = [
         TasteDimension::Company,
         TasteDimension::Team,
         TasteDimension::Ownership,
@@ -774,8 +1071,8 @@ pub fn assess(facets: &JobFacets, person: &Person, profile: &TasteProfile) -> Fi
             .prefer(*d)
             .any(|p| matches!(p.firmness, Firmness::Firm | Firmness::Soft))
     });
-    if fit.needs_company_fit
-        && fit.company_support() == 0.0
+    if company_view
+        && fit.company_support == 0.0
         && !fit
             .uncertainties
             .iter()
@@ -1059,6 +1356,23 @@ fn role(b: &mut Builder, facets: &JobFacets, wants: &Wants<'_>) {
             w.firmness,
             value,
         );
+        // The work they want, not only something related to it, wanted
+        // firmly or as Narrow read it (a weak or learned-only want never
+        // carries a strong fit).
+        let full = relation >= 1.0 && matches!(w.firmness, Firmness::Firm | Firmness::Soft);
+        b.fit.role_read = w.firmness == Firmness::Soft;
+        b.fit.role_basis = match shape.basis {
+            _ if !full => RoleBasis::Inferred,
+            ShapeBasis::Specialty => RoleBasis::Described,
+            ShapeBasis::Description | ShapeBasis::Included if !shape.evidence.is_empty() => {
+                RoleBasis::Described
+            }
+            ShapeBasis::Title if shape.described.is_some() => RoleBasis::Described,
+            ShapeBasis::Title => RoleBasis::Title,
+            ShapeBasis::Description | ShapeBasis::Included | ShapeBasis::TitleArea => {
+                RoleBasis::Inferred
+            }
+        };
     }
     // Shapes they avoid. A title's shape is what the job is; a shape read
     // from a description counts only when the title names none.
@@ -1728,6 +2042,18 @@ fn work_style(b: &mut Builder, facets: &JobFacets, wants: &Wants<'_>) {
             ),
             _ => {}
         }
+    }
+}
+
+/// The employment format, when the posting states it. Whether the person
+/// takes contract work is their engagement preference, which eligibility
+/// reads; fit says what the terms are and invents no penalty.
+fn employment(b: &mut Builder, facets: &JobFacets) {
+    if facets.contract == Some(true) {
+        b.fit.uncertainties.push(format!(
+            "A contract or fixed-term position (“{}”), not a permanent one",
+            clip(&facets.title, 90)
+        ));
     }
 }
 

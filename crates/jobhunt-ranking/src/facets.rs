@@ -151,7 +151,7 @@ impl Level {
 }
 
 /// Levels titles state, first match wins (so "Senior / Staff" is senior).
-const LEVEL_TERMS: [(&str, Level); 24] = [
+const LEVEL_TERMS: [(&str, Level); 31] = [
     ("co founder", Level::Founding),
     ("cofounder", Level::Founding),
     ("founding", Level::Founding),
@@ -169,6 +169,15 @@ const LEVEL_TERMS: [(&str, Level); 24] = [
     ("principal", Level::Principal),
     ("distinguished", Level::Principal),
     ("lead", Level::Lead),
+    // Numbered ladders: "Software Engineer II", "Software Engineer -
+    // Platform [IC3]".
+    ("=II", Level::Mid),
+    ("=IC1", Level::Junior),
+    ("=IC2", Level::Junior),
+    ("=IC3", Level::Mid),
+    ("=IC4", Level::Senior),
+    ("=IC5", Level::Staff),
+    ("=IC6", Level::Staff),
     ("engineering manager*", Level::Manager),
     ("manager", Level::Manager),
     ("head of", Level::Manager),
@@ -177,6 +186,11 @@ const LEVEL_TERMS: [(&str, Level); 24] = [
     ("vice president", Level::Manager),
     ("=CTO", Level::Manager),
 ];
+
+/// Title words of a contract or fixed-term position.
+static CONTRACT_TITLE_PATTERNS: LazyLock<Vocabulary> = LazyLock::new(|| {
+    Vocabulary::compile(&["contract", "contractor", "fixed term", "=FTC", "temporary"])
+});
 
 /// Title words that are not a level even though they contain one.
 const NOT_A_LEVEL: [&str; 3] = ["technical staff", "account manag*", "product manag*"];
@@ -498,6 +512,50 @@ struct Sentence {
     words: Vec<Word>,
     /// Its clauses, as word ranges (see [`clauses`]).
     clauses: Vec<Range<usize>>,
+    /// Under a responsibilities heading or lead ("What you'll do", "In
+    /// this role, you'll:"): what the person will do, whether or not the
+    /// line says "you".
+    duty: bool,
+}
+
+/// Headings over what the person will do.
+const DUTY_HEADINGS: [&str; 16] = [
+    "responsibilit*",
+    "key responsibilit*",
+    "your responsibilit*",
+    "what you ll do",
+    "what you will do",
+    "what you ll be doing",
+    "what you will be doing",
+    "what you ll work on",
+    "what you will work on",
+    "what you ll be responsible for",
+    "what you will be responsible for",
+    "what you ll own",
+    "what you will own",
+    "in this role",
+    "your role",
+    "day to day",
+];
+static DUTY_HEADING_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&DUTY_HEADINGS));
+/// A lead line over a list of duties: "In this role, you'll:", "For this
+/// role, you will:".
+static DUTY_LEAD_PATTERNS: LazyLock<Vocabulary> =
+    LazyLock::new(|| Vocabulary::compile(&["you ll", "you will"]));
+
+/// Whether a line opens a list of duties, closes one, or neither.
+fn duty_marker(line: &str, ws: &[Word], short_heading: bool) -> Option<bool> {
+    let lead = line.trim().ends_with(':') && !line.trim().starts_with(['-', '*', '•', '–']);
+    if (short_heading && starts_with_any(ws, &DUTY_HEADING_PATTERNS))
+        || (lead && has(ws, &DUTY_LEAD_PATTERNS))
+    {
+        Some(true)
+    } else if short_heading || lead {
+        Some(false)
+    } else {
+        None
+    }
 }
 
 /// The sentences of a description that describe the job and the company,
@@ -511,13 +569,16 @@ pub fn content_sentences(description: &str) -> Vec<String> {
 fn content(description: &str) -> Vec<Sentence> {
     let mut out = Vec::new();
     let mut skipping = false;
+    let mut duties = false;
     for line in description.lines() {
         let trimmed = line.trim().trim_end_matches(':');
         let ws = words(trimmed);
         let short = !trimmed.is_empty() && ws.len() <= 6 && !trimmed.ends_with('.');
-        if short && !trimmed.starts_with(['-', '*', '•', '–']) {
+        let heading = short && !trimmed.starts_with(['-', '*', '•', '–']);
+        if heading {
             if starts_with_any(&ws, &BOILERPLATE_HEADING_PATTERNS) {
                 skipping = true;
+                duties = false;
                 continue;
             }
             if heading_kind(line).is_some() {
@@ -527,6 +588,9 @@ fn content(description: &str) -> Vec<Sentence> {
         if skipping {
             continue;
         }
+        if let Some(open) = duty_marker(line, &ws, heading) {
+            duties = open;
+        }
         for sentence in jobhunt_eligibility::job::sentences(line) {
             let ws = words(&sentence);
             if !has(&ws, &BOILERPLATE_CUE_PATTERNS) {
@@ -535,6 +599,7 @@ fn content(description: &str) -> Vec<Sentence> {
                     text: sentence,
                     words: ws,
                     clauses,
+                    duty: duties,
                 });
             }
         }
@@ -1312,7 +1377,10 @@ pub fn facets(record: &JobRecord) -> JobFacets {
     let contract = match &job.employment_type {
         Some(EmploymentType::Contract | EmploymentType::Temporary) => Some(true),
         Some(EmploymentType::FullTime | EmploymentType::PartTime) => Some(false),
-        Some(EmploymentType::Internship | EmploymentType::Other(_)) | None => None,
+        Some(EmploymentType::Internship | EmploymentType::Other(_)) => None,
+        // The source doesn't say; the title may ("Senior Software
+        // Engineer, Core Experiences (Contract)").
+        None => has(&words(&title), &CONTRACT_TITLE_PATTERNS).then_some(true),
     };
     let mut facets = JobFacets {
         company: job.company.trim().to_owned(),
@@ -1525,6 +1593,21 @@ mod tests {
             title_level("Junior Developer").map(|l| l.0),
             Some(Level::Junior)
         );
+    }
+
+    #[test]
+    fn a_contract_title_is_a_contract_when_the_source_is_silent() {
+        let f = |title: &str| facets(&crate::testing::record("ashby:acme", title, "")).contract;
+        assert_eq!(
+            f("Senior Software Engineer, Core Experiences (Contract)"),
+            Some(true)
+        );
+        assert_eq!(
+            f("Senior Demand Generation Specialist (12M FTC)"),
+            Some(true)
+        );
+        assert_eq!(f("Senior Software Engineer"), None);
+        assert_eq!(f("Contracts Manager"), None);
     }
 
     #[test]

@@ -123,6 +123,7 @@ fn ranked_with(
         taste,
         taste_profile: &profile,
         now: now(),
+        companies: None,
     };
     rank(&candidate, &ctx).expect("a ranking")
 }
@@ -352,6 +353,7 @@ fn conditional_eligibility_stays_rankable_with_its_condition_visible() {
             taste: &taste,
             taste_profile: &crate::testing::taste_of(&person),
             now: now(),
+            companies: None,
         },
     )
     .unwrap();

@@ -75,6 +75,15 @@ impl RankKey {
             .collect();
         records.sort();
         parts.extend(records);
+        // The company's size read from its other postings, when ranking
+        // many and it changes what this posting says.
+        if let Some(book) = ctx.companies
+            && let Some(facts) = book.get(&first.posting.company)
+            && facts.headcount.is_some()
+            && crate::facets::facets_of(first).work.headcount.is_none()
+        {
+            parts.push(facts.digest.clone());
+        }
         parts.extend(candidate.state.events.iter().map(|e| e.id.to_string()));
         let refs: Vec<&str> = parts.iter().map(String::as_str).collect();
         Some(Self {
