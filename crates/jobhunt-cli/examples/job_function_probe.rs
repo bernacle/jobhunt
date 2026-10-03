@@ -24,6 +24,9 @@
 //! job_function_probe ic-score <annotations.json> <ens1.json> <ens2.json> <ens3.json>
 //! # each posting's voted answer, as `id<TAB>answer` lines
 //! job_function_probe ic-votes <ensemble.json>
+//! # re-call only the votes that failed (rate limits), in place; each is
+//! # a fresh, independent call, marked `refilled`
+//! job_function_probe ic-fill  <corpus.db> <ensemble.json>
 //! ```
 //!
 //! `ids.txt` holds one job id per line (`job_<hex>`). `CLASSIFIER_MODEL`
@@ -1000,6 +1003,58 @@ async fn ic_run(db: &str, ids_path: &str, out_path: &str) {
     std::fs::write(out_path, serde_json::to_string_pretty(&out).unwrap()).unwrap();
 }
 
+/// Re-calls every vote that has no answer (a provider error such as a rate
+/// limit), sequentially, and recomputes the voted answers.
+async fn ic_fill(db: &str, path: &str) {
+    let (model, _) = model_from_env();
+    let mut ensemble: Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let missing: Vec<String> = ensemble["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|j| {
+            j["votes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v.get("result").is_none())
+        })
+        .map(|j| j["job"].as_str().unwrap().to_owned())
+        .collect();
+    let postings: BTreeMap<String, Posting> = load(db, &missing)
+        .await
+        .into_iter()
+        .map(|p| (p.id.clone(), p))
+        .collect();
+    let mut refilled = 0;
+    for job in ensemble["jobs"].as_array_mut().unwrap() {
+        let Some(posting) = postings.get(job["job"].as_str().unwrap()) else {
+            continue;
+        };
+        for vote in job["votes"].as_array_mut().unwrap() {
+            if vote.get("result").is_some() {
+                continue;
+            }
+            let mut fresh = ic_vote(&model, posting).await;
+            fresh["refilled"] = json!(true);
+            fresh["failed_attempts"] = vote["attempts"].clone();
+            *vote = fresh;
+            refilled += 1;
+        }
+        let answers: Vec<Option<job_ic::Answer>> = job["votes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(vote_answer)
+            .collect();
+        job["voted"] = json!(job_ic::vote(&answers));
+    }
+    ensemble["refilled_votes"] = json!(refilled);
+    std::fs::write(path, serde_json::to_string_pretty(&ensemble).unwrap()).unwrap();
+    println!("refilled {refilled} votes");
+}
+
 fn ic_answers(ensemble: &Value) -> BTreeMap<String, Vec<Option<job_ic::Answer>>> {
     ensemble["jobs"]
         .as_array()
@@ -1023,9 +1078,10 @@ fn ic_usage(ensemble: &Value) -> Value {
     let (mut input, mut output, mut reasoning) = (0, 0, 0);
     let mut ms = Vec::new();
     let (mut retries, mut malformed, mut errors, mut failed) = (0, 0, 0, 0);
-    let (mut valid, mut invalid, mut unsupported) = (0, 0, 0);
+    let (mut valid, mut invalid, mut unsupported, mut refilled) = (0, 0, 0, 0);
     for job in ensemble["jobs"].as_array().unwrap() {
         for vote in job["votes"].as_array().unwrap() {
+            refilled += usize::from(vote.get("refilled").is_some());
             let attempts = vote["attempts"].as_array().unwrap();
             retries += attempts.len().saturating_sub(1);
             for a in attempts {
@@ -1050,6 +1106,7 @@ fn ic_usage(ensemble: &Value) -> Value {
         "calls": ms.len(),
         "input_tokens": input, "output_tokens": output, "reasoning_tokens": reasoning,
         "retries": retries, "malformed": malformed, "errors": errors, "failed_votes": failed,
+        "refilled_votes": refilled,
         "quotes": {"valid": valid, "invalid": invalid, "unsupported_answers": unsupported},
         "latency_ms": {"median": percentile(&ms, 0.5), "p90": percentile(&ms, 0.9), "max": ms.last()},
         "wall_ms": ensemble["wall_ms"],
@@ -1146,6 +1203,7 @@ async fn main() {
         Some("ic-run") => ic_run(&args[2], &args[3], &args[4]).await,
         Some("ic-score") => ic_score(&args[2], &args[3..]),
         Some("ic-votes") => ic_votes(&args[2]),
+        Some("ic-fill") => ic_fill(&args[2], &args[3]).await,
         _ => eprintln!(
             "usage: job_function_probe sample|dump|size|run|score|ic-run|ic-score|ic-votes …"
         ),

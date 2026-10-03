@@ -1,0 +1,1045 @@
+{
+ "about": "derived post-hoc from fresh-2026-10-02-job-functions.json",
+ "jobs": [
+  {
+   "job": "job_41f5097e001315dfeaa8a4e59e953719",
+   "company": "Stripe",
+   "title": "Compliance Manager, User Enablement",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_9a89241b15fdd425aa8c61edab8a6404",
+   "company": "Anthropic",
+   "title": "BDR Enablement Lead",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_60e69efa36c8bf38ba82b288ac8fffc4",
+   "company": "Canonical",
+   "title": "Engineering Manager - Linux Hardware Enablement",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_02b366387aed5f0c98d2b1ef09c94ea1",
+   "company": "Palantir",
+   "title": "Forward Deployed Enablement Engineer - Customer Success",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_a5791bbd0f817cd64ed103dabc829928",
+   "company": "Airbnb",
+   "title": "Senior Sales Operations Lead",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_7e3a1a4fd8cf92dc97ac0dd9e5c9cb43",
+   "company": "Palantir",
+   "title": "Revenue Accounting Manager",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_0d95736333163fdcf6d860c046dd287b",
+   "company": "Anthropic",
+   "title": "Product Marketing Lead, GTM Strategy - Claude for Knowledge Work",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_fce3f2104c4f1b389da19f378f61e842",
+   "company": "render",
+   "title": "Head of Revenue Partnerships",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_0b53a0e928af2486b1f42a4d44801186",
+   "company": "Zoox",
+   "title": "Financial Analyst, Revenue and Commercial",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_1cec3ae42239e95704250a8da6d440e5",
+   "company": "Canonical",
+   "title": "Developer Relations Engineer",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_b0086e52b6888e3811de3ac04abee3f4",
+   "company": "Airbnb",
+   "title": "Senior Product Manager, Community Support Experience",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_56f6f7e6987008c91228bceb62ed4998",
+   "company": "Cockroach Labs",
+   "title": "Join our Talent Community!",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_68fce300eaaa21147a7dbc9d0e96ee53",
+   "company": "Anthropic",
+   "title": "Community Engagement Manager, Data Centers (Texas)",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_9cc68a459f1199f88438db2eae88c89f",
+   "company": "Anthropic",
+   "title": "Research Scientist, Interpretability",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_b728c0078ed7061eea43ae5c18158948",
+   "company": "Modal",
+   "title": "Member of Technical Staff - Research, Inference",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_110ad5a355230d92d767ffd93914bcf8",
+   "company": "Figma",
+   "title": "Data Scientist, Finance",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_76dd30efc224d18c48819d3397d6ca1f",
+   "company": "Airbnb",
+   "title": "Staff Data Scientist, Guest & Host",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_a83c1a4d6e5b90c9e1faa75ea4cf3f7d",
+   "company": "GitLab",
+   "title": "Staff Security Researcher",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_3c2ea3cbd40b2e1ccf58464af9386d55",
+   "company": "Zoox",
+   "title": "Manager, Technical Program Management - Artificial Intelligence",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_5c31ac627b935c2e7453124d1bca6b31",
+   "company": "Stripe",
+   "title": "Staff Product Manager, ML Foundations and GenAI",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_900ff55df893c99ec3e7d57a3d42cd41",
+   "company": "Figma",
+   "title": "Program Manager, Scale Onboarding (London, United Kingdom)",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_604a17d673b94d3549ff2c64380e8326",
+   "company": "Spotify",
+   "title": "Senior Product Manager - Subscriptions",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_6b6e7b8e8643a56bbf0ebd5638a2d372",
+   "company": "Canonical",
+   "title": "Junior Product Manager",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_5b1712931a423a71de7d4da604e7b614",
+   "company": "Canonical",
+   "title": "Observability Engineering Manager",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_53215190da9b3dff6549a89790da3b80",
+   "company": "LaunchDarkly",
+   "title": "Engineering Manager, Experimentation",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_6c1c23a1b27c167b11ea482a798e27c6",
+   "company": "Stripe",
+   "title": "Partner Development Manager, Strategic Partnerships",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_efe77e122378402b7e5a4194b6b6ebcf",
+   "company": "Spotify",
+   "title": "Machine Learning Engineering Manager - Music",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_a18ae3592f20f411bcdb3bc500b5f126",
+   "company": "Vanta",
+   "title": "Sr. Manager, Security Operations",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_812796b737087e56f6f7fea9e7514f24",
+   "company": "sentry",
+   "title": "Engineering Manager, Events Analytics Platform",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_d3b3cc4fb55f793e31abb8279698b95b",
+   "company": "Stripe",
+   "title": "Solutions Architect, Commercial, UK/I",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_02d13fbdd4dda1c35819fe805f5f1260",
+   "company": "Canonical",
+   "title": "Embedded Linux Field Engineer (Mandarin speaking)",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_8c0a7dd55202e65149844e24a78c6b16",
+   "company": "Anthropic",
+   "title": "Forward Deployed Engineer",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_33d7069b40e4e6d59f0055a4d675ae0b",
+   "company": "Tailscale",
+   "title": "Solutions Engineer - Commercial (Expansion Sales)",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_3eac0cf430071acb847169550654f4b4",
+   "company": "workos",
+   "title": "Solutions Engineer",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_0cc6fec54b41f7b02f5c31f977de0283",
+   "company": "Notion",
+   "title": "Commercial Solutions Consultant",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_efbf8ca420574a2549bb05312ba341eb",
+   "company": "Figma",
+   "title": "Solutions Consultant, Payload",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_baac8117134f9cd34fc797f127291fac",
+   "company": "Chainguard",
+   "title": "Senior Technical Support Engineer",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_0b5e36e1da843459e8884762991e544e",
+   "company": "temporal",
+   "title": "Director, Global Developer Success",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_a18231a6030dd52a5b18b1d03868f320",
+   "company": "Replit",
+   "title": "Premium Support Engineer (Foster City, Weekend Shift)",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_75bf5e753a8b4221d6a5b2091e40bede",
+   "company": "Vanta",
+   "title": "VP, Success & Services",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_63ee4a18e7cf5ce3147fb192326e4a18",
+   "company": "Stripe",
+   "title": "Customer Success Manager, Enterprise",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_9fe56dcaa02c680b20c8dc408e087f30",
+   "company": "PlanetScale",
+   "title": "Enterprise Support Engineer",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_8b79845c40bc55159f95870587a78905",
+   "company": "Airbnb",
+   "title": "Staff Workday Integration Engineer, Tech Foundations",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_d0988e5b588bd6dcc7c827ae73cedb24",
+   "company": "Zoox",
+   "title": "Senior Software Engineer, Vehicle Deployment",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_619c3bd69d01b4e27dd8cb292735cbb6",
+   "company": "Ramp",
+   "title": "Partner Consultant, Accounting",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_ba1da99ac3d58870ea7a998a622322d0",
+   "company": "Palantir",
+   "title": "Deployment Strategist - US Government",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_c9ef57a30765358b4b14496a83f397a3",
+   "company": "Vercel",
+   "title": "Workday Integrations Developer",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_4a0f4838ef99575cddbe4d84254858e5",
+   "company": "Stripe",
+   "title": "Designer, Web Presence & Platform",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_661838c8fc6bc929e888a415717c5750",
+   "company": "Anthropic",
+   "title": "Platform Hardware Security",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_9977c0a3f036c0f3c5129bf7c7c2da8e",
+   "company": "Stripe",
+   "title": "Account Executive, Enterprise Grower, Platforms (Israel)",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_bb8d36580f86d4f86d114d6dcad287ca",
+   "company": "clickhouse",
+   "title": "Database Reliability Engineer - Core Team",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_f746e3d5c9f386a2e3e0881c2c0cff6b",
+   "company": "Grafana Labs",
+   "title": "Staff Software Engineer - Databases SRE | Ireland | Remote",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_c07e1b861a7c100f8b2e65abb7ad5872",
+   "company": "GitLab",
+   "title": "Staff Backend Engineer, Core DevOps",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_f6d3a22384d629b9708849300f12f9ca",
+   "company": "Palantir",
+   "title": "Product Reliability Engineer - Defense",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_1f390856a5d975391f8d5c2af0d6b2ae",
+   "company": "Notion",
+   "title": "Software Engineer, Infrastructure Security",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_6dec40af94fd9bcdf873b9dcfa369bc2",
+   "company": "Modal",
+   "title": "Infrastructure Security Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_1454eb948cf54dcca81d63fa77b51049",
+   "company": "GitLab",
+   "title": "Senior Security Risk Engineer",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_b087631e9dd18e8e61ece9dc040f4d18",
+   "company": "Palantir",
+   "title": "Security Systems Engineer",
+   "annotation": {
+    "answer": "not_software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_c2a87b6bf367e0b9af717cb3f5d6f5c9",
+   "company": "Spotify",
+   "title": "Senior Machine Learning Engineer, Personalization, Muse",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_166306595ea33579483ff37a7b0d7020",
+   "company": "GitLab",
+   "title": "Senior Backend Engineer, AI Engineering: Chat",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_9e3aeed589f34eab2a42fd98bb2e5520",
+   "company": "Vanta",
+   "title": "Senior Software Engineer, AI Product",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_d25f41de890ac289f0efab6fca0f28fb",
+   "company": "Grafana Labs",
+   "title": "Staff Backend Engineer - Mimir Query, Databases | Canada | Remote",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_1a4cb076f2ee3c2aa6b280ea5be091d9",
+   "company": "Tailscale",
+   "title": "Software Engineer, Networking (Dataplane)",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_30b71dbc0235d1e5dcc8c6a13c3003f4",
+   "company": "Notion",
+   "title": "Software Engineer, Mobile Core (Android)",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_59c1f26961fa602a13e47d0f55ae7cfc",
+   "company": "Figma",
+   "title": "Software Engineer - Mobile Web",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_1bd94f04d5de44b8f6c563be88b2c69d",
+   "company": "Grafana Labs",
+   "title": "Senior Mobile Engineer - Instrumentation SDK (iOS) | Sweden | Remote",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_98fa1d10f57e0d260b3a64c5186cf686",
+   "company": "duck-duck-go",
+   "title": "Senior Web Compatibility Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_95cef3e03d7418606a3fa0c092d360e3",
+   "company": "Spotify",
+   "title": "Senior Web Engineer - Subscriptions",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_6aff95fb9bb6eb47bbf6da7d7e4ac2b4",
+   "company": "Linear",
+   "title": "Design Engineer (Web & Brand)",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_4ece466574d7ec4a11a1a2e15adc4c17",
+   "company": "LaunchDarkly",
+   "title": "Senior Full Stack Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_0f9321f032d20c5c6242d7c570537d9d",
+   "company": "Linear",
+   "title": "Senior / Staff Fullstack Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_470019b2f51456fe3b82cb1ee840118c",
+   "company": "Vanta",
+   "title": "Senior Fullstack Software Engineer, GRC",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_ee2dd8f57cd7bae23304f55888f9d88c",
+   "company": "Zoox",
+   "title": "Staff/Senior Staff Software Engineer - Full Stack",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_dc810d07e6d30ac22216c37e472b4c9d",
+   "company": "plain",
+   "title": "Senior Product Engineer (AI)",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_57d08ac523da8138925f386f84c56269",
+   "company": "Cockroach Labs",
+   "title": "Staff Product Marketing Manager, Developer Experience",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_d9ed9b1fa15ca4026d278c6e82bec537",
+   "company": "Vanta",
+   "title": "Senior Software Engineer, Product Platform",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_dd54b66531c62930376832ea06da0b4b",
+   "company": "Replit",
+   "title": "Staff Software Engineer, Product",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_8fb1710eaba5226c8da798037fbca977",
+   "company": "Modal",
+   "title": "Member of Technical Staff - Platform Engineering",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_42ab56f896f2c218126ad474173c5ac9",
+   "company": "sentry",
+   "title": "Senior Software Engineer, Billing Platform",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_8a04ca69e6bbbf65677f818c0c5e1823",
+   "company": "attio",
+   "title": "Senior Platform Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_6d13844faba34b9926f6051db28bee64",
+   "company": "clickhouse",
+   "title": "Cloud Software Engineer - Observability Platform",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_06bf07313c65863d01d9834df2acb112",
+   "company": "Replit",
+   "title": "Senior Software Engineer, Replit Cloud",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_fb06963e18270217e24d86e684c461b2",
+   "company": "Automattic Careers",
+   "title": "Senior Systems Engineer",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_c3de2bf669e86b3aa75ff56cbe7b178d",
+   "company": "Zoox",
+   "title": "Embedded Software Engineer - Body Systems",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_cf31f9ada7947dac1ca9982a05cf2df3",
+   "company": "Tailscale",
+   "title": "Software Engineer, Networking (Features)",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_3ddbcb8b1dc8be61b26f91914807b6c3",
+   "company": "Grafana Labs",
+   "title": "Staff Backend Engineer - Grafana Enterprise | US | Remote",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_9a113ff0b34e7b014e367a6859bf7cfa",
+   "company": "LaunchDarkly",
+   "title": "Backend Engineer (Multiple Positions)",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_afd1b65b1fd3a828064293528a7f62b8",
+   "company": "resend",
+   "title": "Backend Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_d73480507337385d7fff72d0ab4e841a",
+   "company": "Airbnb",
+   "title": "Staff Software Engineer, Passport & Commerce (Backend)",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_c5502f6501e833b46259b8ecfa00d4d7",
+   "company": "render",
+   "title": "Senior/Staff Analytics Engineer",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_643dc16f82270225cd25d7410b4fed87",
+   "company": "Figma",
+   "title": "Software Engineer Intern (Winter 2027)",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_77bc219504b8f520f0c73d2ea73183da",
+   "company": "Grafana Labs",
+   "title": "Senior Software Engineer - Session Replay | Canada | Remote",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_0f0e8c90e015a303bc64fb7c41a8ddb0",
+   "company": "Spotify",
+   "title": "RecSys 2026 — Intern",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_8d234486e5d369875d5363fbe0c17dd6",
+   "company": "clickhouse",
+   "title": "Senior Manager, Global Workplaces",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_b2eec08f6b3ed6fbaf1afaf81a2eee40",
+   "company": "GitLab",
+   "title": "New Business Account Executive - Netherlands",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  }
+ ]
+}

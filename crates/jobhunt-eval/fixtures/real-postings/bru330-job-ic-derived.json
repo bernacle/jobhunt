@@ -1,0 +1,475 @@
+{
+ "about": "derived post-hoc from bru330-job-classes.json",
+ "jobs": [
+  {
+   "job": "job_daaaaa17208d4d56170e0b0448d2e940",
+   "company": "Airbnb",
+   "title": "Senior Fullstack Engineer, Quality Engineering",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_3fc0acefeb5bfbd0b5c69ae3129aab7b",
+   "company": "Airbnb",
+   "title": "Senior Mobile Software Engineer, Quality Engineering",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_13ca2b341602bb1e4bec9978af9f3231",
+   "company": "Airbnb",
+   "title": "Senior Software Engineer, Service Tools",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_4c9b635338ed6b1e9d756b0a5d02f5cc",
+   "company": "Anthropic",
+   "title": "Senior+ Software Engineer, Legal Tech",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_4d3b583f4a58d2298d39c99fd35645bf",
+   "company": "Anthropic",
+   "title": "Staff+ Software Engineer, Inference Velocity",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_50f682f10d5894326ed49d0706cbcc35",
+   "company": "axiom",
+   "title": "Distributed Systems Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_a22608d44596149ed675fb3c93e6fa03",
+   "company": "axiom",
+   "title": "ZK Proof Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_f9c4d5c856608a8c7ede9af0c2dc70fa",
+   "company": "Canonical",
+   "title": "Linux Platform Integration - Ubuntu Systems Senior Engineer",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_30b105132f292a5dcac32617ea8801bd",
+   "company": "Canonical",
+   "title": "Senior Site Reliability / Gitops Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_80d79e2232c4865f55ca6caa39afdb32",
+   "company": "Canonical",
+   "title": "Senior Software Engineer - MAAS",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_40a309ddc5a0382ffaad493659d9fb42",
+   "company": "Canonical",
+   "title": "Software Developer (Backend SaaS)",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_6dc959e1efe869ad6499b198849d042e",
+   "company": "Canonical",
+   "title": "Ubuntu Engineering Lead",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_0bd1cc6c3382a05f555157dca820ab3f",
+   "company": "clickhouse",
+   "title": "Senior Consulting Engineer - AMER",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_fad35ece26258b5062b3a2eab34abe8b",
+   "company": "clickhouse",
+   "title": "Senior Curriculum Developer & Instructor",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_c3b82793add441c5b10bfb4fa73ac202",
+   "company": "oyster",
+   "title": "Senior AI Solutions Engineer - GTM",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_1c9f9fb7018bb84b51a5cb36440e9375",
+   "company": "oyster",
+   "title": "Senior Data Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_2a142d6ff324e04188d345ed89153953",
+   "company": "oyster",
+   "title": "Senior Engineer (Platform)",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_35cf5195e69f6eb3217beb08e6e21896",
+   "company": "oyster",
+   "title": "Senior GTM Engineer",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_6ccacbfcbbcc95f4bee9bdee0e340cd6",
+   "company": "PostHog",
+   "title": "ClickHouse Operations Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_1abd37a0b14c68d349d5e9ddea30ff67",
+   "company": "PostHog",
+   "title": "Product Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_fcf7f8748834d735e377c567f3bfdc82",
+   "company": "railway",
+   "title": "Infra Engineer - Datacenters",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_53fb18f76aa6926b8499cf7b7cffa936",
+   "company": "railway",
+   "title": "Infrastructure Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_85ae46cbf1864c7710abcaef5d13c2ba",
+   "company": "railway",
+   "title": "Senior Full-Stack Engineer - Product",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_969738c4ddc0eda164fb20928718dee6",
+   "company": "railway",
+   "title": "Senior Infra Engineer: Baremetal Orchestration",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_c9ff2411407cda083a88165e7b44918c",
+   "company": "railway",
+   "title": "Senior Infra Engineer: Observability",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_272c1fd30c81b78f10bdc66dbba818e3",
+   "company": "railway",
+   "title": "Senior Platform Engineer: Storage",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_515f92b1eb9cf063cd9d07ad6d6eca25",
+   "company": "railway",
+   "title": "Senior Product Engineer, Scalability",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_7f6daf9d54d7a52a14c810ff3f911aa9",
+   "company": "resend",
+   "title": "Customer Success Engineer",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_b27a3dce2fa593a3e06a2175729a3ec3",
+   "company": "socket",
+   "title": "Senior Platform Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_7adf123f2bc943c81d81783e513599fd",
+   "company": "Sourcegraph",
+   "title": "Software Engineer - Platform [IC3]",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_b2752f6d59035e59eb04fce8217ab8c0",
+   "company": "Stripe",
+   "title": "Backend Engineer, Core Technology",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_3782a4c5defe034291998c15566dd7f3",
+   "company": "Stripe",
+   "title": "Integration Engineer (Metronome)",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_372d7c5929546e985876b566fe8b6a44",
+   "company": "Supabase",
+   "title": "Customer Solution Architect (AMER)",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_0f26d5c1b7218af571ed3d102a4ad4eb",
+   "company": "Supabase",
+   "title": "Edge Functions Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_95bcdb6219ae86c491d2a828ae4a7eba",
+   "company": "Supabase",
+   "title": "FinOps Engineer",
+   "annotation": {
+    "answer": "unclear",
+    "also": [
+     "software_engineering_ic",
+     "not_software_engineering_ic"
+    ]
+   }
+  },
+  {
+   "job": "job_4bd4867204b6ffa164d79c2ea5706cde",
+   "company": "Supabase",
+   "title": "Multigres Deployment Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_0fb13f19838c0fd92d9feadcbbfcf797",
+   "company": "Supabase",
+   "title": "Multigres Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_dbcb3f7022c4d9189980d052ec4593b3",
+   "company": "Supabase",
+   "title": "Performance Engineer - Benchmarking",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_d49ae8ac380cabca7ebe850221b014bb",
+   "company": "Supabase",
+   "title": "Platform Engineer - Compute Capacity",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_578c4b8e926ac7a63a2747ec640cfe8d",
+   "company": "Supabase",
+   "title": "Platform Engineer, Edge & Networking",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_1abe6bd0b6d9b35046bcf037fcf22784",
+   "company": "Supabase",
+   "title": "Platform Security Engineer (AMER/APAC)",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_fc763bb234bb18718ee27d68a62cd859",
+   "company": "Supabase",
+   "title": "Postgres Deployment Engineer (Nix)",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_0fa476937b300165e5c22209cc41d93a",
+   "company": "Supabase",
+   "title": "Release Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_634dd38637dbbd4568ebbdc946cb4666",
+   "company": "Supabase",
+   "title": "Software Engineer - Auth",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_db539adfc1d67f89427b009a9014a106",
+   "company": "Supabase",
+   "title": "Software Engineer - Branching",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_c1b6a0761ece46c6346070d31d0ffaa2",
+   "company": "Supabase",
+   "title": "Supalite Engineer",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_62a13793be6e8b8db5b6ecf55c721505",
+   "company": "temporal",
+   "title": "Senior Platform Architect",
+   "annotation": {
+    "answer": "not_software_engineering_ic",
+    "critical": [
+     "wrong_function"
+    ]
+   }
+  },
+  {
+   "job": "job_f73129d23d341c54d6fc24ccc1533e14",
+   "company": "temporal",
+   "title": "Senior Software Engineer, Cloud Platform Foundations",
+   "annotation": {
+    "answer": "software_engineering_ic",
+    "critical": [
+     "ordinary_engineering"
+    ]
+   }
+  },
+  {
+   "job": "job_e8ea7fab276acd3c5264b12c08f7dcd6",
+   "company": "temporal",
+   "title": "Software Engineer II, Open Source Server",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  },
+  {
+   "job": "job_06a8f475b9c6ad7a5a9788fe4bfbe380",
+   "company": "temporal",
+   "title": "Staff Software Engineer, Traffic",
+   "annotation": {
+    "answer": "software_engineering_ic"
+   }
+  }
+ ]
+}
