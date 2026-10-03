@@ -161,14 +161,14 @@ The reference implementation is on branch
 §15).
 
 - **`fit.rs`** (`fit-rules/3`):
-  - [`Scope`] on every aspect and contradiction kind;
-  - [`RoleFit`], [`CompanyFit`] and [`RoleBasis`];
+  - `Scope` on every aspect and contradiction kind;
+  - `RoleFit`, `CompanyFit` and `RoleBasis`;
   - `support` (job-local) and `company_support` kept apart;
   - `classify` in stages: role from role evidence, then the company,
     then the level;
   - `role_reasons()` and `company_reasons()` ("why this role" and "why
     this company");
-  - [`CompanyBook`]: company facts read once per company.
+  - `CompanyBook`: company facts read once per company.
 - **`facets`** (the readings):
   - "II" and "IC1"–"IC6" levels;
   - "N colleagues" headcount;
