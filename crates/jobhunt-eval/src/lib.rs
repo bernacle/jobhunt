@@ -22,6 +22,8 @@
 //!   job only, never a candidate), scored against real postings.
 //! * [`job_function`]: its function-only follow-up, measured on a fresh
 //!   real-posting snapshot.
+//! * [`job_ic`]: a binary "software engineering IC or not" classifier with
+//!   three votes per posting, its follow-up.
 //!
 //! Everything is deterministic and offline: no network, no database, no
 //! model calls, a fixed clock. `docs/recommendation-quality.md` says what
@@ -31,6 +33,7 @@ pub mod build;
 pub mod fixture;
 pub mod job_class;
 pub mod job_function;
+pub mod job_ic;
 pub mod metrics;
 pub mod report;
 pub mod run;

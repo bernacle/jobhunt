@@ -17,6 +17,16 @@
 //! job_function_probe run    <corpus.db> <ids.txt> <run.json>
 //! # agreement with the annotations, stability across runs, the gates
 //! job_function_probe score  <annotations.json> <run1.json> <run2.json> <run3.json>
+//!
+//! # the binary follow-up (`docs/job-ic-vote-experiment.md`): one ensemble
+//! # of three independent votes per posting, per call of ic-run
+//! job_function_probe ic-run   <corpus.db> <ids.txt> <ensemble.json>
+//! job_function_probe ic-score <annotations.json> <ens1.json> <ens2.json> <ens3.json>
+//! # each posting's voted answer, as `id<TAB>answer` lines
+//! job_function_probe ic-votes <ensemble.json>
+//! # re-call only the votes that failed (rate limits), in place; each is
+//! # a fresh, independent call, marked `refilled`
+//! job_function_probe ic-fill  <corpus.db> <ensemble.json>
 //! ```
 //!
 //! `ids.txt` holds one job id per line (`job_<hex>`). `CLASSIFIER_MODEL`
@@ -35,6 +45,7 @@ use jobhunt_core::StableId;
 use jobhunt_eval::job_function::{
     self, Annotation, CLASSIFIER_VERSION, Classification, JobInput, PostingFields, Validated,
 };
+use jobhunt_eval::job_ic;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::Row;
@@ -849,6 +860,328 @@ fn score(annotations: &str, run_paths: &[String]) {
     println!("{}", serde_json::to_string_pretty(&out).unwrap());
 }
 
+// --- the binary, three-vote classifier ----------------------------------------
+
+fn model_from_env() -> (Arc<ModelInterpreter>, String) {
+    let model_name = std::env::var("CLASSIFIER_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.into());
+    let base_url = std::env::var("CLASSIFIER_BASE_URL").ok();
+    let config = ModelConfig::new(
+        PROVIDER,
+        Some(&model_name),
+        base_url.as_deref(),
+        std::env::var("OPENAI_API_KEY").ok(),
+        "OPENAI_API_KEY",
+    )
+    .unwrap();
+    (Arc::new(ModelInterpreter::new(config).unwrap()), model_name)
+}
+
+/// The global cache key of a voted answer: the classifier revision, the
+/// model, and exactly what was sent. No candidate.
+fn ic_cache_key(input: &JobInput, model: &str) -> String {
+    format!(
+        "jic_{}",
+        StableId::derive(
+            "narrow.job_ic",
+            &[
+                job_ic::CLASSIFIER_VERSION,
+                &format!("{PROVIDER}:{model}"),
+                &job_function::render(input)
+            ]
+        )
+    )
+}
+
+/// One independent answer (one call, retried only on retryable errors or
+/// a malformed answer).
+async fn ic_vote(model: &ModelInterpreter, posting: &Posting) -> Value {
+    let user = job_function::render(&posting.input);
+    let mut attempts = Vec::new();
+    let max_retries = model.config().max_retries;
+    let mut result = None;
+    for attempt in 0..=max_retries {
+        let started = Instant::now();
+        let answer = model
+            .structured(job_ic::SYSTEM_PROMPT, &user, job_ic::schema(), "job_ic")
+            .await;
+        let ms = started.elapsed().as_millis();
+        match answer {
+            Ok(a) => {
+                let parsed = job_ic::parse(&a.text, &posting.input);
+                attempts.push(json!({
+                    "attempt": attempt, "ms": ms, "input_tokens": a.input_tokens,
+                    "output_tokens": a.output_tokens, "reasoning_tokens": a.reasoning_tokens,
+                    "malformed": parsed.as_ref().err(),
+                }));
+                if let Ok(v) = parsed {
+                    result = Some(v);
+                    break;
+                }
+            }
+            Err(e) => {
+                let retryable = e.is_retryable();
+                attempts.push(json!({"attempt": attempt, "ms": ms, "error": e.to_string()}));
+                if !retryable {
+                    break;
+                }
+            }
+        }
+        if attempt < max_retries {
+            tokio::time::sleep(model.config().backoff * 2u32.pow(attempt)).await;
+        }
+    }
+    let mut out = json!({"attempts": attempts});
+    if let Some(mut v) = result {
+        for q in &mut v.classification.evidence {
+            *q = clip(q);
+        }
+        for q in &mut v.invalid_quotes {
+            *q = clip(q);
+        }
+        out["result"] = serde_json::to_value(&v).unwrap();
+    }
+    out
+}
+
+fn vote_answer(vote: &Value) -> Option<job_ic::Answer> {
+    serde_json::from_value::<job_ic::Validated>(vote.get("result")?.clone())
+        .ok()
+        .map(|v| v.classification.answer)
+}
+
+/// One ensemble: [`job_ic::VOTES`] fresh, independent calls per posting.
+async fn ic_run(db: &str, ids_path: &str, out_path: &str) {
+    let (model, model_name) = model_from_env();
+    let postings = load(db, &ids(ids_path)).await;
+    let started = Instant::now();
+    let started_at = chrono::Utc::now();
+    let calls: Vec<(usize, usize, Value)> = futures::stream::iter(
+        postings
+            .iter()
+            .enumerate()
+            .flat_map(|(i, p)| (0..job_ic::VOTES).map(move |v| (i, v, p))),
+    )
+    .map(|(i, v, p)| {
+        let model = model.clone();
+        async move { (i, v, ic_vote(&model, p).await) }
+    })
+    .buffer_unordered(CONCURRENCY)
+    .collect()
+    .await;
+    let mut votes: Vec<Vec<Value>> = vec![vec![Value::Null; job_ic::VOTES]; postings.len()];
+    for (i, v, call) in calls {
+        votes[i][v] = call;
+    }
+    let jobs: Vec<Value> = postings
+        .iter()
+        .zip(votes)
+        .map(|(p, votes)| {
+            let answers: Vec<Option<job_ic::Answer>> = votes.iter().map(vote_answer).collect();
+            json!({
+                "job": p.id,
+                "company": p.company,
+                "title": p.title,
+                "content_fingerprint": p.content_fingerprint,
+                "cache_key": ic_cache_key(&p.input, &model_name),
+                "voted": job_ic::vote(&answers),
+                "votes": votes,
+            })
+        })
+        .collect();
+    let out = json!({
+        "classifier": job_ic::CLASSIFIER_VERSION,
+        "prompt_digest": job_ic::prompt_digest(),
+        "provider": PROVIDER,
+        "model": model_name,
+        "votes_per_posting": job_ic::VOTES,
+        "started_at": started_at.to_rfc3339(),
+        "wall_ms": started.elapsed().as_millis(),
+        "concurrency": CONCURRENCY,
+        "cache": "none: every vote called fresh",
+        "jobs": jobs,
+    });
+    std::fs::write(out_path, serde_json::to_string_pretty(&out).unwrap()).unwrap();
+}
+
+/// Re-calls every vote that has no answer (a provider error such as a rate
+/// limit), sequentially, and recomputes the voted answers.
+async fn ic_fill(db: &str, path: &str) {
+    let (model, _) = model_from_env();
+    let mut ensemble: Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let missing: Vec<String> = ensemble["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|j| {
+            j["votes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|v| v.get("result").is_none())
+        })
+        .map(|j| j["job"].as_str().unwrap().to_owned())
+        .collect();
+    let postings: BTreeMap<String, Posting> = load(db, &missing)
+        .await
+        .into_iter()
+        .map(|p| (p.id.clone(), p))
+        .collect();
+    let mut refilled = 0;
+    for job in ensemble["jobs"].as_array_mut().unwrap() {
+        let Some(posting) = postings.get(job["job"].as_str().unwrap()) else {
+            continue;
+        };
+        for vote in job["votes"].as_array_mut().unwrap() {
+            if vote.get("result").is_some() {
+                continue;
+            }
+            let mut fresh = ic_vote(&model, posting).await;
+            fresh["refilled"] = json!(true);
+            fresh["failed_attempts"] = vote["attempts"].clone();
+            *vote = fresh;
+            refilled += 1;
+        }
+        let answers: Vec<Option<job_ic::Answer>> = job["votes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(vote_answer)
+            .collect();
+        job["voted"] = json!(job_ic::vote(&answers));
+    }
+    ensemble["refilled_votes"] = json!(refilled);
+    std::fs::write(path, serde_json::to_string_pretty(&ensemble).unwrap()).unwrap();
+    println!("refilled {refilled} votes");
+}
+
+fn ic_answers(ensemble: &Value) -> BTreeMap<String, Vec<Option<job_ic::Answer>>> {
+    ensemble["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|j| {
+            (
+                j["job"].as_str().unwrap().to_owned(),
+                j["votes"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(vote_answer)
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+fn ic_usage(ensemble: &Value) -> Value {
+    let (mut input, mut output, mut reasoning) = (0, 0, 0);
+    let mut ms = Vec::new();
+    let (mut retries, mut malformed, mut errors, mut failed) = (0, 0, 0, 0);
+    let (mut valid, mut invalid, mut unsupported, mut refilled) = (0, 0, 0, 0);
+    for job in ensemble["jobs"].as_array().unwrap() {
+        for vote in job["votes"].as_array().unwrap() {
+            refilled += usize::from(vote.get("refilled").is_some());
+            let attempts = vote["attempts"].as_array().unwrap();
+            retries += attempts.len().saturating_sub(1);
+            for a in attempts {
+                input += a["input_tokens"].as_u64().unwrap_or(0);
+                output += a["output_tokens"].as_u64().unwrap_or(0);
+                reasoning += a["reasoning_tokens"].as_u64().unwrap_or(0);
+                ms.push(a["ms"].as_u64().unwrap());
+                malformed += usize::from(!a["malformed"].is_null());
+                errors += usize::from(a.get("error").is_some());
+            }
+            failed += usize::from(vote.get("result").is_none());
+            if let Ok(v) = serde_json::from_value::<job_ic::Validated>(vote["result"].clone()) {
+                valid += v.valid_quotes;
+                invalid += v.invalid_quotes.len();
+                unsupported += usize::from(v.unsupported);
+            }
+        }
+    }
+    ms.sort_unstable();
+    json!({
+        "postings": ensemble["jobs"].as_array().unwrap().len(),
+        "calls": ms.len(),
+        "input_tokens": input, "output_tokens": output, "reasoning_tokens": reasoning,
+        "retries": retries, "malformed": malformed, "errors": errors, "failed_votes": failed,
+        "refilled_votes": refilled,
+        "quotes": {"valid": valid, "invalid": invalid, "unsupported_answers": unsupported},
+        "latency_ms": {"median": percentile(&ms, 0.5), "p90": percentile(&ms, 0.9), "max": ms.last()},
+        "wall_ms": ensemble["wall_ms"],
+        "prompt_digest": ensemble["prompt_digest"],
+    })
+}
+
+#[derive(Deserialize)]
+struct IcAnnotated {
+    job: String,
+    company: String,
+    title: String,
+    annotation: job_ic::Annotation,
+}
+
+#[derive(Deserialize)]
+struct IcAnnotations {
+    jobs: Vec<IcAnnotated>,
+}
+
+fn ic_score(annotations: &str, paths: &[String]) {
+    let annotations: IcAnnotations =
+        serde_json::from_str(&std::fs::read_to_string(annotations).unwrap()).unwrap();
+    let ensembles: Vec<Value> = paths
+        .iter()
+        .map(|r| serde_json::from_str(&std::fs::read_to_string(r).unwrap()).unwrap())
+        .collect();
+    let maps: Vec<_> = ensembles.iter().map(ic_answers).collect();
+    let labels: Vec<(String, job_ic::Annotation)> = annotations
+        .jobs
+        .iter()
+        .map(|j| (j.job.clone(), j.annotation.clone()))
+        .collect();
+    let evaluation = job_ic::evaluate(&labels, &maps);
+    // Every posting where any vote disagrees with the annotation or with
+    // another vote, with its votes and quotes.
+    let mut rows = Vec::new();
+    for j in &annotations.jobs {
+        let per: Vec<Vec<Option<job_ic::Answer>>> = maps
+            .iter()
+            .map(|m| m.get(&j.job).cloned().unwrap_or_default())
+            .collect();
+        let all: Vec<Option<job_ic::Answer>> = per.iter().flatten().copied().collect();
+        let disagree = all.iter().any(|a| a.is_none_or(|a| !j.annotation.ok(a)))
+            || all.windows(2).any(|w| w[0] != w[1]);
+        if disagree {
+            rows.push(json!({
+                "job": j.job, "company": j.company, "title": j.title,
+                "annotation": j.annotation,
+                "voted": per.iter().map(|v| job_ic::vote(v)).collect::<Vec<_>>(),
+                "votes": per,
+                "evidence": ensembles.iter().map(|e| e["jobs"].as_array().unwrap().iter()
+                    .find(|x| x["job"] == j.job.as_str())
+                    .map(|x| x["votes"].as_array().unwrap().iter()
+                        .map(|v| v["result"]["classification"]["evidence"].clone())
+                        .collect::<Vec<_>>()))
+                    .collect::<Vec<_>>(),
+            }));
+        }
+    }
+    let out = json!({
+        "usage": ensembles.iter().map(ic_usage).collect::<Vec<_>>(),
+        "evaluation": evaluation,
+        "disagreements": rows,
+    });
+    println!("{}", serde_json::to_string_pretty(&out).unwrap());
+}
+
+fn ic_votes(path: &str) {
+    let ensemble: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    for (job, answers) in ic_answers(&ensemble) {
+        println!("{job}\t{}", job_ic::vote(&answers).as_str());
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -867,6 +1200,12 @@ async fn main() {
         Some("size") => size(&args[2]).await,
         Some("run") => run(&args[2], &args[3], &args[4]).await,
         Some("score") => score(&args[2], &args[3..]),
-        _ => eprintln!("usage: job_function_probe sample|dump|size|run|score …"),
+        Some("ic-run") => ic_run(&args[2], &args[3], &args[4]).await,
+        Some("ic-score") => ic_score(&args[2], &args[3..]),
+        Some("ic-votes") => ic_votes(&args[2]),
+        Some("ic-fill") => ic_fill(&args[2], &args[3]).await,
+        _ => eprintln!(
+            "usage: job_function_probe sample|dump|size|run|score|ic-run|ic-score|ic-votes …"
+        ),
     }
 }
