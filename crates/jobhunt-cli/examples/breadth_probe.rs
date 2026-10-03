@@ -9,6 +9,10 @@
 //! breadth_probe sample <config.toml> <corpus.db> <seed> <ids.txt> <selection.json> <exclude.txt>
 //! # the job-only text of each sampled posting (no network)
 //! breadth_probe dump   <config.toml> <corpus.db> <ids.txt> <out dir>
+//! # the deterministic breadth reading of each posting in ids.txt
+//! breadth_probe run    <config.toml> <corpus.db> <ids.txt> <readings.json>
+//! # readings scored against the annotations (Phase 1 gate)
+//! breadth_probe score  <annotations.json> <readings.json>
 //! ```
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stdout)]
@@ -42,7 +46,12 @@ const FAMILIES: &[(&str, &[&str])] = &[
 const TITLE_WORD_FAMILIES: &[(&str, &[&str])] = &[
     (
         "developer_tooling",
-        &["tooling", "developer experience", "developer productivity", "build system"],
+        &[
+            "tooling",
+            "developer experience",
+            "developer productivity",
+            "build system",
+        ],
     ),
     ("product", &["product engineer", "product software"]),
 ];
@@ -165,7 +174,8 @@ async fn sample(args: &[String]) {
             drawn += 1;
             picked.push(json!({"job": id, "company": company, "title": title, "stratum": stratum}));
         }
-        summary.push(json!({"stratum": stratum, "pool": pool.len(), "quota": quota, "drawn": drawn}));
+        summary
+            .push(json!({"stratum": stratum, "pool": pool.len(), "quota": quota, "drawn": drawn}));
     }
     let ids: Vec<&str> = picked.iter().map(|p| p["job"].as_str().unwrap()).collect();
     std::fs::write(ids_out, ids.join("\n") + "\n").unwrap();
@@ -221,12 +231,78 @@ async fn dump(args: &[String]) {
     app.close().await;
 }
 
+async fn run(args: &[String]) {
+    let (config, db, ids, out) = (&args[2], &args[3], &args[4], &args[5]);
+    let wanted = lines(ids);
+    let app = open(config, db).await;
+    let mut rows = Vec::new();
+    for r in open_records(&app).await {
+        let id = r.id.to_string();
+        if !wanted.contains(&id) {
+            continue;
+        }
+        let p = &r.posting;
+        let reading = jobhunt_eval::breadth::read(
+            &p.title,
+            p.description_text.as_deref().unwrap_or_default(),
+            &p.company,
+        );
+        rows.push(json!({"job": id, "company": p.company, "title": p.title, "reading": reading}));
+    }
+    std::fs::write(
+        out,
+        serde_json::to_string_pretty(&json!({"jobs": rows})).unwrap(),
+    )
+    .unwrap();
+    app.close().await;
+}
+
+fn score(args: &[String]) {
+    use jobhunt_eval::breadth::{Annotation, Breadth, BreadthReading, evaluate};
+    let annotations: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&args[2]).unwrap()).unwrap();
+    let readings: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&args[3]).unwrap()).unwrap();
+    let by_job: BTreeMap<String, BreadthReading> = readings["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|j| {
+            (
+                j["job"].as_str().unwrap().to_owned(),
+                serde_json::from_value(j["reading"].clone()).unwrap(),
+            )
+        })
+        .collect();
+    let mut rows = Vec::new();
+    let mut table = Vec::new();
+    for j in annotations["jobs"].as_array().unwrap() {
+        let a: Annotation = serde_json::from_value(j["annotation"].clone()).unwrap();
+        let id = j["job"].as_str().unwrap();
+        let got = by_job.get(id).map_or(Breadth::Unclear, |r| r.breadth);
+        if a.breadth != "out_of_scope" {
+            table.push(json!({
+                "job": id, "company": j["company"], "title": j["title"],
+                "annotation": a.breadth, "also": a.also, "reading": by_job.get(id),
+            }));
+        }
+        rows.push((a, got));
+    }
+    let m = evaluate(&rows);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&json!({"metrics": m, "jobs": table})).unwrap()
+    );
+}
+
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("sample") => sample(&args).await,
         Some("dump") => dump(&args).await,
-        _ => eprintln!("usage: breadth_probe sample|dump …"),
+        Some("run") => run(&args).await,
+        Some("score") => score(&args),
+        _ => eprintln!("usage: breadth_probe sample|dump|run|score …"),
     }
 }
